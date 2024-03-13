@@ -32,8 +32,9 @@ if os.environ.get("DEBUG") == "False":
     DEBUG = False
 else:
     DEBUG = True
-
-ALLOWED_HOSTS =  ["127.0.0.1", "oputintsev.pythonanywhere.com"]
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+ALLOWED_HOSTS =["127.0.0.1", "oputintsev.pythonanywhere.com"]
 
 
 # Application definition
