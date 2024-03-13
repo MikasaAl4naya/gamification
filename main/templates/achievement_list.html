@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<style>
+    .achievement-image {
+        width: 100px; /* Замените на желаемую ширину */
+        height: auto; /* Это позволит сохранить пропорции изображения */
+    }
+</style>
+
+<html>
+<head>
+    <title>Achievements</title>
+</head>
+<body>
+    <h1>All Achievements</h1>
+    <ul>
+        {% for achievement in achievements %}
+            <li>
+                <h2>{{ achievement.name }}</h2>
+                <p>{{ achievement.description }}</p>
+                <!-- Вывод типа обращения без метки -->
+                {% if achievement.request_type %}
+                    <p>{{ achievement.request_type.name }}</p>
+                {% endif %}
+                <!-- Вывод количества обращений без метки и слова "requests" -->
+                {% if achievement.required_count %}
+                    <p>{{ achievement.required_count }}</p>
+                {% endif %}
+                <!-- Попытайтесь получить URL изображения. Если атрибут image не определен, будет выведено альтернативное изображение -->
+                <img src="{{ achievement.image.url }}" alt="{{ achievement.name }}" class="achievement-image">
+            </li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
