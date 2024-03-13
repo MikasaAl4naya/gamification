@@ -14,16 +14,22 @@ from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+# Затем используйте переменные в вашем файле settings.py
+
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-n_q8-wxb&xdvy)%nxa2ezif5l!jtoe!un^%dttcb6(az^sprbb'
+SECRET_KEY = os.getenv('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG') == 'True'
 
 ALLOWED_HOSTS = []
 
@@ -79,11 +85,11 @@ WSGI_APPLICATION = 'gamefication.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'gameficationDB',  # Замените на имя, которое вы хотите дать новой базе данных
-        'USER': 'postgres',            # Имя пользователя PostgreSQL
-        'PASSWORD': 'oleg',            # Пароль пользователя PostgreSQL
-        'HOST': 'localhost',           # Адрес хоста базы данных (обычно localhost)
-        'PORT': '5432',                # Порт базы данных PostgreSQL
+        'NAME': os.getenv('DATABASE_NAME'),
+        'USER': os.getenv('DATABASE_USER'),
+        'PASSWORD': os.getenv('DATABASE_PASSWORD'),
+        'HOST': os.getenv('DATABASE_HOST'),
+        'PORT': os.getenv('DATABASE_PORT'),
     }
 }
 
