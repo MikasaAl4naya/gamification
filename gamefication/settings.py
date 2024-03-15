@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-n_q8-wxb&xdvy)%nxa2ezif5l!jtoe!un^%dttcb6(az^sprbb
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['oputintsev.pythonanywhere.com','127.0.0.1']
 
 
 # Application definition
@@ -119,10 +119,10 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
-
+STATIC_ROOT = '/home/oputintsev/static'
 # Media files (images, videos, etc.)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = '/home/oputintsev/media'
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
