@@ -1,26 +1,21 @@
-from django.contrib.auth import login, authenticate, logout
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth import login, logout
 from django.core.checks import messages
 from django.http import HttpResponse
 from django.contrib.auth.models import User
-from django.core.mail import send_mail
-from django.template.loader import render_to_string
-from django.utils.crypto import get_random_string
-from django.contrib.auth.tokens import default_token_generator
-from .models import Achievement, Employee, EmployeeAchievement
-from django.shortcuts import render, redirect
-from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm
-from django.shortcuts import redirect
-
+from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption
+from django.shortcuts import  get_object_or_404
+from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm
+from rest_framework.decorators import api_view
+from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status
-
+from rest_framework import status, generics
 from .serializers import LoginSerializer, EmployeeSerializer, EmployeeRegSerializer  # Импортируем сериализатор
-
 from django.contrib.auth import authenticate
 
+
+def test_constructor(request):
+    return render(request, 'test_constructor.html')
 
 class LoginAPIView(APIView):
     def post(self, request):
@@ -178,24 +173,26 @@ def user_profile(request):
         try:
             employee = Employee.objects.get(username=request.user.username)
             achievements = EmployeeAchievement.objects.filter(employee=employee)
-            return render(request, 'user_profile.html', {'employee': employee, 'achievements': achievements})
+            available_tests = Test.objects.all()  # Получаем все доступные тесты
+            if available_tests.exists():
+                required_experience = Test.required_experience
+                required_karma_percentage = Test.required_karma_percentage
+            return render(request, 'user_profile.html', {'employee': employee, 'achievements': achievements, 'available_tests': available_tests})
         except Employee.DoesNotExist:
             return HttpResponse("Employee not found")
     else:
         return HttpResponse("Please log in")
 
 
+
+def test_detail(request, test_id):
+    test = get_object_or_404(Test, pk=test_id)
+    questions = test.testquestion_set.all()
+    return render(request, 'test_detail.html', {'test': test})
+
 def success_view(request):
     # Получаем текущего аутентифицированного пользователя
-    user = request.user
-    # Ищем сотрудника с таким же логином как у текущего пользователя
-    try:
-        employee = Employee.objects.get(username=user.username)
-    except Employee.DoesNotExist:
-        # Если сотрудник с таким логином не найден, делайте необходимые действия
-        pass
-    print(employee.first_name, employee.last_name, employee.email, employee.username)
-    return render(request, 'success.html', {'employee': employee})
+    return render(request, 'success.html', )
 
 class RegisterAPIView(APIView):
     @transaction.atomic
@@ -223,3 +220,135 @@ class RegisterAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+from django.shortcuts import render, redirect
+from .forms import  AnswerOptionForm
+from .models import Test
+
+
+
+def create_question(request):
+    if request.method == 'POST':
+        question_form = QuestionForm(request.POST)
+        answer_forms = [AnswerOptionForm(request.POST, prefix=str(x)) for x in range(4)]  # Четыре варианта ответа
+
+        if question_form.is_valid() and all([form.is_valid() for form in answer_forms]):
+            question = question_form.save()  # Сохраняем вопрос
+            for form in answer_forms:
+                answer = form.save(commit=False)
+                answer.question = question  # Привязываем ответ к вопросу
+                answer.save()
+
+            return redirect('success')  # Перенаправление на страницу успешного создания
+
+    else:
+        question_form = QuestionForm()
+        answer_forms = [AnswerOptionForm(prefix=str(x)) for x in range(4)]  # Четыре варианта ответа
+
+    return render(request, 'quest_create.html', {'question_form': question_form, 'answer_forms': answer_forms})
+
+@api_view(['POST'])
+def create_test(request):
+    if request.method == 'POST':
+        test_serializer = TestSerializer(data=request.data)
+        if test_serializer.is_valid():
+            test = test_serializer.save()
+            question_data = request.data.get('questions', [])
+            for question_item in question_data:
+                answer_options_data = question_item.pop('answer_options', [])  # Извлекаем данные ответов на вопрос
+                question_serializer = TestQuestionSerializer(data=question_item, context={'test': test})
+                if question_serializer.is_valid():
+                    question = question_serializer.save()
+                    # Создаем ответы на вопрос
+                    for answer_option_data in answer_options_data:
+                        AnswerOption.objects.create(question=question, **answer_option_data)
+                else:
+                    test.delete()
+                    return Response(question_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'message': 'Test and questions created successfully'}, status=status.HTTP_201_CREATED)
+        return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CreateQuestion(APIView):
+    def post(self, request, format=None):
+        # Извлекаем айдишник теста из данных запроса
+        test_id = request.data.get('test')
+
+        # Проверяем, что айдишник теста присутствует в запросе
+        if not test_id:
+            return Response({'error': 'Test ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Получаем объект теста по его айдишнику
+        try:
+            test = Test.objects.get(pk=test_id)
+        except Test.DoesNotExist:
+            return Response({'error': 'Test not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Создаем сериализатор для вопроса
+        question_serializer = TestQuestionSerializer(data=request.data, context={'test': test})
+
+        # Проверяем валидность данных для вопроса
+        if question_serializer.is_valid():
+            question_serializer.save()
+        else:
+            return Response(question_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Извлекаем данные ответов на вопрос
+        answer_options_data = request.data.get('answer_options', [])
+
+        # Создаем ответы на вопрос
+        for answer_option_data in answer_options_data:
+            answer_option_data['question'] = question_serializer.instance.pk  # Устанавливаем связь с вопросом
+            answer_serializer = AnswerOptionSerializer(data=answer_option_data)
+            if answer_serializer.is_valid():
+                answer_serializer.save()
+            else:
+                return Response(answer_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'message': 'Question and answers created successfully'}, status=status.HTTP_201_CREATED)
+
+
+
+
+
+
+class DeleteTest(generics.DestroyAPIView):
+    queryset = Test.objects.all()
+    serializer_class = TestSerializer
+    lookup_field = 'id'  # Или какой у вас ключ в модели
+
+class DeleteQuestion(generics.DestroyAPIView):
+    queryset = TestQuestion.objects.all()
+    serializer_class = TestQuestionSerializer
+    lookup_field = 'id'  # Или какой у вас ключ в модели
+
+class DeleteAnswer(generics.DestroyAPIView):
+    queryset = AnswerOption.objects.all()
+    serializer_class = AnswerOptionSerializer
+    lookup_field = 'id'  # Или какой у вас ключ в модели
+
+    from rest_framework import generics
+
+class UpdateTest(generics.UpdateAPIView):
+    queryset = Test.objects.all()
+    serializer_class = TestSerializer
+    lookup_field = 'id'  # Или какой у вас ключ в модели
+
+class UpdateQuestion(generics.UpdateAPIView):
+    queryset = TestQuestion.objects.all()
+    serializer_class = TestQuestionSerializer
+    lookup_field = 'id'  # Или какой у вас ключ в модели
+
+class UpdateAnswer(generics.UpdateAPIView):
+    queryset = AnswerOption.objects.all()
+    serializer_class = AnswerOptionSerializer
+    lookup_field = 'id'  # Или какой у вас ключ в модели
+
+
+class CreateAnswer(APIView):
+    def post(self, request, format=None):
+        serializer = AnswerOptionSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

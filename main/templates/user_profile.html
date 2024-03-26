@@ -12,6 +12,7 @@
         <p>Position: {{ employee.position }}</p>
         <p>Level: {{ employee.level }}</p>
         <p>Experience: {{ employee.experience }}</p>
+        <p>Karma: {{ employee.karma }}</p>
         <p>Balance: {{ employee.balance }}</p>
 
         <h2>Achievements:</h2>
@@ -19,6 +20,23 @@
             {% for achievement in achievements %}
             <img src="{{ achievement.achievement.image.url }}" alt="{{ achievement.achievement }}">
             <li>{{ achievement.achievement }}</li>
+            {% endfor %}
+        </ul>
+
+        <h2>Available Tests:</h2>
+        <ul>
+            {% for test in available_tests %}
+                <li>
+                    {% if employee.experience >= test.required_experience and employee.karma >= test.required_karma_percentage %}
+                        <a href="{% url 'test_detail' test.id %}">{{ test.name }}</a> - Available
+                    {% else %}
+                        {{ test.name }} - Not enough experience or karma
+                    {% endif %}
+                </li>
+                <ul>
+                    <li>Required Experience: {{ test.required_experience }}</li>
+                    <li>Required Karma Percentage: {{ test.required_karma_percentage }}</li>
+                </ul>
             {% endfor %}
         </ul>
 

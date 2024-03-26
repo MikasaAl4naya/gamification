@@ -18,6 +18,17 @@ urlpatterns = [
     path('api/login/', LoginAPIView.as_view(), name='api-login'),
     path('employees/<str:username>/', EmployeeDetails.as_view(), name='employee_details'),
     path('api/register/', RegisterAPIView.as_view(), name='register'),
+    path('test/<int:test_id>/', views.test_detail, name='test_detail'),
+    path('create_test/', create_test, name='create_test'),
+    path('create_question/', CreateQuestion.as_view(), name='create_question'),
+    path('create_answer/', CreateAnswer.as_view(), name='create_answer'),
+    path('delete_test/<int:id>/', DeleteTest.as_view(), name='delete_test'),
+    path('delete_question/<int:id>/', DeleteQuestion.as_view(), name='delete_question'),
+    path('delete_answer/<int:id>/', DeleteAnswer.as_view(), name='delete_answer'),
+    path('update_test/<int:id>/', UpdateTest.as_view(), name='update_test'),
+    path('update_question/<int:id>/', UpdateQuestion.as_view(), name='update_question'),
+    path('update_answer/<int:id>/', UpdateAnswer.as_view(), name='update_answer'),
+    path('test_constructor/', test_constructor, name='test_constructor'),
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
 if settings.DEBUG:

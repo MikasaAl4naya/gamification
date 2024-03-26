@@ -29,7 +29,13 @@ class Employee(AbstractUser):
     experience = models.IntegerField(default=0)
     balance = models.IntegerField(default=0)
     next_level_experience = models.IntegerField(default=100)  # Опыт, необходимый для перехода на следующий уровень
+    karma = models.IntegerField(default=50)
 
+    def save(self, *args, **kwargs):
+        # Проверяем, чтобы значение кармы не превышало максимальное значение
+        if self.karma > 100:
+            self.karma = 100
+        super().save(*args, **kwargs)
     def increase_experience(self, amount):
         self.experience += amount
         if self.experience >= self.next_level_experience:
@@ -161,17 +167,69 @@ class EmployeeMedal(models.Model):
         unique_together = ('employee', 'medal')
 
 
+from django.db import models
+from django.utils import timezone
+
+from django.db import models
+from django.utils import timezone
+
+
+class TestQuestion:
+    pass
+
+
 class Test(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField()
-    required_experience = models.IntegerField()
-    required_karma_percentage = models.IntegerField()
+    duration_minutes = models.PositiveIntegerField(default=60)
+    passing_score = models.PositiveIntegerField(default=70)
 
 class TestQuestion(models.Model):
+    TEXT = 'text'
+    SINGLE = 'single'
+    MULTIPLE = 'multiple'
+    QUESTION_TYPE_CHOICES = [
+        (TEXT, 'Text'),
+        (SINGLE, 'Single Choice'),
+        (MULTIPLE, 'Multiple Choice'),
+    ]
+
     test = models.ForeignKey(Test, on_delete=models.CASCADE)
     question_text = models.TextField()
-    question_type = models.CharField(max_length=50, choices=[("Multiple Choice", "Multiple Choice"), ("Free Response", "Free Response")])
-    explanation = models.TextField(null=True, blank=True)
+    question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES)
+    points = models.PositiveIntegerField(default=1)  # Количество баллов за правильный ответ на вопрос
+    explanation = models.TextField(blank=True, null=True)  # Пояснение к вопросу
+
+from django.core.exceptions import ValidationError
+
+
+class AnswerOption(models.Model):
+    question = models.ForeignKey(TestQuestion, on_delete=models.CASCADE, related_name='answer_options')
+    option_text = models.CharField(max_length=255)
+    is_correct = models.BooleanField(default=False)
+    file = models.FileField(upload_to='answer_files/', null=True, blank=True)
+
+    def clean(self):
+        # Проверяем тип вопроса
+        question_type = self.question.question_type
+
+        # Если тип вопроса SINGLE, то должен быть ровно 1 правильный ответ
+        if question_type == TestQuestion.SINGLE:
+            correct_answers = self.question.answer_options.filter(is_correct=True).count()
+            if correct_answers > 1:
+                raise ValidationError("For single choice question, only one correct answer is allowed.")
+
+        # Если тип вопроса MULTIPLE, то должно быть больше 1 правильного ответа
+        elif question_type == TestQuestion.MULTIPLE:
+            correct_answers = self.question.answer_options.filter(is_correct=True).count()
+            if correct_answers < 2:
+                raise ValidationError("For multiple choice question, at least two correct answers are required.")
+
+        # Если тип вопроса TEXT, то вариантов ответа быть не должно
+        elif question_type == TestQuestion.TEXT:
+            if self.option_text.strip() != "":
+                raise ValidationError("For text-based question, no answer options should be provided.")
+
 
 class TestAttempt(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
@@ -179,7 +237,20 @@ class TestAttempt(models.Model):
     start_time = models.DateTimeField(default=timezone.now)
     end_time = models.DateTimeField(null=True, blank=True)
     is_completed = models.BooleanField(default=False)
-    selected_answer = models.CharField(max_length=255, null=True, blank=True)
+    selected_answers = models.ManyToManyField(AnswerOption)  # ManyToMany для связи с выбранными ответами
     free_response = models.TextField(null=True, blank=True)
     is_correct = models.BooleanField(default=False)
-    explanation = models.TextField(null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        # Обновление времени завершения при завершении теста
+        if self.is_completed and not self.end_time:
+            self.end_time = timezone.now()
+        super().save(*args, **kwargs)
+
+class TestAttemptQuestionExplanation(models.Model):
+    test_attempt = models.ForeignKey(TestAttempt, on_delete=models.CASCADE)
+    test_question = models.ForeignKey(TestQuestion, on_delete=models.CASCADE)
+    explanation = models.TextField()
+
+    class Meta:
+        unique_together = ('test_attempt', 'test_question')

@@ -1,4 +1,4 @@
-from .models import Employee, Request,  Achievement
+from .models import Employee, Request, Achievement, TestQuestion, AnswerOption
 from django import forms
 from django.contrib.auth.models import User
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
@@ -35,5 +35,18 @@ class RequestForm(forms.ModelForm):
 class EmployeeAuthenticationForm(forms.Form):
     username = forms.CharField(max_length=150)
     password = forms.CharField(widget=forms.PasswordInput)
+
+
+
+class QuestionForm(forms.ModelForm):
+    class Meta:
+        model = TestQuestion
+        fields = ['test', 'question_text', 'question_type']  # Добавляем поле 'test'
+
+class AnswerOptionForm(forms.ModelForm):
+    class Meta:
+        model = AnswerOption
+        fields = ['option_text', 'is_correct']
+
 
 
