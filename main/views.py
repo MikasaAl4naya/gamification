@@ -2,11 +2,14 @@ from django.contrib.auth import login, logout
 from django.core.checks import messages
 from django.http import HttpResponse
 from django.contrib.auth.models import User
-from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption
-from django.shortcuts import  get_object_or_404
-from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm
+from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
+    Acoin
+from django.shortcuts import get_object_or_404, render, redirect
+from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
+    AnswerOptionForm
 from rest_framework.decorators import api_view
-from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer
+from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
+    AcoinSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -221,12 +224,6 @@ class RegisterAPIView(APIView):
 
 
 
-from django.shortcuts import render, redirect
-from .forms import  AnswerOptionForm
-from .models import Test
-
-
-
 def create_question(request):
     if request.method == 'POST':
         question_form = QuestionForm(request.POST)
@@ -247,12 +244,77 @@ def create_question(request):
 
     return render(request, 'quest_create.html', {'question_form': question_form, 'answer_forms': answer_forms})
 
+@api_view(['GET'])
+def get_all_tests(request):
+    if request.method == 'GET':
+        tests = Test.objects.all()
+        serializer = TestSerializer(tests, many=True)
+        return Response(serializer.data)
+@api_view(['GET'])
+def get_all_users(request):
+    users = Employee.objects.all()
+    serializer = EmployeeSerializer(users, many=True)
+    return Response(serializer.data)
+@api_view(['GET'])
+def get_user(request, user_id):
+    try:
+        employee = Employee.objects.get(id=user_id)
+        serializer = EmployeeSerializer(employee)
+        return Response(serializer.data)
+    except Employee.DoesNotExist:
+        return Response({'error': 'User not found'}, status=404)
+
+@api_view(['GET'])
+def get_user_balance(request, user_id):
+    try:
+        acoin = Acoin.objects.get(employee_id=user_id)
+        serializer = AcoinSerializer(acoin)
+        return Response(serializer.data)
+    except Acoin.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+@api_view(['GET'])
+def get_user_transactions(request, user_id):
+    try:
+        transactions = AcoinTransaction.objects.filter(user_id=user_id)
+        serializer = AcoinTransactionSerializer(transactions, many=True)
+        return Response(serializer.data)
+    except AcoinTransaction.DoesNotExist:
+        return Response({'error': 'Transactions not found'}, status=404)
+
+
+@api_view(['GET'])
+def get_test_by_id(request, test_id):
+    test = get_object_or_404(Test, id=test_id)
+    serializer = TestSerializer(test)
+    return Response(serializer.data)
+
+@api_view(['GET'])
+def get_question(request, question_id):
+    question = get_object_or_404(TestQuestion, id=question_id)
+    serializer = TestQuestionSerializer(question)
+    return Response(serializer.data)
+@api_view(['POST'])
+def create_acoin_transaction(request):
+    if request.method == 'POST':
+        serializer = AcoinTransactionSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['GET'])
+def get_answer(request, answer_id):
+    answer = get_object_or_404(AnswerOption, id=answer_id)
+    serializer = AnswerOptionSerializer(answer)
+    return Response(serializer.data)
 @api_view(['POST'])
 def create_test(request):
     if request.method == 'POST':
         test_serializer = TestSerializer(data=request.data)
         if test_serializer.is_valid():
             test = test_serializer.save()
+
+            # Обновленная логика для создания вопросов
             question_data = request.data.get('questions', [])
             for question_item in question_data:
                 answer_options_data = question_item.pop('answer_options', [])  # Извлекаем данные ответов на вопрос
@@ -261,10 +323,17 @@ def create_test(request):
                     question = question_serializer.save()
                     # Создаем ответы на вопрос
                     for answer_option_data in answer_options_data:
-                        AnswerOption.objects.create(question=question, **answer_option_data)
+                        answer_option_data['question'] = question.id  # Используем ID вопроса, а не его объект
+                        answer_option_serializer = AnswerOptionSerializer(data=answer_option_data)
+                        if answer_option_serializer.is_valid():
+                            answer_option_serializer.save()
+                        else:
+                            test.delete()
+                            return Response(answer_option_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                 else:
                     test.delete()
                     return Response(question_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
             return Response({'message': 'Test and questions created successfully'}, status=status.HTTP_201_CREATED)
         return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

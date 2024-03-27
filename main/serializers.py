@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from rest_framework import serializers
 
-from main.models import Employee
+from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption
 
 
 class LoginSerializer(serializers.Serializer):
@@ -54,14 +54,19 @@ class EmployeeRegSerializer(serializers.ModelSerializer):
         # Возвращаем созданный сотрудник и сгенерированный пароль
         return employee, password
 
+class AcoinSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Acoin
+        fields = ['employee', 'amount']
 
-from .models import Test, TestQuestion, AnswerOption
-
-
+class AcoinTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AcoinTransaction
+        fields = ['employee', 'amount', 'timestamp']
 class TestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Test
-        fields = ['id', 'name', 'description', 'duration_minutes', 'passing_score']
+        fields = ['id', 'name', 'description', 'duration_seconds', 'unlimited_time', 'show_correct_answers', 'allow_retake', 'theme', 'required_karma', 'passing_score', 'experience_points', 'acoin_reward']
 
     def update(self, instance, validated_data):
         # Логика обновления

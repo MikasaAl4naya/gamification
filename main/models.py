@@ -1,7 +1,8 @@
 import logging
 from urllib.request import Request
 
-from django.contrib.auth.models import AbstractUser, Group, Permission
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AbstractUser, Group, Permission, User
 from django.db import models
 from django.core.validators import EmailValidator, MinValueValidator
 from django.core.exceptions import ValidationError
@@ -27,8 +28,7 @@ class Employee(AbstractUser):
     position = models.CharField(max_length=100)
     level = models.IntegerField(default=1)
     experience = models.IntegerField(default=0)
-    balance = models.IntegerField(default=0)
-    next_level_experience = models.IntegerField(default=100)  # Опыт, необходимый для перехода на следующий уровень
+    next_level_experience = models.IntegerField(default=100)
     karma = models.IntegerField(default=50)
 
     def save(self, *args, **kwargs):
@@ -136,7 +136,26 @@ def update_achievement_progress(sender, instance, **kwargs):
         employee_achievement.increment_progress()
         employee_achievement.save()
         print(employee_achievement)
+class Acoin(models.Model):
+    employee = models.OneToOneField(Employee, on_delete=models.CASCADE, blank=False, null=True)
+    amount = models.IntegerField(default=0)
 
+class AcoinTransaction(models.Model):
+    employee = models.OneToOneField(Employee, on_delete=models.CASCADE, blank=False, null=True)
+    amount = models.IntegerField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+@receiver(post_save, sender=Employee)
+def create_acoin(sender, instance, created, **kwargs):
+    if created:
+        Acoin.objects.create(employee=instance, amount=0)
+
+@receiver(post_save, sender=AcoinTransaction)
+def update_acoin_balance(sender, instance, created, **kwargs):
+    if created:
+        # Обновляем баланс акоинов сотрудника в таблице Acoin
+        acoin, created = Acoin.objects.get_or_create(employee=instance.employee)
+        acoin.amount += instance.amount
+        acoin.save()
 
 class EmployeeItem(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
@@ -167,22 +186,22 @@ class EmployeeMedal(models.Model):
         unique_together = ('employee', 'medal')
 
 
-from django.db import models
-from django.utils import timezone
-
-from django.db import models
-from django.utils import timezone
-
-
-class TestQuestion:
-    pass
 
 
 class Test(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField()
-    duration_minutes = models.PositiveIntegerField(default=60)
+    duration_seconds = models.PositiveIntegerField(default=3600)  # Время в секундах
     passing_score = models.PositiveIntegerField(default=70)
+    unlimited_time = models.BooleanField(default=False)  # Флаг для неограниченного времени
+    show_correct_answers = models.BooleanField(default=False)  # Показывать правильные ответы
+    allow_retake = models.BooleanField(default=False)  # Разрешить повторное прохождение
+    theme = models.CharField(max_length=255, blank=True)  # Тема теста
+    required_karma = models.IntegerField(default=0)  # Необходимое количество кармы для прохождения
+    score = models.PositiveIntegerField(default=0)  # Количество баллов за прохождение
+    experience_points = models.PositiveIntegerField(default=0)  # Количество опыта за прохождение
+    acoin_reward = models.PositiveIntegerField(default=0)  # Количество акоинов за прохождение
+    min_level = models.PositiveIntegerField(default=1)  # Минимальный уровень для прохождения теста
 
 class TestQuestion(models.Model):
     TEXT = 'text'
@@ -193,7 +212,6 @@ class TestQuestion(models.Model):
         (SINGLE, 'Single Choice'),
         (MULTIPLE, 'Multiple Choice'),
     ]
-
     test = models.ForeignKey(Test, on_delete=models.CASCADE)
     question_text = models.TextField()
     question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES)

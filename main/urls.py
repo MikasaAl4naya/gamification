@@ -29,6 +29,15 @@ urlpatterns = [
     path('update_question/<int:id>/', UpdateQuestion.as_view(), name='update_question'),
     path('update_answer/<int:id>/', UpdateAnswer.as_view(), name='update_answer'),
     path('test_constructor/', test_constructor, name='test_constructor'),
+    path('api/test/<int:test_id>/', views.get_test_by_id, name='get_test'),
+    path('api/question/<int:question_id>/', views.get_question, name='get_question'),
+    path('api/answer/<int:answer_id>/', views.get_answer, name='get_answer'),
+    path('api/tests/', views.get_all_tests, name='get_all_tests'),
+    path('api/create_acoin_transaction/', views.create_acoin_transaction, name='create_acoin_transaction'),
+    path('users/', get_all_users, name='get_all_users'),
+    path('user/<int:user_id>/', get_user, name='get_user'),
+    path('user/<int:user_id>/balance/', get_user_balance, name='get_user_balance'),
+    path('user/<int:user_id>/transactions/', get_user_transactions, name='get_user_transactions'),
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
 if settings.DEBUG:
