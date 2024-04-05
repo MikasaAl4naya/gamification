@@ -8,7 +8,7 @@ from django.core.validators import EmailValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 import re
 
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.utils import timezone
 
@@ -51,6 +51,18 @@ class Employee(AbstractUser):
             self.next_level_experience *= 2
         self.save()
 
+    # Метод add_experience для модели Employee
+    def add_experience(self, experience):
+        if experience is not None:
+            self.experience += experience
+            self.save()
+
+    # Метод add_acoins для модели Employee
+    def add_acoins(self, acoins):
+        if acoins is not None:
+            # Создаем транзакцию для начисления Акоинов
+            AcoinTransaction.objects.create(employee=self, amount=acoins)
+
     class Meta:
         # Указываем пространство имен для связи
         # Это позволит Django различать обратные связи
@@ -74,7 +86,8 @@ class Employee(AbstractUser):
         related_name='employee_permissions',
         related_query_name='employee_permission',
     )
-
+    def add_achievement(self, achievement):
+        self.achievements.add(achievement)
 
 class Classifications(models.Model):
     name = models.CharField(max_length=100)
@@ -83,23 +96,56 @@ class Classifications(models.Model):
         return self.name
 
 class Achievement(models.Model):
+    TYPE_CHOICES = [
+        ('Test', 'За тест'),
+        ('Requests', 'За количество обращений'),
+        # Другие типы достижений здесь
+    ]
     name = models.CharField(max_length=100)
     description = models.TextField()
-    request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE)
-    required_count = models.IntegerField()
-    reward_experience = models.IntegerField()
-    reward_currency = models.IntegerField()
+    type = models.CharField(max_length=100, choices=TYPE_CHOICES, default='Test')
+    request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, null=True, blank=True)
+    required_count = models.IntegerField(null=True, blank=True)
+    reward_experience = models.IntegerField(null=True, blank=True)
+    reward_currency = models.IntegerField(null=True, blank=True)
     image = models.ImageField(upload_to='achievements/', default='default.jpg')
-
+    max_level = models.IntegerField(default=3)
     def __str__(self):
         return self.name
 
 
+    def clean(self):
+        # Если тип ачивки не Test, убедитесь, что все поля заполнены
+        if self.type == 'За количество обращений':
+            if not self.request_type:
+                raise ValidationError('Field request_type is required for achievements based on number of requests.')
+            if self.required_count is None:
+                raise ValidationError('Field required_count is required for achievements based on number of requests.')
+            if self.reward_experience is None:
+                raise ValidationError(
+                    'Field reward_experience is required for achievements based on number of requests.')
+            if self.reward_currency is None:
+                raise ValidationError('Field reward_currency is required for achievements based on number of requests.')
+
+        if self.type != 'Test':
+            if self.reward_experience is None:
+                raise ValidationError('Field reward_experience is required for non-test achievements.')
+            if self.reward_currency is None:
+                raise ValidationError('Field reward_currency is required for non-test achievements.')
+
     def level_up(self):
-        # Повышаем уровень ачивки и обновляем требуемое количество и награду
+        if self.level >= self.max_level:
+            raise ValidationError("Maximum level reached for this achievement")
         self.required_count = int(self.required_count * 1.5)
         self.reward_experience = int(self.reward_experience * 1.5)
         self.save()
+
+    def save(self, *args, **kwargs):
+        if self.type == 'Test':
+            self.max_level = 1
+        else:
+            self.max_level = 3
+        super().save(*args, **kwargs)
 
 class Item(models.Model):
     description = models.CharField(max_length=100)
@@ -135,15 +181,20 @@ def update_achievement_progress(sender, instance, **kwargs):
         )
         employee_achievement.increment_progress()
         employee_achievement.save()
-        print(employee_achievement)
 class Acoin(models.Model):
     employee = models.OneToOneField(Employee, on_delete=models.CASCADE, blank=False, null=True)
     amount = models.IntegerField(default=0)
 
 class AcoinTransaction(models.Model):
-    employee = models.OneToOneField(Employee, on_delete=models.CASCADE, blank=False, null=True)
-    amount = models.IntegerField()
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, blank=False, null=True)
+    amount = models.IntegerField(default=0)
     timestamp = models.DateTimeField(auto_now_add=True)
+
+    @classmethod
+    def create_from_achievement(cls, employee, achievement):
+        transaction = cls(employee=employee, amount=achievement.reward_currency)
+        transaction.save()
+        return transaction
 @receiver(post_save, sender=Employee)
 def create_acoin(sender, instance, created, **kwargs):
     if created:
@@ -161,23 +212,52 @@ class EmployeeItem(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
 
+
 class EmployeeAchievement(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     achievement = models.ForeignKey(Achievement, on_delete=models.CASCADE)
-    progress = models.IntegerField(default=0)  # Прогресс выполнения ачивки для сотрудника
+    progress = models.IntegerField(default=0)
+    level = models.IntegerField(default=0)
 
-    # Метод increment_progress модели EmployeeAchievement
     def increment_progress(self):
         self.progress += 1
-        if self.progress >= self.achievement.required_count:
-            # Если достигнут требуемый прогресс, обновляем ачивку
-            self.achievement.level_up()  # Повышаем уровень ачивки
-            self.progress = 0  # Сбрасываем прогресс
+        if self.achievement.required_count is not None and self.progress >= self.achievement.required_count:
+            self.level_up()
 
-            # Прибавляем опыт и валюту сотруднику
-            self.employee.increase_experience(self.achievement.reward_experience)
-            self.employee.balance += self.achievement.reward_currency
-            self.employee.save()
+    def level_up(self):
+        # Повышаем уровень ачивки
+        if self.level >= self.achievement.max_level:
+            return
+        else:
+            self.level += 1
+            # Проверяем, что required_count и reward_experience не являются None
+            if self.achievement.required_count is not None:
+                self.achievement.required_count = int(self.achievement.required_count * 1.5)
+            if self.achievement.reward_experience is not None:
+                self.achievement.reward_experience = int(self.achievement.reward_experience * 1.5)
+            # Сохраняем изменения в модели ачивки
+            self.achievement.save()
+            # Начисляем награды сотруднику
+            self.reward_employee()
+
+    def reward_employee(self):
+        # Получаем сотрудника
+        employee = self.employee
+        # Получаем награды за текущий уровень ачивки
+        reward_currency = self.achievement.reward_currency
+        reward_experience = self.achievement.reward_experience
+        # Начисляем награды сотруднику
+        # Например, добавляем опыт и акоины
+        employee.add_experience(reward_experience)
+        employee.add_acoins(reward_currency)
+
+        # Сбрасываем прогресс
+        self.progress = 0
+        self.save()
+
+
+
+
 class EmployeeMedal(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     medal = models.ForeignKey(Medal, on_delete=models.CASCADE)
@@ -197,11 +277,31 @@ class Test(models.Model):
     show_correct_answers = models.BooleanField(default=False)  # Показывать правильные ответы
     allow_retake = models.BooleanField(default=False)  # Разрешить повторное прохождение
     theme = models.CharField(max_length=255, blank=True)  # Тема теста
+    can_attempt_twice= models.BooleanField(default=False)
     required_karma = models.IntegerField(default=0)  # Необходимое количество кармы для прохождения
     score = models.PositiveIntegerField(default=0)  # Количество баллов за прохождение
     experience_points = models.PositiveIntegerField(default=0)  # Количество опыта за прохождение
     acoin_reward = models.PositiveIntegerField(default=0)  # Количество акоинов за прохождение
     min_level = models.PositiveIntegerField(default=1)  # Минимальный уровень для прохождения теста
+    achievement = models.ForeignKey(Achievement, on_delete=models.SET_NULL, null=True, blank=True)
+    total_questions = models.PositiveIntegerField(default=0)
+
+    def clean(self):
+        # Убеждаемся, что тип ачивки всегда "Test"
+        if self.achievement:
+            if self.achievement.type != 'Test':
+                raise ValidationError('Achievement type must be "Test".')
+
+    def save(self, *args, **kwargs):
+        # Убеждаемся, что тип ачивки всегда "Test"
+        if self.achievement:
+            if self.achievement.type != 'Test':
+                raise ValidationError('Achievement type must be "Test".')
+        super().save(*args, **kwargs)
+class Theory(models.Model):
+    text = models.TextField()
+    image = models.ImageField(upload_to='theory_images/', null=True, blank=True)
+    test = models.ForeignKey(Test, on_delete=models.CASCADE)  # Предположим, что модель теста называется Test
 
 class TestQuestion(models.Model):
     TEXT = 'text'
@@ -217,10 +317,19 @@ class TestQuestion(models.Model):
     question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES)
     points = models.PositiveIntegerField(default=1)  # Количество баллов за правильный ответ на вопрос
     explanation = models.TextField(blank=True, null=True)  # Пояснение к вопросу
+    # Поле для хранения изображений
+    image = models.CharField(max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
+@receiver(post_save, sender=TestQuestion)
+@receiver(post_delete, sender=TestQuestion)
+def update_total_questions(sender, instance, **kwargs):
+    # Получаем тест, к которому привязан вопрос
+    test = instance.test
 
-from django.core.exceptions import ValidationError
+    # Получаем общее количество вопросов для этого теста
+    total_questions = TestQuestion.objects.filter(test=test).count()
 
-
+    # Обновляем поле total_questions в модели Test
+    Test.objects.filter(pk=test.pk).update(total_questions=total_questions)
 class AnswerOption(models.Model):
     question = models.ForeignKey(TestQuestion, on_delete=models.CASCADE, related_name='answer_options')
     option_text = models.CharField(max_length=255)
@@ -250,20 +359,75 @@ class AnswerOption(models.Model):
 
 
 class TestAttempt(models.Model):
+    # Константы для статусов прохождения теста
+    PASSED = 'Passed'
+    NOT_STARTED = 'Not Started'
+    IN_PROGRESS = 'In Progress'
+    FAILED = 'Failed'
+    STATUS_CHOICES = [
+        (PASSED, 'Пройден'),
+        (NOT_STARTED, 'Не начат'),
+        (IN_PROGRESS, 'В процессе'),
+        (FAILED, 'Не пройден')
+    ]
+
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     test = models.ForeignKey(Test, on_delete=models.CASCADE)
     start_time = models.DateTimeField(default=timezone.now)
     end_time = models.DateTimeField(null=True, blank=True)
-    is_completed = models.BooleanField(default=False)
-    selected_answers = models.ManyToManyField(AnswerOption)  # ManyToMany для связи с выбранными ответами
+    attempts = models.IntegerField(default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=NOT_STARTED)
+    selected_answers = models.ManyToManyField(AnswerOption)
     free_response = models.TextField(null=True, blank=True)
     is_correct = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
-        # Обновление времени завершения при завершении теста
-        if self.is_completed and not self.end_time:
-            self.end_time = timezone.now()
+        # Проверяем, существует ли уже попытка прохождения этого теста этим сотрудником
+        existing_attempt = TestAttempt.objects.filter(employee=self.employee, test=self.test).last()
+        if existing_attempt:
+            if existing_attempt.attempts > 0:
+                self.attempts = existing_attempt.attempts - 1
+            else:
+                raise ValidationError("No attempts left for this test")
+        else:
+            self.attempts = 1 if self.test.can_attempt_twice else 0
         super().save(*args, **kwargs)
+
+    def update_progress(self):
+        total_questions = self.test.questions.count()
+        answered_questions = self.selected_answers.count()
+        self.progress = answered_questions / total_questions * 100
+        self.save()
+
+    def submit_test(self):
+        if self.status != self.PASSED and self.status != self.FAILED:
+            self.status = self.IN_PROGRESS
+        self.is_completed = True
+        self.update_progress()
+        self.calculate_score()
+        self.save()
+
+        # Создаем транзакцию для начисления акоинов, если тест пройден успешно
+        if self.status == self.PASSED:
+            acoin_reward = self.test.acoin_reward
+            AcoinTransaction.objects.create(employee=self.employee, amount=acoin_reward)
+
+    def calculate_score(self):
+        total_score = 0
+        total_correct = 0
+        for question in self.test.questions.all():
+            selected_answers = self.selected_answers.filter(question=question)
+            # Проверяем ответы на вопрос
+            if selected_answers:
+                # Проверяем правильность ответов
+                if all(answer.is_correct for answer in selected_answers):
+                    total_correct += 1
+                    total_score += question.points
+                else:
+                    # Уменьшаем баллы за неправильный ответ, если нужно
+                    total_score -= question.penalty_points
+        self.score = total_score
+        self.is_correct = total_correct == self.test.questions.count()
 
 class TestAttemptQuestionExplanation(models.Model):
     test_attempt = models.ForeignKey(TestAttempt, on_delete=models.CASCADE)
@@ -272,3 +436,14 @@ class TestAttemptQuestionExplanation(models.Model):
 
     class Meta:
         unique_together = ('test_attempt', 'test_question')
+@receiver(post_save, sender=TestAttempt)
+def create_acoin_transaction(sender, instance, created, **kwargs):
+    if created and instance.status == TestAttempt.PASSED:
+        # Получаем количество акоинов за прохождение теста
+        acoin_reward = instance.test.acoin_reward
+        # Создаем транзакцию для сотрудника, который получил ачивку за тест
+        AcoinTransaction.objects.create(employee=instance.employee, amount=acoin_reward)
+
+
+
+

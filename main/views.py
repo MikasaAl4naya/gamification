@@ -2,19 +2,22 @@ from django.contrib.auth import login, logout
 from django.core.checks import messages
 from django.http import HttpResponse
 from django.contrib.auth.models import User
+from rest_framework.generics import RetrieveAPIView
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
-    Acoin
+    Acoin, TestAttempt
 from django.shortcuts import get_object_or_404, render, redirect
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
 from rest_framework.decorators import api_view
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
-    AcoinSerializer
+    AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
 from .serializers import LoginSerializer, EmployeeSerializer, EmployeeRegSerializer  # Импортируем сериализатор
 from django.contrib.auth import authenticate
+from .models import Theory
+from .serializers import TheorySerializer
 
 
 def test_constructor(request):
@@ -288,12 +291,51 @@ def get_test_by_id(request, test_id):
     test = get_object_or_404(Test, id=test_id)
     serializer = TestSerializer(test)
     return Response(serializer.data)
+@api_view(['GET'])
+def get_themes_with_tests(request):
+    # Получаем все тесты
+    tests = Test.objects.all()
 
+    # Создаем словарь для хранения тем и связанных с ними тестов
+    themes_with_tests = {}
+
+    # Проходимся по всем тестам и добавляем их к соответствующим темам в словаре
+    for test in tests:
+        theme = test.theme
+        if theme not in themes_with_tests:
+            themes_with_tests[theme] = []
+        themes_with_tests[theme].append({
+            'name': test.name,
+            'required_karma': test.required_karma,
+            'min_level': test.min_level,
+            'achievement': test.achievement.name if test.achievement else None
+        })
+
+    # Преобразуем словарь в список объектов для сериализации
+    themes_with_tests_list = [{'theme': theme, 'tests': tests} for theme, tests in themes_with_tests.items()]
+
+    return Response(themes_with_tests_list)
 @api_view(['GET'])
 def get_question(request, question_id):
     question = get_object_or_404(TestQuestion, id=question_id)
     serializer = TestQuestionSerializer(question)
     return Response(serializer.data)
+@api_view(['POST'])
+def create_request(request):
+    if request.method == 'POST':
+        serializer = RequestSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['POST'])
+def create_achievement(request):
+    if request.method == 'POST':
+        serializer = AchievementSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['POST'])
 def create_acoin_transaction(request):
     if request.method == 'POST':
@@ -307,35 +349,101 @@ def get_answer(request, answer_id):
     answer = get_object_or_404(AnswerOption, id=answer_id)
     serializer = AnswerOptionSerializer(answer)
     return Response(serializer.data)
+from django.forms.models import model_to_dict
+
 @api_view(['POST'])
 def create_test(request):
-    if request.method == 'POST':
-        test_serializer = TestSerializer(data=request.data)
-        if test_serializer.is_valid():
-            test = test_serializer.save()
+    # Создаем сериализатор теста
+    test_serializer = TestSerializer(data=request.data)
 
-            # Обновленная логика для создания вопросов
-            question_data = request.data.get('questions', [])
-            for question_item in question_data:
-                answer_options_data = question_item.pop('answer_options', [])  # Извлекаем данные ответов на вопрос
-                question_serializer = TestQuestionSerializer(data=question_item, context={'test': test})
-                if question_serializer.is_valid():
-                    question = question_serializer.save()
-                    # Создаем ответы на вопрос
-                    for answer_option_data in answer_options_data:
-                        answer_option_data['question'] = question.id  # Используем ID вопроса, а не его объект
-                        answer_option_serializer = AnswerOptionSerializer(data=answer_option_data)
-                        if answer_option_serializer.is_valid():
-                            answer_option_serializer.save()
-                        else:
-                            test.delete()
-                            return Response(answer_option_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-                else:
-                    test.delete()
-                    return Response(question_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-            return Response({'message': 'Test and questions created successfully'}, status=status.HTTP_201_CREATED)
+    # Проверяем валидность данных теста
+    if not test_serializer.is_valid():
         return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    # Сохраняем тест
+    test = test_serializer.save()
+
+    # Получаем данные о вопросах из запроса
+    questions_data = request.data.get('questions', [])
+
+    # Список для хранения созданных вопросов и ответов
+    created_questions = []
+
+    for question_data in questions_data:
+        # Добавляем айдишник теста в данные о вопросе
+        question_data['test'] = test.id
+
+        # Создаем сериализатор для вопроса
+        question_serializer = TestQuestionSerializer(data=question_data)
+        if not question_serializer.is_valid():
+            return Response(question_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # Сохраняем вопрос
+        question = question_serializer.save()
+
+        # Сохраняем варианты ответов на вопрос
+        answer_options_data = question_data.get('answer_options', [])
+        created_answer_options = []
+        for answer_option_data in answer_options_data:
+            answer_option_data['question'] = question.id
+            answer_option_serializer = AnswerOptionSerializer(data=answer_option_data)
+            if not answer_option_serializer.is_valid():
+                return Response(answer_option_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            answer_option_serializer.save()
+            created_answer_options.append(answer_option_serializer.data)
+
+        # Добавляем созданный вопрос в список
+        created_questions.append({
+            'question': question_serializer.data,
+            'answer_options': created_answer_options
+        })
+
+    # Возвращаем успешный ответ с информацией о созданных вопросах и ответах
+    response_data = {'test_id': test.id, 'created_questions': created_questions}
+    return Response(response_data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+def complete_test(request, employee_id, test_id):
+    if request.method == 'POST':
+        try:
+            employee = Employee.objects.get(id=employee_id)
+            test = Test.objects.get(id=test_id)
+        except (Employee.DoesNotExist, Test.DoesNotExist):
+            return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Проверяем, что у сотрудника достаточно кармы для прохождения теста
+        if employee.karma < test.required_karma:
+            return Response({"message": "Insufficient karma to complete the test"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Выполняем проверку теста (здесь может быть ваш код для проверки ответов и вычисления результата)
+
+        # Создаем объект TestAttempt для отслеживания попытки прохождения теста
+        test_attempt = TestAttempt.objects.create(employee=employee, test=test, status=TestAttempt.PASSED)
+
+        # Предположим, что тест успешно пройден и сотруднику начисляется ачивка
+        try:
+            achievement = test.achievement
+
+            # Проверяем, является ли достижение типом "Test"
+            if achievement.type == 'Test':
+                # Получаем или создаем запись об ачивке для сотрудника
+                employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                    employee=employee,
+                    achievement=achievement
+                )
+                # Увеличиваем уровень ачивки
+                employee_achievement.level_up()
+            else:
+                # Для других типов достижений просто начисляем ачивку
+                employee.add_achievement(achievement)
+
+            return Response({"message": "Test completed successfully. Achievement earned."},
+                            status=status.HTTP_200_OK)
+        except Achievement.DoesNotExist:
+            return Response({"message": "Test completed successfully, but no achievement associated with this test."},
+                            status=status.HTTP_200_OK)
 
 
 class CreateQuestion(APIView):
@@ -413,6 +521,30 @@ class UpdateAnswer(generics.UpdateAPIView):
     serializer_class = AnswerOptionSerializer
     lookup_field = 'id'  # Или какой у вас ключ в модели
 
+class TheoryCreate(APIView):
+    def post(self, request, format=None):
+        serializer = TheorySerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class TheoryList(APIView):
+    def get(self, request, format=None):
+        theories = Theory.objects.all()
+        serializer = TheorySerializer(theories, many=True)
+        return Response(serializer.data)
+class TheoryDetail(RetrieveAPIView):
+    queryset = Theory.objects.all()
+    serializer_class = TheorySerializer
+    lookup_field = 'id'
+class TestQuestionDetail(APIView):
+    def get(self, request, question_id, format=None):
+        try:
+            question = TestQuestion.objects.get(id=question_id)
+            serializer = TestQuestionSerializer(question, context={'request': request})
+            return Response(serializer.data)
+        except TestQuestion.DoesNotExist:
+            return Response({"error": "Question not found"}, status=status.HTTP_404_NOT_FOUND)
 
 class CreateAnswer(APIView):
     def post(self, request, format=None):
@@ -421,3 +553,7 @@ class CreateAnswer(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class AnswerOptionDetailView(RetrieveAPIView):
+    queryset = AnswerOption.objects.all()
+    serializer_class = AnswerOptionSerializer
+    lookup_field = 'pk'

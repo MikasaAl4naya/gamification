@@ -7,7 +7,6 @@ from .views import *
 
 urlpatterns = [
     path('achievements/', views.achievement_list, name='achievement_list'),
-    path('achievements/create/', views.create_achievement, name='create_achievement'),
     path('create_request/', create_request, name='create_request'),
     path('success/', success_view, name='success'),
     path('register/', register, name='register_employee'),  # URL для страницы регистрации,
@@ -38,6 +37,16 @@ urlpatterns = [
     path('user/<int:user_id>/', get_user, name='get_user'),
     path('user/<int:user_id>/balance/', get_user_balance, name='get_user_balance'),
     path('user/<int:user_id>/transactions/', get_user_transactions, name='get_user_transactions'),
+    path('answer_options/<int:pk>/', AnswerOptionDetailView.as_view(), name='answer_option_detail'),
+    path('questions/<int:question_id>/', TestQuestionDetail.as_view()),
+    path('theories/', TheoryList.as_view(), name='theory-list'),
+    path('theories/create/', TheoryCreate.as_view(), name='theory-create'),
+    path('theories/<int:id>/', TheoryDetail.as_view(), name='theory-detail'),
+    path('themes-with-tests/', get_themes_with_tests, name='themes_with_tests'),
+    path('achievements/create/', views.create_achievement, name='create_achievement'),
+    path('requests/create/', create_request, name='create_request'),
+    path('requests/complete_test/<int:employee_id>/<int:test_id>/', complete_test, name='complete_test'),
+
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
 if settings.DEBUG:

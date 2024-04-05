@@ -124,7 +124,7 @@ STATIC_URL = 'static/'
 STATIC_ROOT = '/home/oputintsev/static'
 # Media files (images, videos, etc.)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = '/home/oputintsev/media'
+MEDIA_ROOT = 'C:/Users/olegp/PycharmProjects/DjangoProjects/gamefication/media/'
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
