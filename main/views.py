@@ -279,7 +279,7 @@ def get_user_balance(request, user_id):
 @api_view(['GET'])
 def get_user_transactions(request, user_id):
     try:
-        transactions = AcoinTransaction.objects.filter(user_id=user_id)
+        transactions = AcoinTransaction.objects.filter(employee_id=user_id)
         serializer = AcoinTransactionSerializer(transactions, many=True)
         return Response(serializer.data)
     except AcoinTransaction.DoesNotExist:
@@ -366,7 +366,7 @@ def create_test(request):
     # Получаем данные о вопросах из запроса
     questions_data = request.data.get('questions', [])
 
-    # Список для хранения созданных вопросов и ответов
+    # Список для хранения созданных вопросов
     created_questions = []
 
     for question_data in questions_data:
@@ -381,26 +381,40 @@ def create_test(request):
         # Сохраняем вопрос
         question = question_serializer.save()
 
-        # Сохраняем варианты ответов на вопрос
-        answer_options_data = question_data.get('answer_options', [])
-        created_answer_options = []
-        for answer_option_data in answer_options_data:
-            answer_option_data['question'] = question.id
-            answer_option_serializer = AnswerOptionSerializer(data=answer_option_data)
-            if not answer_option_serializer.is_valid():
-                return Response(answer_option_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # Получаем данные о блоках теории из запроса для текущего вопроса
+        theories_data = question_data.get('theories', [])
 
-            answer_option_serializer.save()
-            created_answer_options.append(answer_option_serializer.data)
+        # Список для хранения созданных блоков теории
+        created_theories = []
+
+        for theory_data in theories_data:
+            # Добавляем айдишник теста и вопроса в данные о блоке теории
+            theory_data['test'] = test.id
+            theory_data['question'] = question.id
+
+            # Создаем сериализатор для блока теории
+            theory_serializer = TheorySerializer(data=theory_data)
+            if not theory_serializer.is_valid():
+                return Response(theory_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+            # Сохраняем блок теории
+            theory = theory_serializer.save()
+
+            # Добавляем созданный блок теории в список
+            created_theories.append(theory_serializer.data)
 
         # Добавляем созданный вопрос в список
         created_questions.append({
             'question': question_serializer.data,
-            'answer_options': created_answer_options
+            'theories': created_theories
         })
 
-    # Возвращаем успешный ответ с информацией о созданных вопросах и ответах
-    response_data = {'test_id': test.id, 'created_questions': created_questions}
+    # Возвращаем успешный ответ с информацией о созданных вопросах и блоках теории
+    response_data = {
+        'test_id': test.id,
+        'created_questions': created_questions,
+    }
+
     return Response(response_data, status=status.HTTP_201_CREATED)
 
 
@@ -557,3 +571,22 @@ class AnswerOptionDetailView(RetrieveAPIView):
     queryset = AnswerOption.objects.all()
     serializer_class = AnswerOptionSerializer
     lookup_field = 'pk'
+
+@api_view(['POST'])
+def start_test_attempt(request, test_id, employee_id):
+    if request.method == 'POST':
+        try:
+            employee = Employee.objects.get(id=employee_id)
+            test = Test.objects.get(id=test_id)
+        except (Employee.DoesNotExist, Test.DoesNotExist):
+            return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Проверяем, что у сотрудника достаточно кармы для прохождения теста (если нужно)
+        if employee.karma < test.required_karma:
+            return Response({"message": "Insufficient karma to start the test"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Создаем объект TestAttempt с начальным статусом IN_PROGRESS
+        test_attempt = TestAttempt.objects.create(employee=employee, test=test, status=TestAttempt.IN_PROGRESS)
+
+        return Response({"message": "Test attempt started successfully.", "test_attempt_id": test_attempt.id},
+                        status=status.HTTP_200_OK)

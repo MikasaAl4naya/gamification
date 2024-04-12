@@ -271,6 +271,7 @@ class EmployeeMedal(models.Model):
 class Test(models.Model):
     name = models.CharField(max_length=255)
     description = models.TextField()
+    introduction = models.TextField(blank=True, null=True)  # Введение в тест
     duration_seconds = models.PositiveIntegerField(default=3600)  # Время в секундах
     passing_score = models.PositiveIntegerField(default=70)
     unlimited_time = models.BooleanField(default=False)  # Флаг для неограниченного времени
@@ -298,10 +299,7 @@ class Test(models.Model):
             if self.achievement.type != 'Test':
                 raise ValidationError('Achievement type must be "Test".')
         super().save(*args, **kwargs)
-class Theory(models.Model):
-    text = models.TextField()
-    image = models.ImageField(upload_to='theory_images/', null=True, blank=True)
-    test = models.ForeignKey(Test, on_delete=models.CASCADE)  # Предположим, что модель теста называется Test
+
 
 class TestQuestion(models.Model):
     TEXT = 'text'
@@ -317,8 +315,8 @@ class TestQuestion(models.Model):
     question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES)
     points = models.PositiveIntegerField(default=1)  # Количество баллов за правильный ответ на вопрос
     explanation = models.TextField(blank=True, null=True)  # Пояснение к вопросу
-    # Поле для хранения изображений
     image = models.CharField(max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
+    duration_seconds = models.PositiveIntegerField(default=0)  # Ограничение по времени в секундах
 @receiver(post_save, sender=TestQuestion)
 @receiver(post_delete, sender=TestQuestion)
 def update_total_questions(sender, instance, **kwargs):
@@ -330,6 +328,20 @@ def update_total_questions(sender, instance, **kwargs):
 
     # Обновляем поле total_questions в модели Test
     Test.objects.filter(pk=test.pk).update(total_questions=total_questions)
+class Theory(models.Model):
+    BEFORE = 'before'
+    AFTER = 'after'
+    POSITION_CHOICES = [
+        (BEFORE, 'Before questions'),
+        (AFTER, 'After questions'),
+    ]
+
+    text = models.TextField()
+    image= models.CharField( max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
+    test = models.ForeignKey(Test, on_delete=models.CASCADE)
+    question = models.ForeignKey(TestQuestion, on_delete=models.CASCADE, null=True, blank=True)
+    position = models.CharField(max_length=10, choices=POSITION_CHOICES, default=BEFORE)
+
 class AnswerOption(models.Model):
     question = models.ForeignKey(TestQuestion, on_delete=models.CASCADE, related_name='answer_options')
     option_text = models.CharField(max_length=255)
@@ -381,6 +393,7 @@ class TestAttempt(models.Model):
     free_response = models.TextField(null=True, blank=True)
     is_correct = models.BooleanField(default=False)
 
+
     def save(self, *args, **kwargs):
         # Проверяем, существует ли уже попытка прохождения этого теста этим сотрудником
         existing_attempt = TestAttempt.objects.filter(employee=self.employee, test=self.test).last()
@@ -393,18 +406,10 @@ class TestAttempt(models.Model):
             self.attempts = 1 if self.test.can_attempt_twice else 0
         super().save(*args, **kwargs)
 
-    def update_progress(self):
-        total_questions = self.test.questions.count()
-        answered_questions = self.selected_answers.count()
-        self.progress = answered_questions / total_questions * 100
-        self.save()
-
     def submit_test(self):
         if self.status != self.PASSED and self.status != self.FAILED:
             self.status = self.IN_PROGRESS
         self.is_completed = True
-        self.update_progress()
-        self.calculate_score()
         self.save()
 
         # Создаем транзакцию для начисления акоинов, если тест пройден успешно
@@ -412,22 +417,6 @@ class TestAttempt(models.Model):
             acoin_reward = self.test.acoin_reward
             AcoinTransaction.objects.create(employee=self.employee, amount=acoin_reward)
 
-    def calculate_score(self):
-        total_score = 0
-        total_correct = 0
-        for question in self.test.questions.all():
-            selected_answers = self.selected_answers.filter(question=question)
-            # Проверяем ответы на вопрос
-            if selected_answers:
-                # Проверяем правильность ответов
-                if all(answer.is_correct for answer in selected_answers):
-                    total_correct += 1
-                    total_score += question.points
-                else:
-                    # Уменьшаем баллы за неправильный ответ, если нужно
-                    total_score -= question.penalty_points
-        self.score = total_score
-        self.is_correct = total_correct == self.test.questions.count()
 
 class TestAttemptQuestionExplanation(models.Model):
     test_attempt = models.ForeignKey(TestAttempt, on_delete=models.CASCADE)
@@ -443,7 +432,10 @@ def create_acoin_transaction(sender, instance, created, **kwargs):
         acoin_reward = instance.test.acoin_reward
         # Создаем транзакцию для сотрудника, который получил ачивку за тест
         AcoinTransaction.objects.create(employee=instance.employee, amount=acoin_reward)
-
+        # Получаем количество опыта за прохождение теста
+        experience_reward = instance.test.experience_points
+        # Начисляем опыт сотруднику
+        instance.employee.add_experience(experience_reward)
 
 
 

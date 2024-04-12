@@ -46,7 +46,7 @@ urlpatterns = [
     path('achievements/create/', views.create_achievement, name='create_achievement'),
     path('requests/create/', create_request, name='create_request'),
     path('requests/complete_test/<int:employee_id>/<int:test_id>/', complete_test, name='complete_test'),
-
+    path('start_test_attempt/<int:test_id>/<int:employee_id>/', start_test_attempt, name='start_test_attempt'),
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
 if settings.DEBUG:

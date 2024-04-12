@@ -35,7 +35,9 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = ['username', 'password']
 
-
+class ExperienceIncreaseSerializer(serializers.Serializer):
+    employee_id = serializers.IntegerField()
+    experience_points = serializers.IntegerField()
 class EmployeeRegSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
@@ -142,9 +144,11 @@ class TestQuestionSerializer(serializers.ModelSerializer):
         question = TestQuestion.objects.create(test=test, **validated_data)
         return question
 class TestSerializer(serializers.ModelSerializer):
+    theories = TheorySerializer(many=True, read_only=True)
+
     class Meta:
         model = Test
-        fields = ['id', 'name', 'description', 'duration_seconds', 'unlimited_time', 'show_correct_answers', 'allow_retake', 'theme', 'required_karma', 'passing_score', 'experience_points', 'acoin_reward', 'achievement', 'can_attempt_twice']
+        fields = ['id', 'name', 'description', 'duration_seconds', 'unlimited_time', 'show_correct_answers', 'allow_retake', 'theme', 'required_karma', 'passing_score', 'experience_points', 'acoin_reward', 'achievement', 'can_attempt_twice', 'theories']
 
 
     def update(self, instance, validated_data):
