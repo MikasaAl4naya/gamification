@@ -287,6 +287,49 @@ def get_user_transactions(request, user_id):
 
 
 @api_view(['GET'])
+def get_test_with_theory(request, test_id):
+    try:
+        # Получаем тест по его идентификатору
+        test = Test.objects.get(id=test_id)
+
+        # Получаем все вопросы для этого теста
+        questions = TestQuestion.objects.filter(test=test)
+
+        data = []
+
+        # Проходимся по каждому вопросу
+        for question in questions:
+            # Получаем все теории для этого вопроса
+            theories = Theory.objects.filter(test=test).order_by('position')
+
+            # Добавляем теории и вопросы в порядке их позиции
+            for block in theories:
+                data.append({
+                    'type': 'theory',
+                    'text': block.text
+                })
+
+            data.append({
+                'type': 'question',
+                'question_text': question.question_text,
+                'question_type': question.question_type,
+                'points': question.points,
+                'explanation': question.explanation,
+                'answer_options': [
+                    {
+                        'option_text': option.option_text,
+                        'is_correct': option.is_correct
+                    }
+                    for option in question.answer_options.all()
+                ]
+            })
+
+        return Response(data)
+    except Test.DoesNotExist:
+        return Response({'error': 'Test not found'}, status=404)
+
+
+@api_view(['GET'])
 def get_test_by_id(request, test_id):
     test = get_object_or_404(Test, id=test_id)
     serializer = TestSerializer(test)
@@ -349,7 +392,7 @@ def get_answer(request, answer_id):
     answer = get_object_or_404(AnswerOption, id=answer_id)
     serializer = AnswerOptionSerializer(answer)
     return Response(serializer.data)
-from django.forms.models import model_to_dict
+
 
 @api_view(['POST'])
 def create_test(request):
@@ -363,59 +406,73 @@ def create_test(request):
     # Сохраняем тест
     test = test_serializer.save()
 
-    # Получаем данные о вопросах из запроса
-    questions_data = request.data.get('questions', [])
+    # Получаем данные о блоках из запроса
+    blocks_data = request.data.get('blocks', [])
 
-    # Список для хранения созданных вопросов
+    # Списки для хранения созданных вопросов, теории и ответов
     created_questions = []
+    created_theories = []
+    created_answers = []
 
-    for question_data in questions_data:
-        # Добавляем айдишник теста в данные о вопросе
-        question_data['test'] = test.id
+    # Устанавливаем начальную позицию для блоков
+    position = 1
 
-        # Создаем сериализатор для вопроса
-        question_serializer = TestQuestionSerializer(data=question_data)
-        if not question_serializer.is_valid():
-            return Response(question_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    for block_data in blocks_data:
+        # Добавляем айдишник теста в данные о блоке
+        block_data['content']['test'] = test.id
 
-        # Сохраняем вопрос
-        question = question_serializer.save()
+        # Определяем тип блока: вопрос или теория
+        if block_data['type'] == 'question':
+            serializer_class = TestQuestionSerializer
+            created_list = created_questions
+        elif block_data['type'] == 'theory':
+            serializer_class = TheorySerializer
+            created_list = created_theories
+        else:
+            return Response({'error': 'Invalid block type'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Получаем данные о блоках теории из запроса для текущего вопроса
-        theories_data = question_data.get('theories', [])
+        # Создаем сериализатор для блока
+        block_serializer = serializer_class(data=block_data['content'])
+        if not block_serializer.is_valid():
+            return Response(block_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Список для хранения созданных блоков теории
-        created_theories = []
+        # Сохраняем блок
+        block = block_serializer.save(position=position)
+        created_list.append(block_serializer.data)
 
-        for theory_data in theories_data:
-            # Добавляем айдишник теста и вопроса в данные о блоке теории
-            theory_data['test'] = test.id
-            theory_data['question'] = question.id
+        # Если это вопрос, сохраняем ответы
+        if block_data['type'] == 'question':
+            # Получаем данные об ответах из блока вопроса
+            answers_data = block_data['content'].get('answer_options', [])
 
-            # Создаем сериализатор для блока теории
-            theory_serializer = TheorySerializer(data=theory_data)
-            if not theory_serializer.is_valid():
-                return Response(theory_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            # Сохраняем ответы для текущего вопроса
+            for answer_data in answers_data:
+                # Добавляем айдишник вопроса в данные об ответе
+                answer_data['question'] = block.id
 
-            # Сохраняем блок теории
-            theory = theory_serializer.save()
+                # Создаем сериализатор для ответа
+                answer_serializer = AnswerOptionSerializer(data=answer_data)
+                if not answer_serializer.is_valid():
+                    return Response(answer_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            # Добавляем созданный блок теории в список
-            created_theories.append(theory_serializer.data)
+                # Сохраняем ответ
+                answer = answer_serializer.save()
+                created_answers.append(answer_serializer.data)
 
-        # Добавляем созданный вопрос в список
-        created_questions.append({
-            'question': question_serializer.data,
-            'theories': created_theories
-        })
+        # Увеличиваем позицию для следующего блока
+        position += 1
 
-    # Возвращаем успешный ответ с информацией о созданных вопросах и блоках теории
+    # Возвращаем успешный ответ с информацией о созданных блоках
     response_data = {
         'test_id': test.id,
         'created_questions': created_questions,
+        'created_theories': created_theories,
+        'created_answers': created_answers
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
+
+
 
 
 @api_view(['POST'])
@@ -427,37 +484,39 @@ def complete_test(request, employee_id, test_id):
         except (Employee.DoesNotExist, Test.DoesNotExist):
             return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Проверяем, что у сотрудника достаточно кармы для прохождения теста
-        if employee.karma < test.required_karma:
-            return Response({"message": "Insufficient karma to complete the test"}, status=status.HTTP_400_BAD_REQUEST)
+        # Получаем все вопросы из теста
+        questions = TestQuestion.objects.filter(test=test)
 
-        # Выполняем проверку теста (здесь может быть ваш код для проверки ответов и вычисления результата)
+
+        # Проверяем ответы на каждый вопрос
+        correct_answers_count = 0
+        for question in questions:
+            # Получаем ответ сотрудника на вопрос из запроса
+            submitted_answer_id = request.data.get(f'question_{question.id}_answer_id')
+            submitted_answer = AnswerOption.objects.get(id=submitted_answer_id)
+
+            # Проверяем, является ли ответ сотрудника правильным
+            if submitted_answer.is_correct:
+                correct_answers_count += 1
+
+        # Рассчитываем процент правильных ответов
+        total_questions = questions.count()
+        correct_answers_percentage = (correct_answers_count / total_questions) * 100
+
+        # Определяем, прошел ли сотрудник тест
+        if correct_answers_percentage >= test.passing_score:
+            test_status = TestAttempt.PASSED
+            message = "Test passed successfully."
+        else:
+            test_status = TestAttempt.FAILED
+            message = "Test failed."
 
         # Создаем объект TestAttempt для отслеживания попытки прохождения теста
-        test_attempt = TestAttempt.objects.create(employee=employee, test=test, status=TestAttempt.PASSED)
+        test_attempt = TestAttempt.objects.create(employee=employee, test=test, status=test_status)
 
-        # Предположим, что тест успешно пройден и сотруднику начисляется ачивка
-        try:
-            achievement = test.achievement
-
-            # Проверяем, является ли достижение типом "Test"
-            if achievement.type == 'Test':
-                # Получаем или создаем запись об ачивке для сотрудника
-                employee_achievement, created = EmployeeAchievement.objects.get_or_create(
-                    employee=employee,
-                    achievement=achievement
-                )
-                # Увеличиваем уровень ачивки
-                employee_achievement.level_up()
-            else:
-                # Для других типов достижений просто начисляем ачивку
-                employee.add_achievement(achievement)
-
-            return Response({"message": "Test completed successfully. Achievement earned."},
-                            status=status.HTTP_200_OK)
-        except Achievement.DoesNotExist:
-            return Response({"message": "Test completed successfully, but no achievement associated with this test."},
-                            status=status.HTTP_200_OK)
+        # Возвращаем результат прохождения теста
+        return Response({"message": message, "correct_answers_percentage": correct_answers_percentage},
+                        status=status.HTTP_200_OK)
 
 
 class CreateQuestion(APIView):
@@ -588,5 +647,6 @@ def start_test_attempt(request, test_id, employee_id):
         # Создаем объект TestAttempt с начальным статусом IN_PROGRESS
         test_attempt = TestAttempt.objects.create(employee=employee, test=test, status=TestAttempt.IN_PROGRESS)
 
+        # Возвращаем ответ с идентификатором попытки теста
         return Response({"message": "Test attempt started successfully.", "test_attempt_id": test_attempt.id},
                         status=status.HTTP_200_OK)

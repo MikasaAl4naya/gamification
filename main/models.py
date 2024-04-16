@@ -317,6 +317,7 @@ class TestQuestion(models.Model):
     explanation = models.TextField(blank=True, null=True)  # Пояснение к вопросу
     image = models.CharField(max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
     duration_seconds = models.PositiveIntegerField(default=0)  # Ограничение по времени в секундах
+    position = models.PositiveIntegerField(default=0)
 @receiver(post_save, sender=TestQuestion)
 @receiver(post_delete, sender=TestQuestion)
 def update_total_questions(sender, instance, **kwargs):
@@ -329,18 +330,14 @@ def update_total_questions(sender, instance, **kwargs):
     # Обновляем поле total_questions в модели Test
     Test.objects.filter(pk=test.pk).update(total_questions=total_questions)
 class Theory(models.Model):
-    BEFORE = 'before'
-    AFTER = 'after'
-    POSITION_CHOICES = [
-        (BEFORE, 'Before questions'),
-        (AFTER, 'After questions'),
-    ]
-
+    title = models.CharField(max_length=255)  # Добавленный заголовок
     text = models.TextField()
-    image= models.CharField( max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
+    image = models.CharField(max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
     test = models.ForeignKey(Test, on_delete=models.CASCADE)
-    question = models.ForeignKey(TestQuestion, on_delete=models.CASCADE, null=True, blank=True)
-    position = models.CharField(max_length=10, choices=POSITION_CHOICES, default=BEFORE)
+    position = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return self.title
 
 class AnswerOption(models.Model):
     question = models.ForeignKey(TestQuestion, on_delete=models.CASCADE, related_name='answer_options')
