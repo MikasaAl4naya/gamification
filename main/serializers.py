@@ -148,7 +148,7 @@ class TestSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Test
-        fields = ['id', 'name', 'description', 'introduction', 'duration_seconds', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma', 'score', 'experience_points', 'acoin_reward', 'min_level', 'achievement', 'total_questions', 'can_attempt_twice', 'send_results_to_email', 'theories']
+        fields = ['id', 'name', 'description', 'duration_seconds', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma','experience_points', 'acoin_reward', 'min_level', 'achievement', 'total_questions', 'can_attempt_twice', 'send_results_to_email', 'theories']
 
 
     def update(self, instance, validated_data):

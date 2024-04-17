@@ -278,7 +278,6 @@ class Test(models.Model):
     theme = models.CharField(max_length=255, blank=True)  # Тема теста
     can_attempt_twice = models.BooleanField(default=False)
     required_karma = models.IntegerField(default=0)  # Необходимое количество кармы для прохождения
-    score = models.PositiveIntegerField(default=0)  # Количество баллов за прохождение
     experience_points = models.PositiveIntegerField(default=0)  # Количество опыта за прохождение
     acoin_reward = models.PositiveIntegerField(default=0)  # Количество акоинов за прохождение
     min_level = models.PositiveIntegerField(default=1)  # Минимальный уровень для прохождения теста
