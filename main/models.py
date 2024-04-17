@@ -270,8 +270,7 @@ class EmployeeMedal(models.Model):
 
 class Test(models.Model):
     name = models.CharField(max_length=255)
-    description = models.TextField()
-    introduction = models.TextField(blank=True, null=True)  # Введение в тест
+    description = models.TextField(null=True, blank=True)
     duration_seconds = models.PositiveIntegerField(default=3600)  # Время в секундах
     passing_score = models.PositiveIntegerField(default=70)
     unlimited_time = models.BooleanField(default=False)  # Флаг для неограниченного времени
