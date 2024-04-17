@@ -331,9 +331,27 @@ def get_test_with_theory(request, test_id):
 
 @api_view(['GET'])
 def get_test_by_id(request, test_id):
+    # Получаем тест по его ID или возвращаем ошибку 404, если тест не найден
     test = get_object_or_404(Test, id=test_id)
-    serializer = TestSerializer(test)
-    return Response(serializer.data)
+
+    # Сериализуем данные теста
+    test_serializer = TestSerializer(test)
+
+    # Получаем все вопросы для данного теста
+    questions = TestQuestion.objects.filter(test=test).order_by('id')
+
+    # Сериализуем данные вопросов
+    question_serializer = TestQuestionSerializer(questions, many=True)
+
+
+    # Создаем окончательный ответ, включающий данные теста, вопросов и ответов
+    response_data = {
+        'test': test_serializer.data,
+        'questions': question_serializer.data
+
+    }
+
+    return Response(response_data)
 @api_view(['GET'])
 def get_themes_with_tests(request):
     # Получаем все тесты
@@ -459,6 +477,10 @@ def create_test(request):
                 answer = answer_serializer.save()
                 created_answers.append(answer_serializer.data)
 
+            # Выводим количество правильных ответов для текущего вопроса
+            correct_answers_count = len([answer for answer in answers_data if answer.get('is_correct')])
+            print(correct_answers_count)
+
         # Увеличиваем позицию для следующего блока
         position += 1
 
@@ -474,7 +496,6 @@ def create_test(request):
 
 
 
-
 @api_view(['POST'])
 def complete_test(request, employee_id, test_id):
     if request.method == 'POST':
@@ -487,21 +508,42 @@ def complete_test(request, employee_id, test_id):
         # Получаем все вопросы из теста
         questions = TestQuestion.objects.filter(test=test)
 
+        # Инициализируем счетчик правильных ответов и общее количество вопросов
+        correct_answers_count = 0
+        total_questions = 0
+
+        # Инициализируем словарь для хранения номеров ответов на вопросы
+        answer_options = {}
+
+        # Заполняем словарь с номерами ответов для каждого вопроса
+        for question in questions:
+            # Получаем все ответы на текущий вопрос и преобразуем их айдишники в список
+            answer_ids = list(question.answer_options.values_list('id', flat=True))
+            # Присваиваем номера ответам, начиная с 1
+            answer_numbers = list(range(1, len(answer_ids) + 1))
+            # Соединяем айдишники с соответствующими номерами
+            answer_options[question.id] = dict(zip(answer_numbers, answer_ids))
 
         # Проверяем ответы на каждый вопрос
-        correct_answers_count = 0
-        for question in questions:
-            # Получаем ответ сотрудника на вопрос из запроса
-            submitted_answer_id = request.data.get(f'question_{question.id}_answer_id')
-            submitted_answer = AnswerOption.objects.get(id=submitted_answer_id)
-
-            # Проверяем, является ли ответ сотрудника правильным
-            if submitted_answer.is_correct:
-                correct_answers_count += 1
-
+        for question_number, question in enumerate(questions, start=1):
+            total_questions += 1
+            # Проверяем, есть ли ответ на текущий вопрос в запросе
+            answer_key = str(question_number)
+            if answer_key in request.data:
+                submitted_answer_number = request.data[answer_key]
+                # Проверяем, содержится ли номер ответа в списке номеров для текущего вопроса
+                if submitted_answer_number in answer_options[question.id]:
+                    submitted_answer_id = answer_options[question.id][submitted_answer_number]
+                    submitted_answer = AnswerOption.objects.get(id=submitted_answer_id)
+                    # Проверяем, является ли ответ сотрудника правильным
+                    if submitted_answer.is_correct:
+                        correct_answers_count += 1
+        print(correct_answers_count,"correct answers")
         # Рассчитываем процент правильных ответов
-        total_questions = questions.count()
-        correct_answers_percentage = (correct_answers_count / total_questions) * 100
+        if total_questions > 0:
+            correct_answers_percentage = (correct_answers_count / total_questions) * 100
+        else:
+            correct_answers_percentage = 0
 
         # Определяем, прошел ли сотрудник тест
         if correct_answers_percentage >= test.passing_score:
@@ -517,6 +559,8 @@ def complete_test(request, employee_id, test_id):
         # Возвращаем результат прохождения теста
         return Response({"message": message, "correct_answers_percentage": correct_answers_percentage},
                         status=status.HTTP_200_OK)
+
+
 
 
 class CreateQuestion(APIView):

@@ -276,9 +276,8 @@ class Test(models.Model):
     passing_score = models.PositiveIntegerField(default=70)
     unlimited_time = models.BooleanField(default=False)  # Флаг для неограниченного времени
     show_correct_answers = models.BooleanField(default=False)  # Показывать правильные ответы
-    allow_retake = models.BooleanField(default=False)  # Разрешить повторное прохождение
     theme = models.CharField(max_length=255, blank=True)  # Тема теста
-    can_attempt_twice= models.BooleanField(default=False)
+    can_attempt_twice = models.BooleanField(default=False)
     required_karma = models.IntegerField(default=0)  # Необходимое количество кармы для прохождения
     score = models.PositiveIntegerField(default=0)  # Количество баллов за прохождение
     experience_points = models.PositiveIntegerField(default=0)  # Количество опыта за прохождение
@@ -286,6 +285,8 @@ class Test(models.Model):
     min_level = models.PositiveIntegerField(default=1)  # Минимальный уровень для прохождения теста
     achievement = models.ForeignKey(Achievement, on_delete=models.SET_NULL, null=True, blank=True)
     total_questions = models.PositiveIntegerField(default=0)
+    send_results_to_email = models.BooleanField(default=False)  # Отправлять результаты на почту руководителю
+
 
     def clean(self):
         # Убеждаемся, что тип ачивки всегда "Test"
@@ -356,10 +357,10 @@ class AnswerOption(models.Model):
                 raise ValidationError("For single choice question, only one correct answer is allowed.")
 
         # Если тип вопроса MULTIPLE, то должно быть больше 1 правильного ответа
-        elif question_type == TestQuestion.MULTIPLE:
-            correct_answers = self.question.answer_options.filter(is_correct=True).count()
-            if correct_answers < 2:
-                raise ValidationError("For multiple choice question, at least two correct answers are required.")
+        # elif question_type == TestQuestion.MULTIPLE:
+        #     correct_answers = self.question.answer_options.filter(is_correct=True).count()
+        #     if correct_answers <= 1:
+        #         raise ValidationError("For multiple choice question, at least two correct answers are required.")
 
         # Если тип вопроса TEXT, то вариантов ответа быть не должно
         elif question_type == TestQuestion.TEXT:
@@ -391,17 +392,17 @@ class TestAttempt(models.Model):
     is_correct = models.BooleanField(default=False)
 
 
-    def save(self, *args, **kwargs):
-        # Проверяем, существует ли уже попытка прохождения этого теста этим сотрудником
-        existing_attempt = TestAttempt.objects.filter(employee=self.employee, test=self.test).last()
-        if existing_attempt:
-            if existing_attempt.attempts > 0:
-                self.attempts = existing_attempt.attempts - 1
-            else:
-                raise ValidationError("No attempts left for this test")
-        else:
-            self.attempts = 1 if self.test.can_attempt_twice else 0
-        super().save(*args, **kwargs)
+    # def save(self, *args, **kwargs):
+    #     # Проверяем, существует ли уже попытка прохождения этого теста этим сотрудником
+    #     existing_attempt = TestAttempt.objects.filter(employee=self.employee, test=self.test).last()
+    #     if existing_attempt:
+    #         if existing_attempt.attempts > 0:
+    #             self.attempts = existing_attempt.attempts - 1
+    #         else:
+    #             raise ValidationError("No attempts left for this test")
+    #     else:
+    #         self.attempts = 1 if self.test.can_attempt_twice else 0
+    #     super().save(*args, **kwargs)
 
     def submit_test(self):
         if self.status != self.PASSED and self.status != self.FAILED:
