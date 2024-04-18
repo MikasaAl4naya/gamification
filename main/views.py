@@ -3,6 +3,8 @@ from django.core.checks import messages
 from django.http import HttpResponse
 from django.contrib.auth.models import User
 from rest_framework.generics import RetrieveAPIView
+from rest_framework.utils import json
+
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
     Acoin, TestAttempt, Theme
 from django.shortcuts import get_object_or_404, render, redirect
@@ -376,28 +378,39 @@ def get_test_by_id(request, test_id):
     return Response(response_data)
 @api_view(['GET'])
 def get_themes_with_tests(request):
-    # Получаем все тесты
-    tests = Test.objects.all()
+    # Получаем все темы
+    themes = Theme.objects.all()
 
-    # Создаем словарь для хранения тем и связанных с ними тестов
-    themes_with_tests = {}
+    # Создаем список для хранения тем с их связанными тестами
+    themes_with_tests = []
 
-    # Проходимся по всем тестам и добавляем их к соответствующим темам в словаре
-    for test in tests:
-        theme = test.theme
-        if theme not in themes_with_tests:
-            themes_with_tests[theme] = []
-        themes_with_tests[theme].append({
-            'name': test.name,
-            'required_karma': test.required_karma,
-            'min_level': test.min_level,
-            'achievement': test.achievement.name if test.achievement else None
-        })
+    # Проходимся по всем темам
+    for theme in themes:
+        # Получаем все тесты, связанные с текущей темой
+        tests = Test.objects.filter(theme=theme)
 
-    # Преобразуем словарь в список объектов для сериализации
-    themes_with_tests_list = [{'theme': theme, 'tests': tests} for theme, tests in themes_with_tests.items()]
+        # Создаем список для хранения информации о тестах
+        tests_info = []
 
-    return Response(themes_with_tests_list)
+        # Проходимся по всем тестам и собираем информацию о каждом из них
+        for test in tests:
+            test_info = {
+                'name': test.name,
+                'required_karma': test.required_karma,
+                'min_level': test.min_level,
+                'achievement': test.achievement.name if test.achievement else None
+            }
+            tests_info.append(test_info)
+
+        # Добавляем информацию о текущей теме и ее тестах в список
+        theme_with_tests = {
+            'theme': theme.name,
+            'tests': tests_info
+        }
+        themes_with_tests.append(theme_with_tests)
+
+    return Response(themes_with_tests)
+
 @api_view(['GET'])
 def get_question(request, question_id):
     question = get_object_or_404(TestQuestion, id=question_id)
@@ -515,7 +528,34 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
+from django.shortcuts import get_object_or_404
+from django.http import JsonResponse
+from .models import TestQuestion
 
+def get_questions_with_explanations(request, test_id):
+    # Получаем объект теста по его идентификатору
+    test = get_object_or_404(Test, id=test_id)
+
+    # Получаем все вопросы для данного теста
+    questions = TestQuestion.objects.filter(test=test)
+
+    # Список для хранения данных о вопросах и пояснениях
+    questions_data = []
+
+    # Получаем данные о каждом вопросе и его пояснении
+    for index, question in enumerate(questions, start=1):
+        question_data = {
+            'question_number': index,  # Номер вопроса в тесте
+            'question_text': question.question_text,  # Текст вопроса
+            'explanation': question.explanation  # Пояснение к вопросу
+        }
+        questions_data.append(question_data)
+
+    # Преобразуем данные в формат JSON
+    data_json = json.dumps({'questions': questions_data}, ensure_ascii=False)
+
+    # Возвращаем ответ с данными в формате JSON
+    return HttpResponse(data_json, content_type='application/json; charset=utf-8')
 
 
 @api_view(['POST'])
