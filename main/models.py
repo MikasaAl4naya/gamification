@@ -113,10 +113,8 @@ class Achievement(models.Model):
     def __str__(self):
         return self.name
 
-
     def clean(self):
-        # Если тип ачивки не Test, убедитесь, что все поля заполнены
-        if self.type == 'За количество обращений':
+        if self.type == 'Requests':
             if not self.request_type:
                 raise ValidationError('Field request_type is required for achievements based on number of requests.')
             if self.required_count is None:
@@ -126,7 +124,6 @@ class Achievement(models.Model):
                     'Field reward_experience is required for achievements based on number of requests.')
             if self.reward_currency is None:
                 raise ValidationError('Field reward_currency is required for achievements based on number of requests.')
-
         if self.type != 'Test':
             if self.reward_experience is None:
                 raise ValidationError('Field reward_experience is required for non-test achievements.')
