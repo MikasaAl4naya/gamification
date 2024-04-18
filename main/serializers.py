@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
-    Request
+    Request, Theme
 
 
 class LoginSerializer(serializers.Serializer):
@@ -50,7 +50,6 @@ class EmployeeRegSerializer(serializers.ModelSerializer):
         username = email.split('@')[0]
         # Генерируем случайный пароль
         password = User.objects.make_random_password()
-        # Создаем пользователя с сгенерированным паролем и email в качестве username
         user = User.objects.create_user(username=username, password=password, email=email)
         # Создаем сотрудника, указывая пользователя как его владельца
         employee = Employee.objects.create(password=password, **validated_data)
@@ -94,6 +93,10 @@ class TheorySerializer(serializers.ModelSerializer):
         model = Theory
         fields = '__all__'
 
+class ThemeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Theme
+        fields = ['id', 'name']
 class TestQuestionSerializer(serializers.ModelSerializer):
     answer_options = AnswerOptionSerializer(many=True, partial=True,required=False)
     image = serializers.SerializerMethodField()
@@ -143,6 +146,8 @@ class TestQuestionSerializer(serializers.ModelSerializer):
         test = validated_data.pop('test')  # Извлекаем тест из validated_data
         question = TestQuestion.objects.create(test=test, **validated_data)
         return question
+
+
 class TestSerializer(serializers.ModelSerializer):
     theories = TheorySerializer(many=True, read_only=True)
 

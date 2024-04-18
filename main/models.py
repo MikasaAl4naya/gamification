@@ -267,6 +267,8 @@ class EmployeeMedal(models.Model):
 
 
 
+class Theme(models.Model):
+    name = models.CharField(max_length=255)
 
 class Test(models.Model):
     name = models.CharField(max_length=255)
@@ -275,7 +277,7 @@ class Test(models.Model):
     passing_score = models.PositiveIntegerField(default=70)
     unlimited_time = models.BooleanField(default=False)  # Флаг для неограниченного времени
     show_correct_answers = models.BooleanField(default=False)  # Показывать правильные ответы
-    theme = models.CharField(max_length=255, blank=True)  # Тема теста
+    theme = models.ForeignKey(Theme,on_delete=models.PROTECT, default=1) # Ссылка на модель Theme
     can_attempt_twice = models.BooleanField(default=False)
     required_karma = models.IntegerField(default=0)  # Необходимое количество кармы для прохождения
     experience_points = models.PositiveIntegerField(default=0)  # Количество опыта за прохождение

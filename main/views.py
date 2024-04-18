@@ -4,13 +4,13 @@ from django.http import HttpResponse
 from django.contrib.auth.models import User
 from rest_framework.generics import RetrieveAPIView
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
-    Acoin, TestAttempt
+    Acoin, TestAttempt, Theme
 from django.shortcuts import get_object_or_404, render, redirect
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
 from rest_framework.decorators import api_view
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
-    AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer
+    AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -246,7 +246,14 @@ def create_question(request):
         answer_forms = [AnswerOptionForm(prefix=str(x)) for x in range(4)]  # Четыре варианта ответа
 
     return render(request, 'quest_create.html', {'question_form': question_form, 'answer_forms': answer_forms})
-
+@api_view(['POST'])
+def create_theme(request):
+    if request.method == 'POST':
+        serializer = ThemeSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['GET'])
 def get_all_tests(request):
     if request.method == 'GET':
@@ -258,6 +265,12 @@ def get_all_users(request):
     users = Employee.objects.all()
     serializer = EmployeeSerializer(users, many=True)
     return Response(serializer.data)
+@api_view(['GET'])
+def theme_list(request):
+    if request.method == 'GET':
+        themes = Theme.objects.all().order_by('name')
+        serializer = ThemeSerializer(themes, many=True)
+        return Response(serializer.data)
 @api_view(['GET'])
 def get_user(request, user_id):
     try:
