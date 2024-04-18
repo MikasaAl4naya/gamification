@@ -279,7 +279,16 @@ def get_user(request, user_id):
         return Response(serializer.data)
     except Employee.DoesNotExist:
         return Response({'error': 'User not found'}, status=404)
+@api_view(['DELETE'])
+def delete_all_tests(request):
+    if request.method == 'DELETE':
+        # Получаем все объекты модели Test
+        tests = Test.objects.all()
 
+        # Удаляем все тесты
+        tests.delete()
+
+        return Response({"message": "All tests have been deleted"}, status=status.HTTP_204_NO_CONTENT)
 @api_view(['GET'])
 def get_user_balance(request, user_id):
     try:

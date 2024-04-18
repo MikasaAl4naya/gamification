@@ -50,6 +50,7 @@ urlpatterns = [
     path('get_test_with_theory/<test_id>/', get_test_with_theory, name='get_test_with_theory'),
     path('create_theme/', create_theme, name='create_theme'),
     path('themes/', theme_list, name='theme_list'),
+    path('delete_all_tests/', delete_all_tests, name='delete_all_tests'),
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
 if settings.DEBUG:
