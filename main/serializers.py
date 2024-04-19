@@ -184,4 +184,4 @@ class AchievementSerializer(serializers.ModelSerializer):
 class ClassificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classifications
-        fields = ['id', 'name']
+        fields = ['id', 'name']#коммент ради коммента
