@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
-    Request, Theme
+    Request, Theme, Classifications
 
 
 class LoginSerializer(serializers.Serializer):
@@ -181,3 +181,7 @@ class AchievementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Achievement
         fields = ['id', 'name', 'description', 'type', 'request_type', 'required_count', 'reward_experience', 'reward_currency', 'image']
+class ClassificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Classifications
+        fields = ['id', 'name']

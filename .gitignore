@@ -19,3 +19,4 @@
 # Ignore system files
 __pycache__/
 .DS_Store
+/main/migrations

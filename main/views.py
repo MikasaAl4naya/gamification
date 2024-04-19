@@ -6,13 +6,14 @@ from rest_framework.generics import RetrieveAPIView
 from rest_framework.utils import json
 
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
-    Acoin, TestAttempt, Theme
+    Acoin, TestAttempt, Theme, Classifications
 from django.shortcuts import get_object_or_404, render, redirect
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
 from rest_framework.decorators import api_view
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
-    AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer
+    AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
+    ClassificationSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -445,14 +446,47 @@ def create_achievement(request):
                         status=status.HTTP_400_BAD_REQUEST)
             # Проверяем, является ли тип ачивки "Test"
             if achievement_data['type'] == 'Test':
-                # Убеждаемся, что request_type равен None
-                serializer.validated_data['request_type'] = None
-                if serializer.validated_data['required_count'] != 0:
-                    serializer.validated_data['required_count'] = 0
+                # Находим классификацию с названием "Test"
+                try:
+                    test_classification = Classifications.objects.get(name="Test")
+                except Classifications.DoesNotExist:
+                    return Response(
+                        {"error": "No classification with name 'Test' found."},
+                        status=status.HTTP_400_BAD_REQUEST)
+                # Устанавливаем значение request_type в найденную классификацию
+                serializer.validated_data['request_type'] = test_classification
+                # Проверяем, что required_count равен 0
+                serializer.validated_data['required_count'] = 0
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
+@api_view(['POST'])
+def create_classification(request):
+    if request.method == 'POST':
+        # Извлекаем название классификации из запроса
+        name = request.data.get('name')
+
+        # Проверяем, не пустое ли название
+        if name:
+            # Пытаемся найти классификацию по названию
+            try:
+                existing_classification = Classifications.objects.get(name=name)
+                # Если классификация с таким названием уже существует, возвращаем ошибку
+                return Response({'error': 'Classification with this name already exists'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            except Classifications.DoesNotExist:
+                # Если классификация с таким названием не найдена, создаем новую
+                classification_data = {'name': name}
+                serializer = ClassificationSerializer(data=classification_data)
+                if serializer.is_valid():
+                    serializer.save()
+                    return Response(serializer.data, status=status.HTTP_201_CREATED)
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            # Если название не было указано в запросе, возвращаем ошибку
+            return Response({'error': 'Name field is required'}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 def create_acoin_transaction(request):

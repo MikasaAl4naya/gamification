@@ -90,7 +90,7 @@ class Employee(AbstractUser):
         self.achievements.add(achievement)
 
 class Classifications(models.Model):
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
 
     def __str__(self):
         return self.name
@@ -108,7 +108,7 @@ class Achievement(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField()
     type = models.CharField(max_length=100, choices=TYPE_CHOICES, default='Test')
-    request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, null=True, blank=True)
+    request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, default=1, blank=True)
     required_count = models.IntegerField(null=True, blank=True,default=0)
     reward_experience = models.IntegerField(null=True, blank=True,default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
