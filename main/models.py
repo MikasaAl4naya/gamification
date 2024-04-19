@@ -109,9 +109,9 @@ class Achievement(models.Model):
     description = models.TextField()
     type = models.CharField(max_length=100, choices=TYPE_CHOICES, default='Test')
     request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, null=True, blank=True)
-    required_count = models.IntegerField(null=True, blank=True)
-    reward_experience = models.IntegerField(null=True, blank=True)
-    reward_currency = models.IntegerField(null=True, blank=True)
+    required_count = models.IntegerField(null=True, blank=True,default=0)
+    reward_experience = models.IntegerField(null=True, blank=True,default=0)
+    reward_currency = models.IntegerField(null=True, blank=True, default=0)
     image = models.ImageField(upload_to='achievements/', default='default.jpg')
     max_level = models.IntegerField(default=3)
 
@@ -119,18 +119,28 @@ class Achievement(models.Model):
         if self.type == 'Requests':
             if not self.request_type:
                 raise ValidationError('Field request_type is required for achievements based on number of requests.')
-            if self.required_count is None:
-                raise ValidationError('Field required_count is required for achievements based on number of requests.')
-            if self.reward_experience is None:
+            if self.required_count == 0:
                 raise ValidationError(
-                    'Field reward_experience is required for achievements based on number of requests.')
-            if self.reward_currency is None:
-                raise ValidationError('Field reward_currency is required for achievements based on number of requests.')
-        elif self.type != 'Test':
+                    'Field required_count must be specified for achievements based on number of requests.')
+            if self.reward_experience == 0:
+                raise ValidationError(
+                    'Field reward_experience must be specified for achievements based on number of requests.')
+            if self.reward_currency == 0:
+                raise ValidationError(
+                    'Field reward_currency must be specified for achievements based on number of requests.')
+        elif self.type == 'Test':
+            # Устанавливаем дефолтные значения только для полей, которые имеют значение None
+            if self.request_type_id is None:
+                self.request_type_id = 0
+            if self.required_count is None:
+                self.required_count = 0
             if self.reward_experience is None:
-                raise ValidationError('Field reward_experience is required for non-test achievements.')
+                self.reward_experience = 0
             if self.reward_currency is None:
-                raise ValidationError('Field reward_currency is required for non-test achievements.')
+                self.reward_currency = 0
+        else:
+            # Дополнительная логика для других типов ачивок
+            pass
 
     def __str__(self):
         return self.name

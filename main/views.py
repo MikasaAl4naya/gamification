@@ -424,14 +424,36 @@ def create_request(request):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 @api_view(['POST'])
 def create_achievement(request):
     if request.method == 'POST':
-        serializer = AchievementSerializer(data=request.data)
+        achievement_data = request.data
+        serializer = AchievementSerializer(data=achievement_data)
+
         if serializer.is_valid():
+            # Проверяем, является ли тип ачивки "Requests"
+            if achievement_data['type'] == 'Requests':
+                # Проверяем, что все необходимые поля заполнены
+                if (achievement_data['required_count'] is None or
+                        achievement_data['reward_experience'] is None or
+                        achievement_data['reward_currency'] is None or
+                        achievement_data['request_type'] is None):
+                    return Response(
+                        {"error": "All fields must be specified for achievements based on number of requests."},
+                        status=status.HTTP_400_BAD_REQUEST)
+            # Проверяем, является ли тип ачивки "Test"
+            if achievement_data['type'] == 'Test':
+                # Убеждаемся, что request_type равен None
+                serializer.validated_data['request_type'] = None
+                if serializer.validated_data['required_count'] != 0:
+                    serializer.validated_data['required_count'] = 0
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 @api_view(['POST'])
 def create_acoin_transaction(request):
     if request.method == 'POST':
