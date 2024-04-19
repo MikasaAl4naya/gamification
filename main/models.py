@@ -95,6 +95,10 @@ class Classifications(models.Model):
     def __str__(self):
         return self.name
 
+
+from django.core.exceptions import ValidationError
+
+
 class Achievement(models.Model):
     TYPE_CHOICES = [
         ('Test', 'За тест'),
@@ -110,8 +114,6 @@ class Achievement(models.Model):
     reward_currency = models.IntegerField(null=True, blank=True)
     image = models.ImageField(upload_to='achievements/', default='default.jpg')
     max_level = models.IntegerField(default=3)
-    def __str__(self):
-        return self.name
 
     def clean(self):
         if self.type == 'Requests':
@@ -124,11 +126,14 @@ class Achievement(models.Model):
                     'Field reward_experience is required for achievements based on number of requests.')
             if self.reward_currency is None:
                 raise ValidationError('Field reward_currency is required for achievements based on number of requests.')
-        if self.type != 'Test':
+        elif self.type != 'Test':
             if self.reward_experience is None:
                 raise ValidationError('Field reward_experience is required for non-test achievements.')
             if self.reward_currency is None:
                 raise ValidationError('Field reward_currency is required for non-test achievements.')
+
+    def __str__(self):
+        return self.name
 
     def level_up(self):
         if self.level >= self.max_level:
