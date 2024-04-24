@@ -1,3 +1,5 @@
+import ast
+
 from django.contrib.auth import login, logout
 from django.core.checks import messages
 from django.http import HttpResponse
@@ -396,6 +398,7 @@ def get_themes_with_tests(request):
         # Проходимся по всем тестам и собираем информацию о каждом из них
         for test in tests:
             test_info = {
+                'test': test.id,
                 'name': test.name,
                 'required_karma': test.required_karma,
                 'min_level': test.min_level,
@@ -658,8 +661,69 @@ def manually_check_test(request, employee_id, test_id):
             "answers_info": answers_info
         }
         return Response(response_data, status=status.HTTP_200_OK)
+@api_view(['GET'])
+def test_attempt_moderation_list(request):
+    # Получаем все попытки прохождения тестов на модерации
+    test_attempts_moderation = TestAttempt.objects.filter(status=TestAttempt.MODERATION)
+
+    # Сериализуем данные
+    serializer = TestAttemptSerializer(test_attempts_moderation, many=True)  # Предположим, что у вас есть соответствующий сериализатор
+
+    # Возвращаем ответ с данными
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+@api_view(['POST'])
+def update_test_attempt_status(request, test_attempt_id):
+    if request.method == 'POST':
+        try:
+            test_attempt = TestAttempt.objects.get(id=test_attempt_id)
+        except TestAttempt.DoesNotExist:
+            return JsonResponse({"message": "TestAttempt not found"}, status=404)
+
+        # Проверяем, что это попытка прохождения теста, которая находится на модерации
+        if test_attempt.status != TestAttempt.MODERATION:
+            return JsonResponse({"message": "TestAttempt is not in moderation"}, status=400)
+
+        # Получаем данные о баллах за каждый вопрос
+        text_questions_score = request.data.get("text_questions_score", {})
+
+        # Итерируемся по ключам словаря submitted_questions (айдишникам вопросов)
+        total_score = 0
+        # Преобразовать строку в словарь
+        submitted_questions_dict = ast.literal_eval(test_attempt.submitted_questions)
+
+        # Теперь можно использовать .items() для итерации по элементам словаря
+        for question_id, question_text in submitted_questions_dict.items():
+            # Получаем объект вопроса по его айдишнику
+            try:
+                question = TestQuestion.objects.get(id=question_id)
+            except TestQuestion.DoesNotExist:
+                return JsonResponse({"message": f"Question with id {question_id} not found"}, status=404)
+
+            # Получаем баллы за вопрос
+            question_points = question.points
+
+            # Если для этого вопроса были выставлены баллы в запросе, учитываем их
+            if str(question_id) in text_questions_score:
+                score_from_request = int(text_questions_score[str(question_id)])
+                # Ограничиваем баллы по максимальному количеству баллов за вопрос
+                question_points = min(question_points, score_from_request)
+
+            # Добавляем баллы за текущий вопрос к общему счету
+            total_score += question_points
+
+        # Обновляем статус в зависимости от набранных баллов
+        if total_score >= test_attempt.test.passing_score:
+            test_attempt.status = TestAttempt.PASSED
+        else:
+            test_attempt.status = TestAttempt.FAILED
+
+        # Сохраняем обновленный объект TestAttempt
+        test_attempt.save()
+
+        return JsonResponse({"message": "TestAttempt status updated successfully", "total_score": total_score},
+                            status=200)
 @api_view(['POST'])
 def complete_test(request, employee_id, test_id):
     if request.method == 'POST':
