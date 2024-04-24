@@ -329,7 +329,7 @@ class TestQuestion(models.Model):
     points = models.PositiveIntegerField(default=1)  # Количество баллов за правильный ответ на вопрос
     explanation = models.TextField(blank=True, null=True)  # Пояснение к вопросу
     image = models.CharField(max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
-    duration_seconds = models.PositiveIntegerField(default=0)  # Ограничение по времени в секундах
+    duration_seconds = models.IntegerField(default=0)  # Ограничение по времени в секундах
     position = models.PositiveIntegerField(default=0)
 @receiver(post_save, sender=TestQuestion)
 @receiver(post_delete, sender=TestQuestion)
@@ -386,22 +386,26 @@ class TestAttempt(models.Model):
     NOT_STARTED = 'Not Started'
     IN_PROGRESS = 'In Progress'
     FAILED = 'Failed'
+    MODERATION = 'На модерации'
     STATUS_CHOICES = [
         (PASSED, 'Пройден'),
         (NOT_STARTED, 'Не начат'),
         (IN_PROGRESS, 'В процессе'),
-        (FAILED, 'Не пройден')
+        (FAILED, 'Не пройден'),
+        (MODERATION, 'На модерации')
     ]
-
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     test = models.ForeignKey(Test, on_delete=models.CASCADE)
     start_time = models.DateTimeField(default=timezone.now)
+    score = models.FloatField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True)
     attempts = models.IntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=NOT_STARTED)
-    selected_answers = models.ManyToManyField(AnswerOption)
+    submitted_answers = models.TextField(null=True, blank=True)  # Сохраняем ответы сотрудника
+    submitted_questions = models.TextField(null=True, blank=True)  # Сохраняем вопросы
     free_response = models.TextField(null=True, blank=True)
     is_correct = models.BooleanField(default=False)
+
 
 
     # def save(self, *args, **kwargs):

@@ -53,6 +53,9 @@ urlpatterns = [
     path('delete_all_tests/', delete_all_tests, name='delete_all_tests'),
     path('tests/<int:test_id>/questions_with_explanations/', get_questions_with_explanations, name='questions_with_explanations'),
     path('classifications/create/', create_classification, name='create_classification'),
+    path('manually-check/<int:employee_id>/<int:test_id>/', manually_check_test, name='manually_check_test'),
+    path('test_attempts/', list_test_attempts, name='list_test_attempts'),
+    path('test_attempts/<int:attempt_id>/', get_test_attempt, name='get_test_attempt'),
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
 if settings.DEBUG:

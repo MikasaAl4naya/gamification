@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 from rest_framework import serializers
 
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
-    Request, Theme, Classifications
+    Request, Theme, Classifications, TestAttempt
 
 
 class LoginSerializer(serializers.Serializer):
@@ -29,7 +29,10 @@ class EmployeeSerializer(serializers.ModelSerializer):
         model = Employee
         fields = ['id', 'username', 'email', 'position', 'level', 'experience']
 
-
+class TestAttemptSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TestAttempt
+        fields = '__all__'
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User

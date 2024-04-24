@@ -13,7 +13,7 @@ from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, Emplo
 from rest_framework.decorators import api_view
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
-    ClassificationSerializer
+    ClassificationSerializer, TestAttemptSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -613,9 +613,8 @@ def get_questions_with_explanations(request, test_id):
     # Возвращаем ответ с данными в формате JSON
     return HttpResponse(data_json, content_type='application/json; charset=utf-8')
 
-
 @api_view(['POST'])
-def complete_test(request, employee_id, test_id):
+def manually_check_test(request, employee_id, test_id):
     if request.method == 'POST':
         try:
             employee = Employee.objects.get(id=employee_id)
@@ -626,59 +625,183 @@ def complete_test(request, employee_id, test_id):
         # Получаем все вопросы из теста
         questions = TestQuestion.objects.filter(test=test)
 
-        # Инициализируем счетчик правильных ответов и общее количество вопросов
+        # Инициализируем список для хранения информации о каждом ответе
+        answers_info = []
+        total_questions = 0
+        # Проверяем ответы на каждый вопрос
+        for question in questions:
+            total_questions += 1
+            print(total_questions)
+            answer_info = {}
+            if question.question_type == 'text':
+                # Для вопросов с типом 'text' проверяющий самостоятельно оценивает ответ
+                # Здесь предполагается, что данные о баллах за ответ передаются в теле запроса
+                answer_info['question_number'] = total_questions
+                answer_info['submitted_answer'] = request.data.get(str(question.number), "")
+                answer_info['manual_score'] = request.data.get(f"{question.number}_score", None)
+                answers_info.append(answer_info)
+            else:
+                # Для остальных типов вопросов ответы сравниваются с правильными ответами из базы данных
+                answer_key = f"{total_questions}_answer"
+                if answer_key in request.data:
+                    submitted_answer_id = int(request.data[answer_key])
+                    submitted_answer = AnswerOption.objects.get(id=submitted_answer_id)
+                    is_correct = submitted_answer.is_correct
+                    answer_info['question_number'] = total_questions
+                    answer_info['submitted_answer_number'] = submitted_answer_id
+                    answer_info['is_correct'] = is_correct
+                    answers_info.append(answer_info)
+
+        # Возвращаем информацию о проверенных ответах
+        response_data = {
+            "message": "Test manually checked.",
+            "answers_info": answers_info
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+def complete_test(request, employee_id, test_id):
+    if request.method == 'POST':
+        try:
+            employee = Employee.objects.get(id=employee_id)
+            test = Test.objects.get(id=test_id)
+        except (Employee.DoesNotExist, Test.DoesNotExist):
+            return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        questions = TestQuestion.objects.filter(test=test)
         correct_answers_count = 0
         total_questions = 0
+        score = 0  # Инициализируем переменную для подсчета баллов
 
-        # Инициализируем словарь для хранения номеров ответов на вопросы
-        answer_options = {}
+        answers_info = []
 
-        # Заполняем словарь с номерами ответов для каждого вопроса
-        for question in questions:
-            # Получаем все ответы на текущий вопрос и преобразуем их айдишники в список
-            answer_ids = list(question.answer_options.values_list('id', flat=True))
-            # Присваиваем номера ответам, начиная с 1
-            answer_numbers = list(range(1, len(answer_ids) + 1))
-            # Соединяем айдишники с соответствующими номерами
-            answer_options[question.id] = dict(zip(answer_numbers, answer_ids))
+        # Создаем объект TestAttempt для отслеживания попытки прохождения теста с результатами
+        test_attempt = TestAttempt.objects.create(
+            employee=employee,
+            test=test,
+            status=TestAttempt.MODERATION if TestQuestion.objects.filter(test=test, question_type='text').exists() else TestAttempt.NOT_STARTED,
+            score=0  # Инициализируем score
+        )
 
-        # Проверяем ответы на каждый вопрос
+        submitted_answers = {}  # Словарь для хранения ответов сотрудника
+        submitted_questions = {}  # Словарь для хранения вопросов
+
         for question_number, question in enumerate(questions, start=1):
             total_questions += 1
-            # Проверяем, есть ли ответ на текущий вопрос в запросе
             answer_key = str(question_number)
             if answer_key in request.data:
-                submitted_answer_number = request.data[answer_key]
-                # Проверяем, содержится ли номер ответа в списке номеров для текущего вопроса
-                if submitted_answer_number in answer_options[question.id]:
-                    submitted_answer_id = answer_options[question.id][submitted_answer_number]
-                    submitted_answer = AnswerOption.objects.get(id=submitted_answer_id)
-                    # Проверяем, является ли ответ сотрудника правильным
-                    if submitted_answer.is_correct:
+                submitted_answer = request.data[answer_key]
+                submitted_answers[question.id] = submitted_answer  # Сохраняем ответ сотрудника
+                submitted_questions[question.id] = question.question_text  # Сохраняем текст вопроса
+
+                answer_options = question.answer_options.all()
+                if question.question_type == 'single':
+                    submitted_answer_number = int(submitted_answer)
+                    if submitted_answer_number <= len(answer_options):
+                        submitted_answer_option = answer_options[submitted_answer_number - 1]
+                        is_correct = submitted_answer_option.is_correct
+                        if is_correct:
+                            correct_answers_count += 1
+                            # Добавляем количество баллов за правильный ответ к общему счету
+                            score += question.points
+                        answer_info = {
+                            "question_number": question_number,
+                            "submitted_answer_number": submitted_answer_number,
+                            "is_correct": is_correct
+                        }
+                        answers_info.append(answer_info)
+                    else:
+                        answer_info = {
+                            "question_number": question_number,
+                            "submitted_answer_number": submitted_answer_number,
+                            "is_correct": False
+                        }
+                        answers_info.append(answer_info)
+                elif question.question_type == 'text':
+                    # Для вопросов типа "text" просто проверяем, есть ли ответ, но не изменяем score
+                    if submitted_answer:
                         correct_answers_count += 1
-        print(correct_answers_count,"correct answers")
-        # Рассчитываем процент правильных ответов
-        if total_questions > 0:
-            correct_answers_percentage = (correct_answers_count / total_questions) * 100
+                        is_correct = True
+                    else:
+                        is_correct = False
+                    answer_info = {
+                        "question_number": question_number,
+                        "submitted_answer_number": submitted_answer,
+                        "is_correct": is_correct
+                    }
+                    answers_info.append(answer_info)
+                elif question.question_type == 'multiple':
+                    # Для вопросов с множественным выбором проверяем все предоставленные ответы
+                    submitted_answer_numbers = [int(answer) for answer in submitted_answer]
+                    correct_option_numbers = [index + 1 for index, option in enumerate(answer_options) if
+                                              option.is_correct]
+
+                    # Проверяем, содержатся ли в предоставленных ответах все правильные варианты и не содержатся ли неправильные
+                    is_correct = set(submitted_answer_numbers) == set(correct_option_numbers) and \
+                                 all(option <= len(answer_options) for option in submitted_answer_numbers)
+
+                    if is_correct:
+                        correct_answers_count += 1
+                        # Добавляем количество баллов за правильный ответ к общему счету
+                        score += question.points
+                    answer_info = {
+                        "question_number": question_number,
+                        "submitted_answer_number": submitted_answer_numbers,
+                        "is_correct": is_correct
+                    }
+                    answers_info.append(answer_info)
+
+        # Обновляем score в test_attempt
+        test_attempt.score = score
+        test_attempt.save()
+
+        # Сохраняем ответы сотрудника и вопросы в test_attempt
+        test_attempt.submitted_answers = submitted_answers
+        test_attempt.submitted_questions = submitted_questions
+        test_attempt.save()
+
+        # Если тест не содержит вопросов типа "text", сохраняем результаты и количество баллов
+        if not TestQuestion.objects.filter(test=test, question_type='text').exists():
+            # Обновляем статус в зависимости от прохождения теста
+            if correct_answers_count / total_questions * 100 >= test.passing_score:
+                test_attempt.status = TestAttempt.PASSED
+            else:
+                test_attempt.status = TestAttempt.FAILED
+            test_attempt.save()
+
+            response_data = {
+                "message": "Результаты теста",
+                "score": score,
+                "answers_info": answers_info
+            }
         else:
-            correct_answers_percentage = 0
+            response_data = {
+                "message": "Результаты теста находятся на модерации. Они будут доступны позже."
+            }
 
-        # Определяем, прошел ли сотрудник тест
-        if correct_answers_percentage >= test.passing_score:
-            test_status = TestAttempt.PASSED
-            message = "Test passed successfully."
-        else:
-            test_status = TestAttempt.FAILED
-            message = "Test failed."
+        return Response(response_data, status=status.HTTP_200_OK)
 
-        # Создаем объект TestAttempt для отслеживания попытки прохождения теста
-        test_attempt = TestAttempt.objects.create(employee=employee, test=test, status=test_status)
+@api_view(['GET'])
+def list_test_attempts(request):
+    """
+    Возвращает список всех попыток прохождения тестов.
+    """
+    test_attempts = TestAttempt.objects.all()
+    serializer = TestAttemptSerializer(test_attempts, many=True)
+    return Response(serializer.data)
 
-        # Возвращаем результат прохождения теста
-        return Response({"message": message, "correct_answers_percentage": correct_answers_percentage},
-                        status=status.HTTP_200_OK)
-
-
+@api_view(['GET'])
+def get_test_attempt(request, attempt_id):
+    """
+    Возвращает попытку прохождения теста по ее уникальному идентификатору (ID).
+    """
+    try:
+        test_attempt = TestAttempt.objects.get(id=attempt_id)
+        serializer = TestAttemptSerializer(test_attempt)
+        return Response(serializer.data)
+    except TestAttempt.DoesNotExist:
+        return Response({"message": "TestAttempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
 class CreateQuestion(APIView):
