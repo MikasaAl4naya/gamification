@@ -1,9 +1,11 @@
 import ast
+from datetime import timedelta
 
 from django.contrib.auth import login, logout
 from django.core.checks import messages
 from django.http import HttpResponse
 from django.contrib.auth.models import User
+from django.utils import timezone
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.utils import json
 
@@ -364,21 +366,50 @@ def get_test_by_id(request, test_id):
     # Сериализуем данные теста
     test_serializer = TestSerializer(test)
 
-    # Получаем все вопросы для данного теста
-    questions = TestQuestion.objects.filter(test=test).order_by('id')
+    # Получаем все вопросы и теорию для данного теста, отсортированные по позиции
+    questions = TestQuestion.objects.filter(test=test).order_by('position')
+    theories = Theory.objects.filter(test=test).order_by('position')
 
-    # Сериализуем данные вопросов
-    question_serializer = TestQuestionSerializer(questions, many=True)
+    # Создаем список для хранения блоков теста
+    blocks = []
 
+    # Добавляем данные о вопросах в список блоков
+    for question in questions:
+        block_data = {
+            'type': 'question',
+            'content': TestQuestionSerializer(question).data
+        }
+        blocks.append(block_data)
 
-    # Создаем окончательный ответ, включающий данные теста, вопросов и ответов
+    # Добавляем данные о теории в список блоков
+    for theory in theories:
+        block_data = {
+            'type': 'theory',
+            'content': TheorySerializer(theory).data
+        }
+        blocks.append(block_data)
+
+    # Сортируем блоки по позиции, если она есть
+    sorted_blocks = sorted(blocks, key=lambda x: x['content'].get('position', 0))
+
+    # Добавляем позицию вопроса к соответствующим блокам
+    for block in sorted_blocks:
+        if block['type'] == 'question':
+            block['content']['position'] = TestQuestion.objects.get(id=block['content']['id']).position
+        elif block['type'] == 'theory':
+            block['content']['position'] = Theory.objects.get(id=block['content']['id']).position
+
+    # Возвращаем данные о тесте и его блоках
     response_data = {
         'test': test_serializer.data,
-        'questions': question_serializer.data
-
+        'blocks': sorted_blocks
     }
-
     return Response(response_data)
+
+
+
+
+
 @api_view(['GET'])
 def get_themes_with_tests(request):
     # Получаем все темы
@@ -725,6 +756,26 @@ def update_test_attempt_status(request, test_attempt_id):
         return JsonResponse({"message": "TestAttempt status updated successfully", "total_score": total_score},
                             status=200)
 @api_view(['POST'])
+def start_test(request, employee_id, test_id):
+    if request.method == 'POST':
+        try:
+            employee = Employee.objects.get(id=employee_id)
+            test = Test.objects.get(id=test_id)
+        except (Employee.DoesNotExist, Test.DoesNotExist):
+            return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Создаем объект TestAttempt для отслеживания попытки прохождения теста
+        test_attempt = TestAttempt.objects.create(
+            employee=employee,
+            test=test,
+            status=TestAttempt.IN_PROGRESS  # Устанавливаем статус "в процессе"
+        )
+
+        # Возвращаем идентификатор только что созданного TestAttempt
+        return Response({"test_attempt_id": test_attempt.id}, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
 def complete_test(request, employee_id, test_id):
     if request.method == 'POST':
         try:
@@ -845,6 +896,50 @@ def complete_test(request, employee_id, test_id):
             }
 
         return Response(response_data, status=status.HTTP_200_OK)
+@api_view(['GET'])
+def reattempt_delay(request, employee_id, test_id):
+    try:
+        # Находим сотрудника и тест по их идентификаторам
+        employee = Employee.objects.get(id=employee_id)
+        test = Test.objects.get(id=test_id)
+    except (Employee.DoesNotExist, Test.DoesNotExist):
+        return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Ищем последнюю попытку прохождения этого теста этим сотрудником
+    last_attempt = TestAttempt.objects.filter(employee=employee, test=test).order_by('-end_time').first()
+
+    if last_attempt:
+        # Рассчитываем разницу во времени между последней попыткой и текущим временем
+        time_since_last_attempt = timezone.now() - last_attempt.start_time
+
+        # Рассчитываем оставшееся время до повторной попытки
+        remaining_time = timedelta(days=test.retry_delay_days) - time_since_last_attempt
+
+        # Получаем количество дней
+        remaining_days = remaining_time.days
+
+        if remaining_days >= 1:
+            # Если осталось больше одного дня, выводим только количество дней
+            return Response({"message": f"Reattempt available in {remaining_days} days"})
+        elif remaining_time.total_seconds() <= 0:
+            # Если время истекло
+            return Response({"message": "Reattempt available now"})
+        else:
+            # Выводим количество оставшихся часов, либо сообщение о том, что осталось меньше часа
+            remaining_hours, remaining_minutes = divmod(remaining_time.seconds, 3600)
+            remaining_minutes //= 60
+
+            if remaining_hours >= 1:
+                return Response({"message": f"Reattempt available in {remaining_hours} hours"})
+            else:
+                return Response({"message": "Reattempt available in less than an hour"})
+    else:
+        # Если это первая попытка прохождения теста этим сотрудником
+        return Response({"message": "Reattempt available now"})
+
+
+
+
 
 @api_view(['GET'])
 def list_test_attempts(request):

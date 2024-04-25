@@ -296,6 +296,7 @@ class Test(models.Model):
     acoin_reward = models.PositiveIntegerField(default=0)  # Количество акоинов за прохождение
     min_level = models.PositiveIntegerField(default=1)  # Минимальный уровень для прохождения теста
     achievement = models.ForeignKey(Achievement, on_delete=models.SET_NULL, null=True, blank=True)
+    retry_delay_days = models.PositiveIntegerField(null=True, blank=True)
     total_questions = models.PositiveIntegerField(default=0)
     send_results_to_email = models.BooleanField(default=False)  # Отправлять результаты на почту руководителю
 
@@ -406,19 +407,23 @@ class TestAttempt(models.Model):
     free_response = models.TextField(null=True, blank=True)
     is_correct = models.BooleanField(default=False)
 
-
-
-    # def save(self, *args, **kwargs):
-    #     # Проверяем, существует ли уже попытка прохождения этого теста этим сотрудником
-    #     existing_attempt = TestAttempt.objects.filter(employee=self.employee, test=self.test).last()
-    #     if existing_attempt:
-    #         if existing_attempt.attempts > 0:
-    #             self.attempts = existing_attempt.attempts - 1
-    #         else:
-    #             raise ValidationError("No attempts left for this test")
-    #     else:
-    #         self.attempts = 1 if self.test.can_attempt_twice else 0
-    #     super().save(*args, **kwargs)
+    def save(self, *args, **kwargs):
+        if not self.pk:  # Проверяем, что это новая запись
+            # Ищем последнюю попытку прохождения этого теста этим сотрудником
+            last_attempt = TestAttempt.objects.filter(employee=self.employee, test=self.test).order_by(
+                '-end_time').first()
+            if last_attempt:
+                # Рассчитываем разницу в днях между окончанием последней попытки и текущим временем
+                days_since_last_attempt = (timezone.now() - last_attempt.end_time).days
+                # Проверяем, прошло ли достаточно дней для повторной попытки
+                if days_since_last_attempt < self.test.retry_delay_days:
+                    raise ValidationError("Not enough days since last attempt")
+                else:
+                    self.attempts = 1  # Устанавливаем количество попыток на 1
+            else:
+                # Если это первая попытка прохождения теста этим сотрудником
+                self.attempts = 1 if self.test.can_attempt_twice else 0
+        super().save(*args, **kwargs)
 
     def submit_test(self):
         if self.status != self.PASSED and self.status != self.FAILED:
