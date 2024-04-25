@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from django.contrib.auth import login, logout
 from django.core.checks import messages
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.models import User
 from django.utils import timezone
 from rest_framework.generics import RetrieveAPIView
@@ -618,9 +618,6 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
-from django.shortcuts import get_object_or_404
-from django.http import JsonResponse
-from .models import TestQuestion
 
 def get_questions_with_explanations(request, test_id):
     # Получаем объект теста по его идентификатору
@@ -775,6 +772,8 @@ def start_test(request, employee_id, test_id):
         return Response({"test_attempt_id": test_attempt.id}, status=status.HTTP_201_CREATED)
 
 
+from django.utils import timezone
+
 @api_view(['POST'])
 def complete_test(request, employee_id, test_id):
     if request.method == 'POST':
@@ -784,20 +783,18 @@ def complete_test(request, employee_id, test_id):
         except (Employee.DoesNotExist, Test.DoesNotExist):
             return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        test_attempt = TestAttempt.objects.filter(employee=employee, test=test,
+                                                  status=TestAttempt.IN_PROGRESS).order_by('-start_time').last()
+
+        if not test_attempt:
+            return Response({"message": "Test attempt not found"}, status=status.HTTP_404_NOT_FOUND)
+
         questions = TestQuestion.objects.filter(test=test)
         correct_answers_count = 0
         total_questions = 0
         score = 0  # Инициализируем переменную для подсчета баллов
 
         answers_info = []
-
-        # Создаем объект TestAttempt для отслеживания попытки прохождения теста с результатами
-        test_attempt = TestAttempt.objects.create(
-            employee=employee,
-            test=test,
-            status=TestAttempt.MODERATION if TestQuestion.objects.filter(test=test, question_type='text').exists() else TestAttempt.NOT_STARTED,
-            score=0  # Инициализируем score
-        )
 
         submitted_answers = {}  # Словарь для хранения ответов сотрудника
         submitted_questions = {}  # Словарь для хранения вопросов
@@ -848,6 +845,9 @@ def complete_test(request, employee_id, test_id):
                     answers_info.append(answer_info)
                 elif question.question_type == 'multiple':
                     # Для вопросов с множественным выбором проверяем все предоставленные ответы
+                    if isinstance(submitted_answer, int):
+                        submitted_answer = [
+                            submitted_answer]  # Если только один вариант был выбран, преобразуем его в список
                     submitted_answer_numbers = [int(answer) for answer in submitted_answer]
                     correct_option_numbers = [index + 1 for index, option in enumerate(answer_options) if
                                               option.is_correct]
@@ -869,6 +869,7 @@ def complete_test(request, employee_id, test_id):
 
         # Обновляем score в test_attempt
         test_attempt.score = score
+        test_attempt.end_time = timezone.now()  # Устанавливаем end_time
         test_attempt.save()
 
         # Сохраняем ответы сотрудника и вопросы в test_attempt
@@ -876,8 +877,11 @@ def complete_test(request, employee_id, test_id):
         test_attempt.submitted_questions = submitted_questions
         test_attempt.save()
 
-        # Если тест не содержит вопросов типа "text", сохраняем результаты и количество баллов
-        if not TestQuestion.objects.filter(test=test, question_type='text').exists():
+        # Проверяем, содержит ли тест вопросы типа "text"
+        has_text_questions = TestQuestion.objects.filter(test=test, question_type='text').exists()
+
+        # Если тест не содержит вопросов типа "text"
+        if not has_text_questions:
             # Обновляем статус в зависимости от прохождения теста
             if correct_answers_count / total_questions * 100 >= test.passing_score:
                 test_attempt.status = TestAttempt.PASSED
@@ -891,11 +895,14 @@ def complete_test(request, employee_id, test_id):
                 "answers_info": answers_info
             }
         else:
+            # Если тест содержит вопросы типа "text", оставляем статус на модерации
             response_data = {
                 "message": "Результаты теста находятся на модерации. Они будут доступны позже."
             }
 
         return Response(response_data, status=status.HTTP_200_OK)
+
+
 @api_view(['GET'])
 def reattempt_delay(request, employee_id, test_id):
     try:
