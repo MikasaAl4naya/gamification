@@ -402,8 +402,7 @@ class TestAttempt(models.Model):
     end_time = models.DateTimeField(null=True, blank=True)
     attempts = models.IntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=NOT_STARTED)
-    submitted_answers = models.TextField(null=True, blank=True)  # Сохраняем ответы сотрудника
-    submitted_questions = models.TextField(null=True, blank=True)  # Сохраняем вопросы
+    test_results = models.TextField(null=True, blank=True)
     free_response = models.TextField(null=True, blank=True)
     is_correct = models.BooleanField(default=False)
 
