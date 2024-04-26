@@ -369,8 +369,8 @@ def test_results(request, test_attempt_id):
 
     # Формируем ответ в нужном формате
     response_data = {
-        "Набранное количество баллов": test_results.get("Набранное количество баллов"),
-        "Максимальное количество баллов": test_results.get("Максимальное количество баллов"),
+        "score": test_results.get("Набранное количество баллов"),
+        "max_score": test_results.get("Максимальное количество баллов"),
         "answers_info": test_results.get("answers_info")
     }
 
@@ -1048,8 +1048,61 @@ class DeleteAnswer(generics.DestroyAPIView):
     serializer_class = AnswerOptionSerializer
     lookup_field = 'id'  # Или какой у вас ключ в модели
 
-    from rest_framework import generics
+    class UpdateTestAndContent(APIView):
+        def put(self, request, test_id):
+            try:
+                test = Test.objects.get(id=test_id)
+            except Test.DoesNotExist:
+                return Response({"message": "Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
+            test_serializer = TestSerializer(test, data=request.data, partial=True)
+            if test_serializer.is_valid():
+                test_serializer.save()
+
+                # Обновление вопросов
+                if 'questions' in request.data:
+                    questions_data = request.data['questions']
+                    for question_data in questions_data:
+                        question_id = question_data.get('id', None)
+                        if question_id:
+                            try:
+                                question = TestQuestion.objects.get(id=question_id)
+                            except TestQuestion.DoesNotExist:
+                                continue
+                            question_serializer = TestQuestionSerializer(question, data=question_data, partial=True)
+                            if question_serializer.is_valid():
+                                question_serializer.save()
+
+                # Обновление ответов
+                if 'answers' in request.data:
+                    answers_data = request.data['answers']
+                    for answer_data in answers_data:
+                        answer_id = answer_data.get('id', None)
+                        if answer_id:
+                            try:
+                                answer = Answer.objects.get(id=answer_id)
+                            except Answer.DoesNotExist:
+                                continue
+                            answer_serializer = AnswerSerializer(answer, data=answer_data, partial=True)
+                            if answer_serializer.is_valid():
+                                answer_serializer.save()
+
+                # Обновление теории
+                if 'theory' in request.data:
+                    theory_data = request.data['theory']
+                    theory_id = theory_data.get('id', None)
+                    if theory_id:
+                        try:
+                            theory = Theory.objects.get(id=theory_id)
+                        except Theory.DoesNotExist:
+                            return Response({"message": "Theory not found"}, status=status.HTTP_404_NOT_FOUND)
+                        theory_serializer = TheorySerializer(theory, data=theory_data, partial=True)
+                        if theory_serializer.is_valid():
+                            theory_serializer.save()
+
+                return Response({"message": "Test and content updated successfully"}, status=status.HTTP_200_OK)
+            else:
+                return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 class UpdateTest(generics.UpdateAPIView):
     queryset = Test.objects.all()
     serializer_class = TestSerializer
