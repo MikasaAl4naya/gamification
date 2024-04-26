@@ -819,15 +819,19 @@ def complete_test(request, employee_id, test_id):
                             # Добавляем количество баллов за правильный ответ к общему счету
                             score += question.points
                         answer_info = {
-                            "question_number": question_number,
                             "question_text": question_text,
-                            "submitted_answer": submitted_answer_option['option_number'],
                             "is_correct": is_correct,
-                            "answer_options": [{option['option_number']: option['option_text']} for option in answer_options]
+                            "answer_options": []
                         }
-                        if not is_correct:
-                            correct_options = [option['option_number'] for option in answer_options if option['is_correct']]
-                            answer_info["correct_options"] = correct_options
+                        for option in answer_options:
+                            option_info = {
+                                "option_number": option["option_number"],
+                                "option_text": option["option_text"],
+                                "submitted_answer": option["option_number"] == submitted_answer_number,
+                                "correct_options": option["is_correct"]
+                            }
+                            answer_info["answer_options"].append(option_info)
+
                         # Включаем пояснение в блок ответа
                         explanation = question.explanation
                         if explanation:
@@ -835,7 +839,6 @@ def complete_test(request, employee_id, test_id):
                         answers_info.append(answer_info)
                     else:
                         answer_info = {
-                            "question_number": question_number,
                             "question_text": question_text,
                             "submitted_answer": submitted_answer,
                             "is_correct": False,
@@ -850,7 +853,6 @@ def complete_test(request, employee_id, test_id):
                     else:
                         is_correct = False
                     answer_info = {
-                        "question_number": question_number,
                         "question_text": question_text,
                         "submitted_answer": submitted_answer,
                         "is_correct": is_correct,
@@ -878,12 +880,20 @@ def complete_test(request, employee_id, test_id):
                         # Добавляем количество баллов за правильный ответ к общему счету
                         score += question.points
                     answer_info = {
-                        "question_number": question_number,
                         "question_text": question_text,
                         "submitted_answer": submitted_answer_numbers,
                         "is_correct": is_correct,
-                        "answer_options": [{option['option_number']: option['option_text']} for option in answer_options]
+                        "answer_options": []
                     }
+                    for option in answer_options:
+                        option_info = {
+                            "option_number": option["option_number"],
+                            "option_text": option["option_text"],
+                            "submitted_answer": option["option_number"] in submitted_answer_numbers,
+                            "correct_options": option["is_correct"]
+                        }
+                        answer_info["answer_options"].append(option_info)
+
                     if not is_correct:
                         correct_options = [option['option_number'] for option in answer_options if option['is_correct']]
                         answer_info["correct_options"] = correct_options
