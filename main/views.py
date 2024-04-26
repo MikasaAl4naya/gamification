@@ -961,7 +961,19 @@ def reattempt_delay(request, employee_id, test_id):
 
 
 
+@api_view(['DELETE'])
+def delete_all_test_attempts(request):
+    TestAttempt.objects.all().delete()
+    return Response({"message": "All test attempts have been deleted."})
 
+@api_view(['DELETE'])
+def delete_test_attempt(request, attempt_id):
+    try:
+        test_attempt = TestAttempt.objects.get(id=attempt_id)
+        test_attempt.delete()
+        return Response({"message": f"Test attempt with id {attempt_id} has been deleted."})
+    except TestAttempt.DoesNotExist:
+        return Response({"message": "Test attempt not found."}, status=404)
 
 
 @api_view(['GET'])
