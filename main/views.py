@@ -771,9 +771,6 @@ def start_test(request, employee_id, test_id):
         # Возвращаем идентификатор только что созданного TestAttempt
         return Response({"test_attempt_id": test_attempt.id}, status=status.HTTP_201_CREATED)
 
-
-from django.utils import timezone
-
 @api_view(['POST'])
 def complete_test(request, employee_id, test_id):
     if request.method == 'POST':
@@ -792,6 +789,7 @@ def complete_test(request, employee_id, test_id):
         questions = TestQuestion.objects.filter(test=test)
         correct_answers_count = 0
         total_questions = 0
+        max_score = 0
         score = 0  # Инициализируем переменную для подсчета баллов
 
         answers_info = []
@@ -801,33 +799,47 @@ def complete_test(request, employee_id, test_id):
 
         for question_number, question in enumerate(questions, start=1):
             total_questions += 1
+            question_text = question.question_text
+            answer_options = [{'option_number': index + 1, 'option_text': option.option_text, 'is_correct': option.is_correct} for index, option in enumerate(question.answer_options.all())]
+            max_score += question.points
+
             answer_key = str(question_number)
             if answer_key in request.data:
                 submitted_answer = request.data[answer_key]
-                submitted_answers[question.id] = submitted_answer  # Сохраняем ответ сотрудника
-                submitted_questions[question.id] = question.question_text  # Сохраняем текст вопроса
+                submitted_answers[question_text] = submitted_answer  # Сохраняем ответ сотрудника
+                submitted_questions[question_text] = question_text  # Сохраняем текст вопроса
 
-                answer_options = question.answer_options.all()
                 if question.question_type == 'single':
                     submitted_answer_number = int(submitted_answer)
                     if submitted_answer_number <= len(answer_options):
                         submitted_answer_option = answer_options[submitted_answer_number - 1]
-                        is_correct = submitted_answer_option.is_correct
+                        is_correct = submitted_answer_option['is_correct']
                         if is_correct:
                             correct_answers_count += 1
                             # Добавляем количество баллов за правильный ответ к общему счету
                             score += question.points
                         answer_info = {
                             "question_number": question_number,
-                            "submitted_answer_number": submitted_answer_number,
-                            "is_correct": is_correct
+                            "question_text": question_text,
+                            "submitted_answer": submitted_answer_option['option_number'],
+                            "is_correct": is_correct,
+                            "answer_options": [{option['option_number']: option['option_text']} for option in answer_options]
                         }
+                        if not is_correct:
+                            correct_options = [option['option_number'] for option in answer_options if option['is_correct']]
+                            answer_info["correct_options"] = correct_options
+                        # Включаем пояснение в блок ответа
+                        explanation = question.explanation
+                        if explanation:
+                            answer_info["explanation"] = explanation
                         answers_info.append(answer_info)
                     else:
                         answer_info = {
                             "question_number": question_number,
-                            "submitted_answer_number": submitted_answer_number,
-                            "is_correct": False
+                            "question_text": question_text,
+                            "submitted_answer": submitted_answer,
+                            "is_correct": False,
+                            "answer_options": [{option['option_number']: option['option_text']} for option in answer_options]
                         }
                         answers_info.append(answer_info)
                 elif question.question_type == 'text':
@@ -839,9 +851,14 @@ def complete_test(request, employee_id, test_id):
                         is_correct = False
                     answer_info = {
                         "question_number": question_number,
-                        "submitted_answer_number": submitted_answer,
-                        "is_correct": is_correct
+                        "question_text": question_text,
+                        "submitted_answer": submitted_answer,
+                        "is_correct": is_correct,
+                        "answer_options": [{option['option_number']: option['option_text']} for option in answer_options]
                     }
+                    if not is_correct:
+                        correct_options = [option['option_number'] for option in answer_options if option['is_correct']]
+                        answer_info["correct_options"] = correct_options
                     answers_info.append(answer_info)
                 elif question.question_type == 'multiple':
                     # Для вопросов с множественным выбором проверяем все предоставленные ответы
@@ -850,7 +867,7 @@ def complete_test(request, employee_id, test_id):
                             submitted_answer]  # Если только один вариант был выбран, преобразуем его в список
                     submitted_answer_numbers = [int(answer) for answer in submitted_answer]
                     correct_option_numbers = [index + 1 for index, option in enumerate(answer_options) if
-                                              option.is_correct]
+                                              option['is_correct']]
 
                     # Проверяем, содержатся ли в предоставленных ответах все правильные варианты и не содержатся ли неправильные
                     is_correct = set(submitted_answer_numbers) == set(correct_option_numbers) and \
@@ -862,9 +879,14 @@ def complete_test(request, employee_id, test_id):
                         score += question.points
                     answer_info = {
                         "question_number": question_number,
-                        "submitted_answer_number": submitted_answer_numbers,
-                        "is_correct": is_correct
+                        "question_text": question_text,
+                        "submitted_answer": submitted_answer_numbers,
+                        "is_correct": is_correct,
+                        "answer_options": [{option['option_number']: option['option_text']} for option in answer_options]
                     }
+                    if not is_correct:
+                        correct_options = [option['option_number'] for option in answer_options if option['is_correct']]
+                        answer_info["correct_options"] = correct_options
                     answers_info.append(answer_info)
 
         # Обновляем score в test_attempt
@@ -877,31 +899,14 @@ def complete_test(request, employee_id, test_id):
         test_attempt.submitted_questions = submitted_questions
         test_attempt.save()
 
-        # Проверяем, содержит ли тест вопросы типа "text"
-        has_text_questions = TestQuestion.objects.filter(test=test, question_type='text').exists()
-
-        # Если тест не содержит вопросов типа "text"
-        if not has_text_questions:
-            # Обновляем статус в зависимости от прохождения теста
-            if correct_answers_count / total_questions * 100 >= test.passing_score:
-                test_attempt.status = TestAttempt.PASSED
-            else:
-                test_attempt.status = TestAttempt.FAILED
-            test_attempt.save()
-
-            response_data = {
-                "message": "Результаты теста",
-                "score": score,
-                "answers_info": answers_info
-            }
-        else:
-            # Если тест содержит вопросы типа "text", оставляем статус на модерации
-            response_data = {
-                "message": "Результаты теста находятся на модерации. Они будут доступны позже."
-            }
+        # Подготавливаем данные для вывода
+        response_data = {
+            "Набранное количество баллов": score,
+            "Максимальное количество баллов": max_score,
+            "answers_info": answers_info
+        }
 
         return Response(response_data, status=status.HTTP_200_OK)
-
 
 @api_view(['GET'])
 def reattempt_delay(request, employee_id, test_id):
@@ -943,6 +948,7 @@ def reattempt_delay(request, employee_id, test_id):
     else:
         # Если это первая попытка прохождения теста этим сотрудником
         return Response({"message": "Reattempt available now"})
+
 
 
 
