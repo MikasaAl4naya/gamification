@@ -402,7 +402,7 @@ class TestAttempt(models.Model):
     end_time = models.DateTimeField(null=True, blank=True)
     attempts = models.IntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=NOT_STARTED)
-    test_results = models.TextField(null=True, blank=True)
+    test_results = models.JSONField(null=True, blank=True,default=dict)
     free_response = models.TextField(null=True, blank=True)
     is_correct = models.BooleanField(default=False)
 

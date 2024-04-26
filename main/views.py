@@ -357,6 +357,24 @@ def get_test_with_theory(request, test_id):
     except Test.DoesNotExist:
         return Response({'error': 'Test not found'}, status=404)
 
+@api_view(['GET'])
+def test_results(request, test_attempt_id):
+    try:
+        test_attempt = TestAttempt.objects.get(id=test_attempt_id)
+    except TestAttempt.DoesNotExist:
+        return Response({"message": "Test attempt not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Получаем результаты теста в виде словаря Python из поля test_results
+    test_results = json.loads(test_attempt.test_results)
+
+    # Формируем ответ в нужном формате
+    response_data = {
+        "Набранное количество баллов": test_results.get("Набранное количество баллов"),
+        "Максимальное количество баллов": test_results.get("Максимальное количество баллов"),
+        "answers_info": test_results.get("answers_info")
+    }
+
+    return Response(response_data, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 def get_test_by_id(request, test_id):
@@ -924,7 +942,16 @@ def reattempt_delay(request, employee_id, test_id):
         # Если это первая попытка прохождения теста этим сотрудником
         return Response({"message": "Reattempt available now"})
 
+@api_view(['GET'])
+def review_test_attempts(request):
+    if request.method == 'GET':
+        # Получаем все попытки прохождения тестов на модерации
+        test_attempts = TestAttempt.objects.filter(status=TestAttempt.MODERATION)
 
+        # Сериализуем данные для вывода
+        serializer = TestAttemptSerializer(test_attempts, many=True)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 @api_view(['DELETE'])
 def delete_all_test_attempts(request):

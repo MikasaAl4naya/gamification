@@ -62,6 +62,8 @@ urlpatterns = [
     path('start_test/<int:employee_id>/<int:test_id>/', start_test, name='start_test'),
     path('attempts/delete_all', delete_all_test_attempts, name='delete-all-attempts'),
     path('attempts/delete/<int:attempt_id>/', delete_test_attempt, name='delete-attempt'),
+    path('review-test-attempts/', review_test_attempts, name='review_test_attempts'),
+    path('test_attempt/test_results/<int:test_attempt_id>', test_results, name='test_results'),
 
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
