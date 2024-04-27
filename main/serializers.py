@@ -112,7 +112,7 @@ class TestQuestionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TestQuestion
-        fields = ['id', 'test', 'question_text', 'question_type', 'points', 'explanation', 'image',  'answer_options']
+        fields = ['id', 'test', 'question_text', 'duration_seconds', 'question_type', 'points', 'explanation', 'image',  'answer_options']
 
     def get_image_url(self, obj):
         request = self.context.get('request')
@@ -159,14 +159,6 @@ class TestSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'duration_seconds', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma','experience_points', 'acoin_reward', 'min_level', 'achievement', 'total_questions', 'can_attempt_twice','retry_delay_days', 'send_results_to_email', 'theories']
 
 
-    def update(self, instance, validated_data):
-        # Логика обновления
-        instance.name = validated_data.get('name', instance.name)
-        instance.description = validated_data.get('description', instance.description)
-        instance.duration_minutes = validated_data.get('duration_minutes', instance.duration_minutes)
-        instance.passing_score = validated_data.get('passing_score', instance.passing_score)
-        instance.save()
-        return instance
 class RequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Request

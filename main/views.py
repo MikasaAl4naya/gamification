@@ -357,6 +357,49 @@ def get_test_with_theory(request, test_id):
     except Test.DoesNotExist:
         return Response({'error': 'Test not found'}, status=404)
 
+
+class UpdateTestAndContent(APIView):
+    def put(self, request, test_id):
+        try:
+            test = Test.objects.get(id=test_id)
+        except Test.DoesNotExist:
+            return Response({"message": "Test not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        test_serializer = TestSerializer(test, data=request.data, partial=True)
+        if test_serializer.is_valid():
+            test_serializer.save()
+
+            # Удаление старых вопросов, ответов и теории
+            test.questions.all().delete()
+            test.theory.delete()
+
+            # Создание новых вопросов
+            if 'questions' in request.data:
+                questions_data = request.data['questions']
+                for question_data in questions_data:
+                    question_serializer = TestQuestionSerializer(data=question_data)
+                    if question_serializer.is_valid():
+                        question_serializer.save(test=test)
+
+            # Создание новых ответов
+            if 'answers' in request.data:
+                answers_data = request.data['answers']
+                for answer_data in answers_data:
+                    answer_serializer = AnswerOptionSerializer(data=answer_data)
+                    if answer_serializer.is_valid():
+                        answer_serializer.save()
+
+            # Создание новой теории
+            if 'theory' in request.data:
+                theory_data = request.data['theory']
+                theory_serializer = TheorySerializer(data=theory_data)
+                if theory_serializer.is_valid():
+                    theory_serializer.save(test=test)
+
+            return Response({"message": "Test and content updated successfully"}, status=status.HTTP_200_OK)
+        else:
+            return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 @api_view(['GET'])
 def test_results(request, test_attempt_id):
     try:
@@ -1048,21 +1091,24 @@ class DeleteAnswer(generics.DestroyAPIView):
     serializer_class = AnswerOptionSerializer
     lookup_field = 'id'  # Или какой у вас ключ в модели
 
-    class UpdateTestAndContent(APIView):
-        def put(self, request, test_id):
-            try:
-                test = Test.objects.get(id=test_id)
-            except Test.DoesNotExist:
-                return Response({"message": "Test not found"}, status=status.HTTP_404_NOT_FOUND)
+class UpdateTestAndContent(APIView):
+    def put(self, request, test_id):
+        try:
+            test = Test.objects.get(id=test_id)
+        except Test.DoesNotExist:
+            return Response({"message": "Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
-            test_serializer = TestSerializer(test, data=request.data, partial=True)
-            if test_serializer.is_valid():
-                test_serializer.save()
+        test_serializer = TestSerializer(test, data=request.data, partial=True)
+        if test_serializer.is_valid():
+            test_serializer.save()
 
-                # Обновление вопросов
-                if 'questions' in request.data:
-                    questions_data = request.data['questions']
-                    for question_data in questions_data:
+            # Обновление блоков
+            if 'blocks' in request.data:
+                blocks_data = request.data['blocks']
+                position = 1  # Инициализация счетчика позиции
+                for block_data in blocks_data:
+                    if block_data['type'] == 'question':
+                        question_data = block_data['content']
                         question_id = question_data.get('id', None)
                         if question_id:
                             try:
@@ -1071,38 +1117,49 @@ class DeleteAnswer(generics.DestroyAPIView):
                                 continue
                             question_serializer = TestQuestionSerializer(question, data=question_data, partial=True)
                             if question_serializer.is_valid():
-                                question_serializer.save()
+                                question_serializer.save(position=position)  # Устанавливаем позицию вопроса
+                        else:
+                            question_data['test'] = test.id  # Устанавливаем связь с тестом
+                            question_serializer = TestQuestionSerializer(data=question_data)
+                            if question_serializer.is_valid():
+                                question_serializer.save(position=position)  # Устанавливаем позицию вопроса
+                                position += 1  # Увеличиваем счетчик позиции
 
-                # Обновление ответов
-                if 'answers' in request.data:
-                    answers_data = request.data['answers']
-                    for answer_data in answers_data:
-                        answer_id = answer_data.get('id', None)
-                        if answer_id:
+                                # Сохраняем ответы для текущего вопроса
+                                answers_data = question_data.get('answer_options', [])
+                                for answer_data in answers_data:
+                                    answer_data['question'] = question_serializer.instance.id
+                                    answer_serializer = AnswerOptionSerializer(data=answer_data)
+                                    if answer_serializer.is_valid():
+                                        answer_serializer.save()
+
+                    elif block_data['type'] == 'theory':
+                        theory_data = block_data['content']
+                        theory_id = theory_data.get('id', None)
+                        if theory_id:
                             try:
-                                answer = Answer.objects.get(id=answer_id)
-                            except Answer.DoesNotExist:
+                                theory = Theory.objects.get(id=theory_id)
+                            except Theory.DoesNotExist:
                                 continue
-                            answer_serializer = AnswerSerializer(answer, data=answer_data, partial=True)
-                            if answer_serializer.is_valid():
-                                answer_serializer.save()
+                            theory_serializer = TheorySerializer(theory, data=theory_data, partial=True)
+                            if theory_serializer.is_valid():
+                                theory_serializer.save(position=position)  # Устанавливаем позицию теории
+                        else:
+                            theory_data['test'] = test.id  # Устанавливаем связь с тестом
+                            theory_serializer = TheorySerializer(data=theory_data)
+                            if theory_serializer.is_valid():
+                                theory_serializer.save(position=position)  # Устанавливаем позицию теории
+                                position += 1  # Увеличиваем счетчик позиции
 
-                # Обновление теории
-                if 'theory' in request.data:
-                    theory_data = request.data['theory']
-                    theory_id = theory_data.get('id', None)
-                    if theory_id:
-                        try:
-                            theory = Theory.objects.get(id=theory_id)
-                        except Theory.DoesNotExist:
-                            return Response({"message": "Theory not found"}, status=status.HTTP_404_NOT_FOUND)
-                        theory_serializer = TheorySerializer(theory, data=theory_data, partial=True)
-                        if theory_serializer.is_valid():
-                            theory_serializer.save()
+            return Response({"message": "Test and content updated successfully"}, status=status.HTTP_200_OK)
+        else:
+            return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-                return Response({"message": "Test and content updated successfully"}, status=status.HTTP_200_OK)
-            else:
-                return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+
 class UpdateTest(generics.UpdateAPIView):
     queryset = Test.objects.all()
     serializer_class = TestSerializer
