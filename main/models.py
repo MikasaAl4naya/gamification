@@ -3,7 +3,7 @@ from urllib.request import Request
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser, Group, Permission, User
-from django.db import models
+from django.db import models, transaction
 from django.core.validators import EmailValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 import re
@@ -299,7 +299,8 @@ class Test(models.Model):
     retry_delay_days = models.PositiveIntegerField(null=True, blank=True)
     total_questions = models.PositiveIntegerField(default=0)
     send_results_to_email = models.BooleanField(default=False)  # Отправлять результаты на почту руководителю
-
+    # Новое поле для обозначения максимального количества баллов
+    max_score = models.PositiveIntegerField(default=0)
 
     def clean(self):
         # Убеждаемся, что тип ачивки всегда "Test"
@@ -429,11 +430,18 @@ class TestAttempt(models.Model):
             self.status = self.IN_PROGRESS
         self.is_completed = True
         self.save()
-
         # Создаем транзакцию для начисления акоинов, если тест пройден успешно
         if self.status == self.PASSED:
             acoin_reward = self.test.acoin_reward
             AcoinTransaction.objects.create(employee=self.employee, amount=acoin_reward)
+            achievement = self.test.achievement
+            if achievement:
+                if self.score == self.test.max_score:
+                    # Начинаем транзакцию для обеспечения целостности данных
+                    with transaction.atomic():
+                        # Создаем запись об ачивке для сотрудника
+                        EmployeeAchievement.objects.create(employee=self.employee, achievement=achievement)
+                        self.employee.save()
 
 
 class TestAttemptQuestionExplanation(models.Model):

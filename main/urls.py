@@ -53,11 +53,10 @@ urlpatterns = [
     path('delete_all_tests/', delete_all_tests, name='delete_all_tests'),
     path('tests/<int:test_id>/questions_with_explanations/', get_questions_with_explanations, name='questions_with_explanations'),
     path('classifications/create/', create_classification, name='create_classification'),
-    path('manually-check/<int:employee_id>/<int:test_id>/', manually_check_test, name='manually_check_test'),
     path('test_attempts/', list_test_attempts, name='list_test_attempts'),
     path('test_attempts/<int:attempt_id>/', get_test_attempt, name='get_test_attempt'),
     path('test_attempts/moderation/', test_attempt_moderation_list, name='test_attempt_moderation_list'),
-    path('test_attempts/<int:test_attempt_id>/update_status/', update_test_attempt_status, name='update_test_attempt_status'),
+    path('test_attempts/<int:test_attempt_id>/moderate/', moderate_test_attempt, name='moderate_test_attempt'),
     path('test_attempts/<int:employee_id>/<int:test_id>/reattempt_delay/', reattempt_delay, name='reattempt_delay'),
     path('start_test/<int:employee_id>/<int:test_id>/', start_test, name='start_test'),
     path('attempts/delete_all', delete_all_test_attempts, name='delete-all-attempts'),
@@ -65,6 +64,7 @@ urlpatterns = [
     path('review-test-attempts/', review_test_attempts, name='review_test_attempts'),
     path('test_attempt/test_results/<int:test_attempt_id>', test_results, name='test_results'),
     path('update_test_and_content/<int:test_id>/', UpdateTestAndContent.as_view(), name='update_test_and_content'),
+    path('employees/<int:employee_id>/tests/<int:test_id>/status/', test_status),
 
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
