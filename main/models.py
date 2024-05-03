@@ -413,13 +413,15 @@ class TestAttempt(models.Model):
             last_attempt = TestAttempt.objects.filter(employee=self.employee, test=self.test).order_by(
                 '-end_time').first()
             if last_attempt:
-                # Рассчитываем разницу в днях между окончанием последней попытки и текущим временем
-                days_since_last_attempt = (timezone.now() - last_attempt.end_time).days
-                # Проверяем, прошло ли достаточно дней для повторной попытки
-                if days_since_last_attempt < self.test.retry_delay_days:
-                    raise ValidationError("Not enough days since last attempt")
+                if self.test.retry_delay_days != 0:
+                    # Рассчитываем разницу в днях между окончанием последней попытки и текущим временем
+                    days_since_last_attempt = (timezone.now() - last_attempt.end_time).days
+                    # Проверяем, прошло ли достаточно дней для повторной попытки
+                    if days_since_last_attempt < self.test.retry_delay_days:
+                        raise ValidationError("Not enough days since last attempt")
                 else:
-                    self.attempts = 1  # Устанавливаем количество попыток на 1
+                    # Если retry_delay_days равно 0, количество дней не учитывается
+                    days_since_last_attempt = 0
             else:
                 # Если это первая попытка прохождения теста этим сотрудником
                 self.attempts = 1 if self.test.can_attempt_twice else 0
