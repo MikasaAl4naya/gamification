@@ -706,8 +706,6 @@ def get_questions_with_explanations(request, test_id):
     return HttpResponse(data_json, content_type='application/json; charset=utf-8')
 
 
-import json
-
 @api_view(['GET'])
 def test_status(request, employee_id, test_id):
     try:
@@ -748,9 +746,6 @@ def test_status(request, employee_id, test_id):
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
-
-
-
 
 
 @api_view(['GET'])
@@ -953,15 +948,10 @@ def complete_test(request, employee_id, test_id):
 
         # Сохраняем изменения в объекте test_attempt
         test_attempt.save()
-
-        # Формируем ответ в зависимости от наличия вопросов типа 'text'
-        if has_text_questions:
-            response_data = {"message": "Тест ушел на модерацию"}
-        else:
-            response_data = {
-                "status": test_attempt.status,
-                "test_attempt_id": test_attempt.id
-            }
+        response_data = {
+            "status": test_attempt.status,
+            "test_attempt_id": test_attempt.id
+        }
 
         return Response(response_data, status=status.HTTP_200_OK)
 
