@@ -959,9 +959,8 @@ def complete_test(request, employee_id, test_id):
             response_data = {"message": "Тест ушел на модерацию"}
         else:
             response_data = {
-                "Набранное количество баллов": score,
-                "Максимальное количество баллов": max_score,
-                "answers_info": answers_info
+                "status": test_attempt.status,
+                "test_attempt_id": test_attempt.id
             }
 
         return Response(response_data, status=status.HTTP_200_OK)
