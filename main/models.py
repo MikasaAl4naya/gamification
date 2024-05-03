@@ -425,6 +425,11 @@ class TestAttempt(models.Model):
             else:
                 # Если это первая попытка прохождения теста этим сотрудником
                 self.attempts = 1 if self.test.can_attempt_twice else 0
+
+        # Установка текущего времени в качестве времени начала теста
+        if not self.end_time:
+            self.end_time = timezone.now()
+
         super().save(*args, **kwargs)
 
     def submit_test(self):
