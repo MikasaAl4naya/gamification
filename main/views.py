@@ -752,7 +752,8 @@ def test_status(request, employee_id, test_id):
 
     response_data = {
         "status": status_message,
-        "correct_answers": correct_answers_info
+        "total_score": total_score,
+        "max_score": max_score
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
@@ -844,11 +845,28 @@ def moderate_test_attempt(request, test_attempt_id):
 
         return Response(response_data, status=status.HTTP_200_OK)
 
+@api_view(['GET'])
+def required_tests_chain(request, test_id):
+    try:
+        test = Test.objects.get(id=test_id)
+    except Test.DoesNotExist:
+        return Response({"message": "Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    required_tests = []  # Список для хранения цепочки тестов
 
+    # Начинаем с текущего теста и движемся по цепочке required_test
+    current_test = test
+    while current_test.required_test:
+        required_tests.insert(0, current_test.required_test)  # Добавляем предыдущий тест в начало списка
+        current_test = current_test.required_test
 
+    # Формируем список идентификаторов тестов в цепочке
+    tests_chain_ids = [test.id for test in required_tests]
 
+    if not tests_chain_ids:
+        return Response({"message": "No required tests found for this test"}, status=status.HTTP_200_OK)
 
+    return Response({"required_tests_chain": tests_chain_ids}, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
 def start_test(request, employee_id, test_id):

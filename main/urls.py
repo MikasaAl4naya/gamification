@@ -28,11 +28,11 @@ urlpatterns = [
     path('update_question/<int:id>/', UpdateQuestion.as_view(), name='update_question'),
     path('update_answer/<int:id>/', UpdateAnswer.as_view(), name='update_answer'),
     path('test_constructor/', test_constructor, name='test_constructor'),
-    path('api/test/<int:test_id>/', views.get_test_by_id, name='get_test'),
-    path('api/question/<int:question_id>/', views.get_question, name='get_question'),
-    path('api/answer/<int:answer_id>/', views.get_answer, name='get_answer'),
-    path('api/tests/', views.get_all_tests, name='get_all_tests'),
-    path('api/create_acoin_transaction/', views.create_acoin_transaction, name='create_acoin_transaction'),
+    path('test/<int:test_id>/', views.get_test_by_id, name='get_test'),
+    path('question/<int:question_id>/', views.get_question, name='get_question'),
+    path('answer/<int:answer_id>/', views.get_answer, name='get_answer'),
+    path('tests/', views.get_all_tests, name='get_all_tests'),
+    path('create_acoin_transaction/', views.create_acoin_transaction, name='create_acoin_transaction'),
     path('users/', get_all_users, name='get_all_users'),
     path('user/<int:user_id>/', get_user, name='get_user'),
     path('user/<int:user_id>/balance/', get_user_balance, name='get_user_balance'),
@@ -65,6 +65,7 @@ urlpatterns = [
     path('test_attempt/test_results/<int:test_attempt_id>', test_results, name='test_results'),
     path('update_test_and_content/<int:test_id>/', UpdateTestAndContent.as_view(), name='update_test_and_content'),
     path('employees/<int:employee_id>/tests/<int:test_id>/status/', test_status),
+    path('tests/required_tests_chain/<int:test_id>/', required_tests_chain, name='required_tests'),
 
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки

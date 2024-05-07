@@ -152,11 +152,9 @@ class TestQuestionSerializer(serializers.ModelSerializer):
 
 
 class TestSerializer(serializers.ModelSerializer):
-    theories = TheorySerializer(many=True, read_only=True)
-
     class Meta:
         model = Test
-        fields = ['id', 'name', 'description', 'duration_seconds', 'max_score', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma','experience_points', 'acoin_reward', 'min_level', 'achievement', 'total_questions', 'can_attempt_twice','retry_delay_days', 'send_results_to_email', 'theories']
+        fields = ['id', 'name', 'description', 'duration_seconds', 'max_score', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma','experience_points', 'acoin_reward', 'min_level', 'achievement', 'total_questions', 'can_attempt_twice','retry_delay_days', 'send_results_to_email', 'required_test']
 
 
 class RequestSerializer(serializers.ModelSerializer):
