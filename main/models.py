@@ -301,6 +301,7 @@ class Test(models.Model):
     send_results_to_email = models.BooleanField(default=False)  # Отправлять результаты на почту руководителю
     # Новое поле для обозначения максимального количества баллов
     max_score = models.PositiveIntegerField(default=0)
+    required_test = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
 
     def clean(self):
         # Убеждаемся, что тип ачивки всегда "Test"

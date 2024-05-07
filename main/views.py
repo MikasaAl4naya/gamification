@@ -400,6 +400,7 @@ class UpdateTestAndContent(APIView):
         else:
             return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 @api_view(['GET'])
 def test_results(request, test_attempt_id):
     try:
@@ -407,17 +408,26 @@ def test_results(request, test_attempt_id):
     except TestAttempt.DoesNotExist:
         return Response({"message": "Test attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Получаем результаты теста в виде словаря Python из поля test_results
+    # Проверяем статус теста
+    if test_attempt.status == TestAttempt.MODERATION:
+        # Если тест находится на модерации, возвращаем информацию о статусе и ничего больше не отображаем
+        response_data = {
+            "status": test_attempt.status
+        }
+        return Response(response_data, status=status.HTTP_200_OK)
+
+    # Если тест не находится на модерации, получаем результаты теста в виде словаря Python из поля test_results
     test_results = json.loads(test_attempt.test_results)
 
     # Формируем ответ в нужном формате
     response_data = {
         "score": test_results.get("Набранное количество баллов"),
         "max_score": test_results.get("Максимальное количество баллов"),
+        "status": test_attempt.status,
         "answers_info": test_results.get("answers_info")
     }
-
     return Response(response_data, status=status.HTTP_200_OK)
+
 
 @api_view(['GET'])
 def get_test_by_id(request, test_id):
@@ -760,8 +770,6 @@ def test_attempt_moderation_list(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-import json
-
 
 @api_view(['POST'])
 def moderate_test_attempt(request, test_attempt_id):
@@ -769,43 +777,77 @@ def moderate_test_attempt(request, test_attempt_id):
         try:
             test_attempt = TestAttempt.objects.get(id=test_attempt_id)
         except TestAttempt.DoesNotExist:
-            return JsonResponse({"message": "TestAttempt not found"}, status=404)
+            return Response({"message": "Test Attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Проверяем, что это попытка прохождения теста, которая находится на модерации
-        if test_attempt.status != TestAttempt.MODERATION:
-            return JsonResponse({"message": "TestAttempt is not in moderation"}, status=400)
+        # Проверяем, что запрос содержит необходимые данные
+        if 'moderated_questions' not in request.data:
+            return Response({"message": "Moderated questions are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Получаем данные о баллах за каждый вопрос из запроса
-        manual_scores = request.data.get("manual_scores", {})
+        moderated_questions = request.data['moderated_questions']
 
-        # Преобразуем строку JSON с результатами теста в словарь
+        # Преобразуем строку test_results в словарь
         test_results = json.loads(test_attempt.test_results)
 
-        # Обновляем баллы для каждого вопроса, если указаны в запросе
-        for question_id, score in manual_scores.items():
-            # Проверяем, существует ли вопрос с таким идентификатором в результатах теста
-            if question_id in test_results:
-                try:
-                    # Попробуем преобразовать значение в целое число
-                    score = int(score)
-                except ValueError:
-                    # Если не удалось преобразовать в число, возвращаем ошибку
-                    return JsonResponse({"message": f"Invalid score value for question {question_id}"}, status=400)
+        # Получаем информацию о ответах на вопросы
+        answers_info = test_results.get('answers_info', [])
 
-                # Обновляем баллы для вопроса
-                test_results[question_id]["score"] = min(score, test_results[question_id]["question_score"])
-        # Суммируем значения ключа "score" только для элементов, где он присутствует
-        total_score = sum(item.get("score", 0) for item in test_results["answers_info"])
+        # Проверяем, находится ли тест на модерации
+        if test_attempt.status != TestAttempt.MODERATION:
+            return Response({"message": "Test attempt is not on moderation"}, status=status.HTTP_400_BAD_REQUEST)
+
+        for moderated_question in moderated_questions:
+            question_number = moderated_question.get('question_number')
+            moderation_score = moderated_question.get('moderation_score')
+
+            # Проверяем, что номер вопроса корректный
+            if question_number < 1 or question_number > len(answers_info):
+                return Response({"message": "Invalid question number"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Находим вопрос, который нужно модерировать
+            question_to_moderate = answers_info[question_number - 1]
+
+            # Проверяем, что вопрос имеет тип "text"
+            if 'type' not in question_to_moderate or question_to_moderate['type'] != 'text':
+                return Response({"message": "You can only moderate questions with type 'text'"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Получаем максимальное количество баллов, которое можно установить за ответ на вопрос
+            max_question_score = question_to_moderate.get('max_question_score', 0)
+
+            # Проверяем, что установленное количество баллов не превышает максимальное
+            if moderation_score > max_question_score:
+                return Response({"message": f"Moderation score exceeds the maximum allowed score ({max_question_score})"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Обновляем баллы за вопрос
+            question_to_moderate['question_score'] = moderation_score
+
+        # Обновляем информацию об ответах на вопросы
+        test_results['answers_info'] = answers_info
+        test_attempt.test_results = json.dumps(test_results)
+
+        # Пересчитываем общее количество баллов
+        total_score = sum(question.get('question_score', 0) for question in answers_info)
+        test_attempt.score = total_score
+
+        # Проверяем, пройден ли тест
         if total_score >= test_attempt.test.passing_score:
             test_attempt.status = TestAttempt.PASSED
         else:
             test_attempt.status = TestAttempt.FAILED
 
-        # Сохраняем обновленные результаты теста обратно в формате JSON
-        test_attempt.test_results = json.dumps(test_results)
+        # Сохраняем изменения
         test_attempt.save()
-        
-        return JsonResponse({"message": "TestAttempt status updated successfully", "total_score": total_score})
+
+        response_data = {
+            "message": "Test moderated successfully",
+            "status": test_attempt.status
+        }
+
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+
+
+
 
 
 @api_view(['POST'])
@@ -849,6 +891,7 @@ def complete_test(request, employee_id, test_id):
         answers_info = []
 
         for question_number, question in enumerate(questions, start=1):
+            submitted_text_answer = ""
             total_questions += 1
             question_text = question.question_text
             answer_options = [
@@ -875,12 +918,9 @@ def complete_test(request, employee_id, test_id):
                     else:
                         question_score = 0
                 elif question.question_type == 'text':
-                    if submitted_answer:
-                        correct_answers_count += 1
-                        score += question.points
-                        question_score = question.points
-                    else:
-                        question_score = 0
+                    # Для вопросов с типом "text" сохраняем текстовый ответ
+                    submitted_text_answer = submitted_answer
+                    question_score = 0
                 elif question.question_type == 'multiple':
                     if isinstance(submitted_answer, int):
                         submitted_answer = [
@@ -896,30 +936,37 @@ def complete_test(request, employee_id, test_id):
                         # Рассчитываем баллы за каждый правильный ответ
                         question_score_per_answer = question.points / len(correct_option_numbers)
                         # Умножаем количество правильных ответов на баллы за каждый ответ
-                        question_score = selected_correct_answers * question_score_per_answer
+                        question_score = round(selected_correct_answers * question_score_per_answer, 2)
                         correct_answers_count += selected_correct_answers
                         score += question_score
                         is_correct = True  # Помечаем вопрос как правильный, если есть хотя бы один правильный ответ
                     else:
                         question_score = 0
 
+
                 # Обновляем данные в answers_info
                 answer_info = {
                     "question_text": question_text,
+                    "type": question.question_type,
                     "is_correct": is_correct,  # Используем переменную is_correct
                     "question_score": question_score,
                     "answer_options": [],
                     "explanation": question.explanation
                 }
-                for option in answer_options:
-                    option_info = {
-                        "option_number": option["option_number"],
-                        "option_text": option["option_text"],
-                        "submitted_answer": option["option_number"] in submitted_answer_numbers if isinstance(
-                            submitted_answer, list) else option["option_number"] == int(submitted_answer),
-                        "correct_options": option["is_correct"]
-                    }
-                    answer_info["answer_options"].append(option_info)
+                if question.question_type == 'text':
+                    # Добавляем текстовый ответ в информацию о вопросе
+                    answer_info['text_answer'] = submitted_text_answer
+                    answer_info['max_question_score'] = question.points
+                else:
+                    for option in answer_options:
+                        option_info = {
+                            "option_number": option["option_number"],
+                            "option_text": option["option_text"],
+                            "submitted_answer": option["option_number"] in submitted_answer_numbers if isinstance(
+                                submitted_answer, list) else option["option_number"] == int(submitted_answer),
+                            "correct_options": option["is_correct"]
+                        }
+                        answer_info["answer_options"].append(option_info)
                 answers_info.append(answer_info)
 
         # Обновляем данные в test_attempt
