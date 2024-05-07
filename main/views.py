@@ -610,6 +610,13 @@ def get_answer(request, answer_id):
 
 @api_view(['POST'])
 def create_test(request):
+    # Получаем данные о блоках из запроса
+    blocks_data = request.data.get('blocks', [])
+
+    # Проверяем, есть ли вопросы в блоках
+    if not any(block['type'] == 'question' for block in blocks_data):
+        return Response({'error': 'Test must contain at least one question'}, status=status.HTTP_400_BAD_REQUEST)
+
     # Создаем сериализатор теста
     test_serializer = TestSerializer(data=request.data)
 
@@ -619,9 +626,6 @@ def create_test(request):
 
     # Сохраняем тест
     test = test_serializer.save()
-
-    # Получаем данные о блоках из запроса
-    blocks_data = request.data.get('blocks', [])
 
     # Списки для хранения созданных вопросов, теории и ответов
     created_questions = []
@@ -846,13 +850,15 @@ def moderate_test_attempt(request, test_attempt_id):
         return Response(response_data, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
-def required_tests_chain(request, test_id):
+def required_tests_chain(request, employee_id, test_id):
     try:
+        employee = Employee.objects.get(id=employee_id)
         test = Test.objects.get(id=test_id)
-    except Test.DoesNotExist:
-        return Response({"message": "Test not found"}, status=status.HTTP_404_NOT_FOUND)
+    except (Employee.DoesNotExist, Test.DoesNotExist):
+        return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
     required_tests = []  # Список для хранения цепочки тестов
+    tests_not_passed = []  # Список для хранения тестов, которые не прошел сотрудник
 
     # Начинаем с текущего теста и движемся по цепочке required_test
     current_test = test
@@ -860,13 +866,24 @@ def required_tests_chain(request, test_id):
         required_tests.insert(0, current_test.required_test)  # Добавляем предыдущий тест в начало списка
         current_test = current_test.required_test
 
+    # Проверяем, прошел ли сотрудник каждый из необходимых тестов
+    for req_test in required_tests:
+        if not TestAttempt.objects.filter(employee=employee, test=req_test, status=TestAttempt.PASSED).exists():
+            tests_not_passed.append(req_test.id)
+
     # Формируем список идентификаторов тестов в цепочке
     tests_chain_ids = [test.id for test in required_tests]
 
     if not tests_chain_ids:
         return Response({"message": "No required tests found for this test"}, status=status.HTTP_200_OK)
 
-    return Response({"required_tests_chain": tests_chain_ids}, status=status.HTTP_200_OK)
+    response_data = {}
+
+    if tests_not_passed:
+        response_data["tests_not_passed"] = tests_not_passed
+
+    return Response(response_data, status=status.HTTP_200_OK)
+
 
 @api_view(['POST'])
 def start_test(request, employee_id, test_id):
@@ -877,6 +894,14 @@ def start_test(request, employee_id, test_id):
         except (Employee.DoesNotExist, Test.DoesNotExist):
             return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        # Проверяем, есть ли предыдущий тест, который необходимо пройти
+        required_test = test.required_test
+        if required_test:
+            # Проверяем, пройден ли предыдущий тест
+            if not TestAttempt.objects.filter(employee=employee, test=required_test, status=TestAttempt.PASSED).exists():
+                return Response({"message": f"You must pass test {required_test.id} before starting this test"},
+                                status=status.HTTP_400_BAD_REQUEST)
+
         # Создаем объект TestAttempt для отслеживания попытки прохождения теста
         test_attempt = TestAttempt.objects.create(
             employee=employee,
@@ -886,6 +911,7 @@ def start_test(request, employee_id, test_id):
 
         # Возвращаем идентификатор только что созданного TestAttempt
         return Response({"test_attempt_id": test_attempt.id}, status=status.HTTP_201_CREATED)
+
 
 @api_view(['POST'])
 def complete_test(request, employee_id, test_id):

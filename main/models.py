@@ -8,7 +8,7 @@ from django.core.validators import EmailValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 import re
 
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 
@@ -283,6 +283,8 @@ class Theme(models.Model):
     name = models.CharField(max_length=255)
 
 class Test(models.Model):
+    author = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True)  # Автор создания теста
+    created_at = models.DateTimeField(auto_now_add=True)  # Дата создания теста
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
     duration_seconds = models.PositiveIntegerField(default=3600)  # Время в секундах
@@ -451,14 +453,6 @@ class TestAttempt(models.Model):
                         EmployeeAchievement.objects.create(employee=self.employee, achievement=achievement)
                         self.employee.save()
 
-
-class TestAttemptQuestionExplanation(models.Model):
-    test_attempt = models.ForeignKey(TestAttempt, on_delete=models.CASCADE)
-    test_question = models.ForeignKey(TestQuestion, on_delete=models.CASCADE)
-    explanation = models.TextField()
-
-    class Meta:
-        unique_together = ('test_attempt', 'test_question')
 @receiver(post_save, sender=TestAttempt)
 def create_acoin_transaction(sender, instance, created, **kwargs):
     if created and instance.status == TestAttempt.PASSED:
@@ -471,5 +465,18 @@ def create_acoin_transaction(sender, instance, created, **kwargs):
         # Начисляем опыт сотруднику
         instance.employee.add_experience(experience_reward)
 
+
+@receiver(pre_delete, sender=models.Model)
+def reorder_ids(sender, instance, **kwargs):
+    # Получаем класс модели удаляемого экземпляра
+    model_class = instance.__class__
+
+    # Получаем список записей, у которых идентификатор больше чем у удаляемой записи
+    records_to_reorder = model_class.objects.filter(id__gt=instance.id)
+
+    # Перенумеровываем идентификаторы
+    for record in records_to_reorder:
+        record.id -= 1
+        record.save(update_fields=['id'])
 
 
