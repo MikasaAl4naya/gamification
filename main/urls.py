@@ -10,7 +10,6 @@ urlpatterns = [
     path('create_request/', create_request, name='create_request'),
     path('success/', success_view, name='success'),
     path('register/', register, name='register_employee'),  # URL для страницы регистрации,
-    path('login/', user_login, name='login'),
     path('registration_success/', registration_success, name='registration_success'),
     path('profile/', user_profile, name='user_profile'),
     path('logout/', logout_view, name='logout'),
@@ -66,6 +65,7 @@ urlpatterns = [
     path('update_test_and_content/<int:test_id>/', UpdateTestAndContent.as_view(), name='update_test_and_content'),
     path('employees/<int:employee_id>/tests/<int:test_id>/status/', test_status),
     path('tests/required_tests_chain/<int:employee_id>/<int:test_id>/', required_tests_chain, name='required_tests'),
+    path('test_duration/<int:test_id>/', get_test_duration, name='get_test_duration'),
 
 
 ]

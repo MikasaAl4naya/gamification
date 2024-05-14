@@ -30,6 +30,7 @@ from .serializers import TheorySerializer
 def test_constructor(request):
     return render(request, 'test_constructor.html')
 
+
 class LoginAPIView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -41,10 +42,19 @@ class LoginAPIView(APIView):
             # Проверяем аутентификацию пользователя по имени пользователя и паролю
             user = authenticate(request, username=username, password=password)
             if user is not None:
-                # Если пользователь успешно аутентифицирован, возвращаем успешный ответ с данными пользователя
+                # Если пользователь успешно аутентифицирован, получаем его
                 employee = Employee.objects.get(username=username)
-                employee_serializer = EmployeeSerializer(employee)
-                return Response({'message': 'Login successful', 'employee': employee_serializer.data},
+
+                # Получаем опыт и карму сотрудника
+                experience = employee.experience
+                karma = employee.karma
+
+                # Получаем количество акоинов сотрудника
+                acoin = Acoin.objects.get(employee=employee).amount
+
+                # Возвращаем успешный ответ с данными сотрудника
+                return Response({'message': 'Login successful', 'employee_id': employee.id,
+                                 'experience': experience, 'karma': karma, 'acoin': acoin},
                                 status=status.HTTP_200_OK)
             else:
                 # Если аутентификация не удалась, возвращаем сообщение об ошибке
@@ -55,8 +65,6 @@ class LoginAPIView(APIView):
         else:
             # Если данные запроса некорректны, возвращаем сообщение об ошибке
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 
 def index(request):
@@ -138,25 +146,6 @@ class EmployeeDetails(APIView):
             return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
 
-def user_login(request):
-    if request.method == 'POST':
-        form = EmployeeAuthenticationForm(request.POST)
-        if form.is_valid():
-            username = form.cleaned_data.get('username')
-            password = form.cleaned_data.get('password')
-            user = authenticate(request, username=username, password=password)
-            if user is not None:
-                login(request, user)
-                # Сохранение идентификатора пользователя в сессии
-                request.session['user_id'] = user.id
-                return redirect('user_profile')
-            else:
-                print('Неверные учетные данные')
-        else:
-            print('Форма не прошла валидацию')
-    else:
-        form = EmployeeAuthenticationForm()
-    return render(request, 'login.html', {'form': form})
 
 def some_other_view(request):
     # Получение идентификатора пользователя из сессии
@@ -278,14 +267,41 @@ def theme_list(request):
         themes = Theme.objects.all().order_by('name')
         serializer = ThemeSerializer(themes, many=True)
         return Response(serializer.data)
+
+
 @api_view(['GET'])
 def get_user(request, user_id):
     try:
+        # Получаем сотрудника по его ID
         employee = Employee.objects.get(id=user_id)
-        serializer = EmployeeSerializer(employee)
-        return Response(serializer.data)
+
+        # Получаем опыт и карму сотрудника
+        experience = employee.experience
+        karma = employee.karma
+
+        # Получаем количество акоинов сотрудника
+        acoin = Acoin.objects.get(employee=employee).amount
+
+        # Создаем словарь с данными сотрудника
+        user_data = {
+            'id': employee.id,
+            'username': employee.username,
+            'email': employee.email,
+            'position': employee.position,
+            'level': employee.level,
+            'experience': experience,
+            'karma': karma,
+            'acoin': acoin,
+            'next_lvl_experience': employee.next_level_experience
+        }
+
+        # Возвращаем успешный ответ с данными сотрудника
+        return Response(user_data)
     except Employee.DoesNotExist:
-        return Response({'error': 'User not found'}, status=404)
+        # Если сотрудник не найден, возвращаем сообщение об ошибке
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
 @api_view(['DELETE'])
 def delete_all_tests(request):
     if request.method == 'DELETE':
@@ -484,7 +500,7 @@ def get_test_by_id(request, test_id):
 @api_view(['GET'])
 def get_themes_with_tests(request):
     # Получаем все темы
-    themes = Theme.objects.all()
+    themes = Theme.objects.all().order_by('name')
 
     # Создаем список для хранения тем с их связанными тестами
     themes_with_tests = []
@@ -503,7 +519,7 @@ def get_themes_with_tests(request):
                 'test': test.id,
                 'name': test.name,
                 'required_karma': test.required_karma,
-                'min_level': test.min_level,
+                'min_exp': test.min_experience,
                 'achievement': test.achievement.name if test.achievement else None
             }
             tests_info.append(test_info)
@@ -894,6 +910,16 @@ def start_test(request, employee_id, test_id):
         except (Employee.DoesNotExist, Test.DoesNotExist):
             return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        # Проверяем, достаточно ли у сотрудника опыта для прохождения теста
+        if employee.experience < test.experience_points:
+            return Response({"message": "Not enough experience to start this test"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Проверяем, достаточно ли у сотрудника кармы для прохождения теста
+        if employee.karma < test.required_karma:
+            return Response({"message": "Not enough karma to start this test"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         # Проверяем, есть ли предыдущий тест, который необходимо пройти
         required_test = test.required_test
         if required_test:
@@ -911,6 +937,7 @@ def start_test(request, employee_id, test_id):
 
         # Возвращаем идентификатор только что созданного TestAttempt
         return Response({"test_attempt_id": test_attempt.id}, status=status.HTTP_201_CREATED)
+
 
 
 @api_view(['POST'])
@@ -1043,7 +1070,6 @@ def complete_test(request, employee_id, test_id):
             "status": test_attempt.status,
             "test_attempt_id": test_attempt.id
         }
-
         return Response(response_data, status=status.HTTP_200_OK)
 
 
@@ -1114,6 +1140,17 @@ def delete_test_attempt(request, attempt_id):
         return Response({"message": "Test attempt not found."}, status=404)
 
 
+@api_view(['GET'])
+def get_test_duration(request, test_id):
+    try:
+        test = Test.objects.get(id=test_id)
+    except Test.DoesNotExist:
+        return Response({"message": "Test not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Получаем время на прохождение теста
+    duration_seconds = test.duration_seconds
+
+    return Response({"duration_seconds": duration_seconds}, status=status.HTTP_200_OK)
 @api_view(['GET'])
 def list_test_attempts(request):
     """

@@ -43,12 +43,28 @@ class Employee(AbstractUser):
 
     def level_up(self):
         self.level += 1
-        self.experience -= self.next_level_experience
-        self.next_level_experience *= 2
+
+        # Определение множителя опыта для следующего уровня
+        experience_multiplier = 2.0 - (self.level * 0.1)
+        if experience_multiplier < 1.0:
+            experience_multiplier = 1.0
+
+        # Вычисление опыта, необходимого для следующего уровня
+        self.next_level_experience = int(self.next_level_experience * experience_multiplier)
+
+        # Проверка, достигнут ли следующий уровень
         while self.experience >= self.next_level_experience:
             self.level += 1
             self.experience -= self.next_level_experience
-            self.next_level_experience *= 2
+
+            # Обновление множителя опыта для следующего уровня
+            experience_multiplier = 2.0 - (self.level * 0.1)
+            if experience_multiplier < 1.0:
+                experience_multiplier = 1.0
+
+            # Вычисление опыта, необходимого для следующего уровня
+            self.next_level_experience = int(self.next_level_experience * experience_multiplier)
+
         self.save()
 
     # Метод add_experience для модели Employee
@@ -296,7 +312,7 @@ class Test(models.Model):
     required_karma = models.IntegerField(default=0)  # Необходимое количество кармы для прохождения
     experience_points = models.PositiveIntegerField(default=0)  # Количество опыта за прохождение
     acoin_reward = models.PositiveIntegerField(default=0)  # Количество акоинов за прохождение
-    min_level = models.PositiveIntegerField(default=1)  # Минимальный уровень для прохождения теста
+    min_experience = models.PositiveIntegerField(default=0)  # Минимальный опыт для прохождения теста
     achievement = models.ForeignKey(Achievement, on_delete=models.SET_NULL, null=True, blank=True)
     retry_delay_days = models.PositiveIntegerField(null=True, blank=True)
     total_questions = models.PositiveIntegerField(default=0)
@@ -452,18 +468,22 @@ class TestAttempt(models.Model):
                         # Создаем запись об ачивке для сотрудника
                         EmployeeAchievement.objects.create(employee=self.employee, achievement=achievement)
                         self.employee.save()
-
 @receiver(post_save, sender=TestAttempt)
-def create_acoin_transaction(sender, instance, created, **kwargs):
-    if created and instance.status == TestAttempt.PASSED:
+def handle_test_attempt_status(sender, instance, **kwargs):
+    if instance.status == TestAttempt.PASSED:
+        create_acoin_transaction(instance)
+
+def create_acoin_transaction(test_attempt):
+    if test_attempt.status == TestAttempt.PASSED:
         # Получаем количество акоинов за прохождение теста
-        acoin_reward = instance.test.acoin_reward
-        # Создаем транзакцию для сотрудника, который получил ачивку за тест
-        AcoinTransaction.objects.create(employee=instance.employee, amount=acoin_reward)
+        acoin_reward = test_attempt.test.acoin_reward
+        # Создаем транзакцию для сотрудника, который получил акоины за тест
+        AcoinTransaction.objects.create(employee=test_attempt.employee, amount=acoin_reward)
         # Получаем количество опыта за прохождение теста
-        experience_reward = instance.test.experience_points
+        experience_reward = test_attempt.test.experience_points
         # Начисляем опыт сотруднику
-        instance.employee.add_experience(experience_reward)
+        test_attempt.employee.increase_experience(experience_reward)
+
 
 
 @receiver(pre_delete, sender=models.Model)
