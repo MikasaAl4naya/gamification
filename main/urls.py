@@ -9,7 +9,6 @@ urlpatterns = [
     path('achievements/', views.achievement_list, name='achievement_list'),
     path('create_request/', create_request, name='create_request'),
     path('success/', success_view, name='success'),
-    path('register/', register, name='register_employee'),  # URL для страницы регистрации,
     path('registration_success/', registration_success, name='registration_success'),
     path('profile/', user_profile, name='user_profile'),
     path('logout/', logout_view, name='logout'),
@@ -66,6 +65,13 @@ urlpatterns = [
     path('employees/<int:employee_id>/tests/<int:test_id>/status/', test_status),
     path('tests/required_tests_chain/<int:employee_id>/<int:test_id>/', required_tests_chain, name='required_tests'),
     path('test_duration/<int:test_id>/', get_test_duration, name='get_test_duration'),
+    path('test-score/<int:test_id>/', TestScoreAPIView.as_view(), name='test-score'),
+    path('most-incorrect-questions/<int:test_id>/', QuestionErrorAPIView.as_view(), name='most_incorrect_questions_api'),
+    path('most-correct-questions/<int:test_id>/', QuestionSuccessAPIView.as_view(), name='most_correct_questions_api'),
+    path('employee-stats/', StatisticsAPIView.as_view(), name='employee_stats'),
+    path('test-time-stat/', TestStatisticsAPIView.as_view(), name='test-time-stat'),
+    path('questions-stat/', QuestionStatisticsAPIView.as_view(), name='questions_stat'),
+    # Другие URL-адреса вашего приложения...
 
 
 ]

@@ -1,11 +1,15 @@
 import ast
+from collections import Counter
 from datetime import timedelta
 
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, get_user_model
 from django.core.checks import messages
+from django.db.models import Max, FloatField, Avg, Count, Q, F, Sum, ExpressionWrapper, DurationField
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.utils.crypto import get_random_string
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.utils import json
 
@@ -74,6 +78,38 @@ def achievement_list(request):
     achievements = Achievement.objects.all()
     return render(request, 'achievement_list.html', {'achievements': achievements})
 
+class TestScoreAPIView(APIView):
+    def get(self, request, test_id):
+        # Получаем максимальное количество баллов для каждого сотрудника
+        max_scores = TestAttempt.objects.filter(test_id=test_id).values('employee_id').annotate(
+            max_score=Coalesce(Max('score'), 0, output_field=FloatField())
+        )
+
+        # Вычисляем средний балл теста по всем участникам
+        average_score = TestAttempt.objects.filter(test_id=test_id).aggregate(avg_score=Avg('score'))['avg_score'] or 0
+
+        # Формируем список с результатами для каждого сотрудника
+        scores = [{'employee_id': item['employee_id'], 'max_score': item['max_score']} for item in max_scores]
+
+        # Добавляем средний балл теста к результатам
+        result = {
+            'average_score': average_score,
+            'individual_scores': scores
+        }
+
+        return Response(result)
+class MostIncorrectQuestionsAPIView(APIView):
+    def get(self, request):
+        # Получаем список вопросов, по которым сотрудники чаще всего ошибаются
+        most_incorrect_questions = TestQuestion.objects.annotate(
+            incorrect_count=Count('testattemptquestionexplanation', filter=~Q(testattemptquestionexplanation__is_correct=True))
+        ).order_by('-incorrect_count')[:10]
+
+        # Формируем список вопросов и количества ошибок для каждого вопроса
+        result = [{'question_text': question.text, 'incorrect_count': question.incorrect_count} for question in most_incorrect_questions]
+
+        return Response(result)
+
 def create_achievement(request):
     if request.method == 'POST':
         form = AchievementForm(request.POST, request.FILES)
@@ -96,33 +132,6 @@ def create_request(request):
 
 
 from django.db import transaction
-
-@transaction.atomic
-def register(request):
-    if request.method == 'POST':
-        form = EmployeeRegistrationForm(request.POST)
-        if form.is_valid():
-            # Генерация случайного пароля
-            password = User.objects.make_random_password()
-
-            # Создание пользователя и сотрудника внутри одной транзакции
-            user = User.objects.create_user(username=form.cleaned_data['email'].split('@')[0], password=password)
-            employee = form.save(commit=False)
-            employee.user = user
-            employee.username = user.username
-
-            # Сохранение сотрудника
-            employee.save()
-
-            # Сохранение сгенерированного пароля в сессии
-            request.session['generated_password'] = password
-
-            # Отображение страницы успешной регистрации
-            return redirect('registration_success')
-
-    else:
-        form = EmployeeRegistrationForm()
-    return render(request, 'register_employee.html', {'form': form})
 
 def registration_success(request):
     # Получение сгенерированного пароля из сессии
@@ -201,14 +210,15 @@ class RegisterAPIView(APIView):
     def post(self, request):
         serializer = EmployeeRegSerializer(data=request.data)
         if serializer.is_valid():
-            # Создание пользователя
-            username = serializer.validated_data['email'].split('@')[0]
-            password = User.objects.make_random_password()
-            user = User.objects.create_user(username=username, password=password)
+            # Создание сотрудника
+            employee = serializer.save()
 
-            # Создание сотрудника, связанного с пользователем
-            employee_data = {**serializer.validated_data, 'username': username, 'password': password}
-            employee = Employee.objects.create(**employee_data)
+            # Генерация пароля
+            password = get_random_string(length=10)
+
+            # Сохранение сгенерированного пароля в сотруднике
+            employee.set_password(password)
+            employee.save()
 
             # Сохранение сгенерированного пароля в сессии
             request.session['generated_password'] = password
@@ -220,6 +230,7 @@ class RegisterAPIView(APIView):
             }, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
@@ -515,13 +526,17 @@ def get_themes_with_tests(request):
 
         # Проходимся по всем тестам и собираем информацию о каждом из них
         for test in tests:
+            created_at = test.created_at.strftime("%Y-%m-%dT%H:%M")
             test_info = {
                 'test': test.id,
                 'name': test.name,
                 'required_karma': test.required_karma,
                 'min_exp': test.min_experience,
-                'achievement': test.achievement.name if test.achievement else None
+                'achievement': test.achievement.name if test.achievement else None,
+                'created_at': created_at,
+                'author': test.author.name if test.author else None
             }
+
             tests_info.append(test_info)
 
         # Добавляем информацию о текущей теме и ее тестах в список
@@ -911,14 +926,14 @@ def start_test(request, employee_id, test_id):
             return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Проверяем, достаточно ли у сотрудника опыта для прохождения теста
-        if employee.experience < test.experience_points:
-            return Response({"message": "Not enough experience to start this test"},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        # Проверяем, достаточно ли у сотрудника кармы для прохождения теста
-        if employee.karma < test.required_karma:
-            return Response({"message": "Not enough karma to start this test"},
-                            status=status.HTTP_400_BAD_REQUEST)
+        # if employee.experience < test.experience_points:
+        #     return Response({"message": "Not enough experience to start this test"},
+        #                     status=status.HTTP_400_BAD_REQUEST)
+        #
+        # # Проверяем, достаточно ли у сотрудника кармы для прохождения теста
+        # if employee.karma < test.required_karma:
+        #     return Response({"message": "Not enough karma to start this test"},
+        #                     status=status.HTTP_400_BAD_REQUEST)
 
         # Проверяем, есть ли предыдущий тест, который необходимо пройти
         required_test = test.required_test
@@ -1073,6 +1088,150 @@ def complete_test(request, employee_id, test_id):
         return Response(response_data, status=status.HTTP_200_OK)
 
 
+class QuestionErrorAPIView(APIView):
+    def get(self, request, test_id):
+        # Получаем все попытки прохождения теста
+        test_attempts = TestAttempt.objects.filter(test_id=test_id)
+
+        # Список для хранения количества неправильных ответов на каждый вопрос
+        question_errors = Counter()
+
+        # Проходим по каждой попытке
+        for test_attempt in test_attempts:
+            test_results = json.loads(test_attempt.test_results)
+            answers_info = test_results.get("answers_info", [])
+
+            # Для каждого вопроса проверяем, был ли ответ неправильным
+            for answer_info in answers_info:
+                if not answer_info["is_correct"]:
+                    question_errors[answer_info["question_text"]] += 1
+
+        # Находим список вопросов, на которые чаще всего ошибаются
+        most_common_errors = question_errors.most_common()
+
+        # Возвращаем список вопросов
+        return Response({"most_common_errors": most_common_errors})
+
+class StatisticsAPIView(APIView):
+    def get(self, request):
+        # Получаем всех сотрудников
+        employees = Employee.objects.all()
+
+        # Список для хранения статистики по каждому сотруднику
+        employees_statistics = []
+
+        # Обходим каждого сотрудника
+        for employee in employees:
+            # Получаем количество заработанных валют текущего сотрудника
+            total_acoins = Acoin.objects.filter(employee=employee).aggregate(total_acoins=Sum('amount'))['total_acoins'] or 0
+
+            # Получаем количество заработанного опыта текущего сотрудника
+            total_experience = employee.experience
+
+            # Получаем количество заработанных достижений текущего сотрудника
+            total_achievements = EmployeeAchievement.objects.filter(employee=employee).count()
+
+            # Добавляем информацию о текущем сотруднике в список
+            employee_info = {
+                "employee_id": employee.id,
+                "total_acoins": total_acoins,
+                "total_experience": total_experience,
+                "total_achievements": total_achievements
+            }
+            employees_statistics.append(employee_info)
+
+        # Возвращаем информацию по каждому сотруднику
+        return JsonResponse(employees_statistics, safe=False)
+class QuestionStatisticsAPIView(APIView):
+    def get(self, request):
+        # Создаем словари для хранения информации о частоте ошибок и правильных ответов
+        error_counter = Counter()
+        correct_counter = Counter()
+
+        # Обходим все попытки прохождения тестов
+        for attempt in TestAttempt.objects.all():
+            # Получаем результаты теста для текущей попытки
+            test_results = attempt.test_results
+            if isinstance(test_results, str):
+                # Если test_results - строка, пытаемся преобразовать ее в словарь
+                try:
+                    results_dict = json.loads(test_results)
+                    for answer_info in results_dict.get("answers_info", []):
+                        # Проверяем, является ли ответ неправильным или правильным
+                        if not answer_info["is_correct"]:
+                            error_counter[(answer_info["question_text"], attempt.test_id)] += 1
+                        else:
+                            correct_counter[(answer_info["question_text"], attempt.test_id)] += 1
+                except ValueError:
+                    # Если не удалось преобразовать строку в JSON, пропускаем эту попытку
+                    pass
+
+        # Получаем список вопросов, по которым чаще всего ошибаются
+        most_common_errors = error_counter.most_common()
+
+        # Получаем список вопросов, на которые чаще всего отвечают верно
+        most_common_correct = correct_counter.most_common()
+
+        return Response({
+            "most_common_errors": most_common_errors,
+            "most_common_correct": most_common_correct
+        })
+
+class TestStatisticsAPIView(APIView):
+    def get(self, request):
+        # Определите начальную и конечную даты для анализа
+        start_date = timezone.now() - timezone.timedelta(days=100)  # Например, за последние 30 дней
+        end_date = timezone.now()
+
+        # Получите успешные попытки прохождения теста за указанный период
+        successful_attempts = TestAttempt.objects.filter(
+            status=TestAttempt.PASSED,
+            end_time__range=(start_date, end_date)  # Учитываем только те, которые завершились в заданном периоде
+        )
+
+        # Группируем успешные попытки прохождения теста по тесту и вычисляем среднюю и максимальную продолжительность
+        test_statistics = successful_attempts.values('test').annotate(
+            avg_duration=Avg(
+                ExpressionWrapper(
+                    F('end_time') - F('start_time'),
+                    output_field=DurationField()
+                )
+            ),
+            max_duration=Max(
+                ExpressionWrapper(
+                    F('end_time') - F('start_time'),
+                    output_field=DurationField()
+                )
+            )
+        )
+
+        # Возвращаем результаты
+        return Response({
+            'test_statistics': list(test_statistics)
+        })
+class QuestionSuccessAPIView(APIView):
+    def get(self, request, test_id):
+        # Получаем все попытки прохождения теста
+        test_attempts = TestAttempt.objects.filter(test_id=test_id)
+
+        # Список для хранения количества правильных ответов на каждый вопрос
+        question_successes = Counter()
+
+        # Проходим по каждой попытке
+        for test_attempt in test_attempts:
+            test_results = json.loads(test_attempt.test_results)
+            answers_info = test_results.get("answers_info", [])
+
+            # Для каждого вопроса проверяем, был ли ответ правильным
+            for answer_info in answers_info:
+                if answer_info["is_correct"]:
+                    question_successes[answer_info["question_text"]] += 1
+
+        # Находим список вопросов, на которые чаще всего отвечают правильно
+        most_common_successes = question_successes.most_common()
+
+        # Возвращаем список вопросов
+        return Response({"most_common_successes": most_common_successes})
 @api_view(['GET'])
 def reattempt_delay(request, employee_id, test_id):
     try:

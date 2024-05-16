@@ -1,7 +1,4 @@
 import logging
-from urllib.request import Request
-
-from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser, Group, Permission, User
 from django.db import models, transaction
 from django.core.validators import EmailValidator, MinValueValidator
@@ -32,10 +29,10 @@ class Employee(AbstractUser):
     karma = models.IntegerField(default=50)
 
     def save(self, *args, **kwargs):
-        # Проверяем, чтобы значение кармы не превышало максимальное значение
         if self.karma > 100:
             self.karma = 100
         super().save(*args, **kwargs)
+
     def increase_experience(self, amount):
         self.experience += amount
         if self.experience >= self.next_level_experience:
@@ -43,68 +40,34 @@ class Employee(AbstractUser):
 
     def level_up(self):
         self.level += 1
-
-        # Определение множителя опыта для следующего уровня
         experience_multiplier = 2.0 - (self.level * 0.1)
         if experience_multiplier < 1.0:
             experience_multiplier = 1.0
-
-        # Вычисление опыта, необходимого для следующего уровня
         self.next_level_experience = int(self.next_level_experience * experience_multiplier)
-
-        # Проверка, достигнут ли следующий уровень
         while self.experience >= self.next_level_experience:
             self.level += 1
-            self.experience -= self.next_level_experience
-
-            # Обновление множителя опыта для следующего уровня
             experience_multiplier = 2.0 - (self.level * 0.1)
             if experience_multiplier < 1.0:
                 experience_multiplier = 1.0
-
-            # Вычисление опыта, необходимого для следующего уровня
             self.next_level_experience = int(self.next_level_experience * experience_multiplier)
-
         self.save()
 
-    # Метод add_experience для модели Employee
     def add_experience(self, experience):
         if experience is not None:
             self.experience += experience
             self.save()
 
-    # Метод add_acoins для модели Employee
     def add_acoins(self, acoins):
         if acoins is not None:
-            # Создаем транзакцию для начисления Акоинов
             AcoinTransaction.objects.create(employee=self, amount=acoins)
 
     class Meta:
-        # Указываем пространство имен для связи
-        # Это позволит Django различать обратные связи
-        # между моделями Employee и User
         app_label = 'main'
+        # Добавим опцию swappable, чтобы Django понимал, что это пользовательская модель
+        swappable = 'AUTH_USER_MODEL'
 
-    # Решаем конфликт имен для связи с моделью Group
-    groups = models.ManyToManyField(
-        Group,
-        verbose_name='groups',
-        blank=True,
-        related_name='employee_groups',
-        related_query_name='employee_group',
-    )
-
-    # Решаем конфликт имен для связи с моделью Permission
-    user_permissions = models.ManyToManyField(
-        Permission,
-        verbose_name='user permissions',
-        blank=True,
-        related_name='employee_permissions',
-        related_query_name='employee_permission',
-    )
     def add_achievement(self, achievement):
         self.achievements.add(achievement)
-
 class Classifications(models.Model):
     name = models.CharField(max_length=100, unique=True)
 
@@ -112,7 +75,6 @@ class Classifications(models.Model):
         return self.name
 
 
-from django.core.exceptions import ValidationError
 
 
 class Achievement(models.Model):
@@ -195,20 +157,6 @@ class Request(models.Model):
     status = models.CharField(max_length=100, choices=STATUS_CHOICES)
 
 
-@receiver(post_save, sender=Request)
-def update_achievement_progress(sender, instance, **kwargs):
-    if instance.status == 'Completed':
-        try:
-            achievement = Achievement.objects.get(request_type=instance.classification)
-        except Achievement.DoesNotExist:
-            return
-
-        employee_achievement, created = EmployeeAchievement.objects.get_or_create(
-            employee=instance.responsible,
-            achievement=achievement
-        )
-        employee_achievement.increment_progress()
-        employee_achievement.save()
 class Acoin(models.Model):
     employee = models.OneToOneField(Employee, on_delete=models.CASCADE, blank=False, null=True)
     amount = models.IntegerField(default=0)
@@ -223,18 +171,7 @@ class AcoinTransaction(models.Model):
         transaction = cls(employee=employee, amount=achievement.reward_currency)
         transaction.save()
         return transaction
-@receiver(post_save, sender=Employee)
-def create_acoin(sender, instance, created, **kwargs):
-    if created:
-        Acoin.objects.create(employee=instance, amount=0)
 
-@receiver(post_save, sender=AcoinTransaction)
-def update_acoin_balance(sender, instance, created, **kwargs):
-    if created:
-        # Обновляем баланс акоинов сотрудника в таблице Acoin
-        acoin, created = Acoin.objects.get_or_create(employee=instance.employee)
-        acoin.amount += instance.amount
-        acoin.save()
 
 class EmployeeItem(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
@@ -320,6 +257,7 @@ class Test(models.Model):
     # Новое поле для обозначения максимального количества баллов
     max_score = models.PositiveIntegerField(default=0)
     required_test = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
+    image = models.ImageField(upload_to='test/', default='default.jpg')
 
     def clean(self):
         # Убеждаемся, что тип ачивки всегда "Test"
@@ -352,17 +290,7 @@ class TestQuestion(models.Model):
     image = models.CharField(max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
     duration_seconds = models.IntegerField(default=0)  # Ограничение по времени в секундах
     position = models.PositiveIntegerField(default=0)
-@receiver(post_save, sender=TestQuestion)
-@receiver(post_delete, sender=TestQuestion)
-def update_total_questions(sender, instance, **kwargs):
-    # Получаем тест, к которому привязан вопрос
-    test = instance.test
 
-    # Получаем общее количество вопросов для этого теста
-    total_questions = TestQuestion.objects.filter(test=test).count()
-
-    # Обновляем поле total_questions в модели Test
-    Test.objects.filter(pk=test.pk).update(total_questions=total_questions)
 class Theory(models.Model):
     title = models.CharField(max_length=255)  # Добавленный заголовок
     text = models.TextField()
@@ -424,7 +352,6 @@ class TestAttempt(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=NOT_STARTED)
     test_results = models.JSONField(null=True, blank=True,default=dict)
     free_response = models.TextField(null=True, blank=True)
-    is_correct = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if not self.pk:  # Проверяем, что это новая запись
@@ -468,10 +395,6 @@ class TestAttempt(models.Model):
                         # Создаем запись об ачивке для сотрудника
                         EmployeeAchievement.objects.create(employee=self.employee, achievement=achievement)
                         self.employee.save()
-@receiver(post_save, sender=TestAttempt)
-def handle_test_attempt_status(sender, instance, **kwargs):
-    if instance.status == TestAttempt.PASSED:
-        create_acoin_transaction(instance)
 
 def create_acoin_transaction(test_attempt):
     if test_attempt.status == TestAttempt.PASSED:
@@ -483,20 +406,5 @@ def create_acoin_transaction(test_attempt):
         experience_reward = test_attempt.test.experience_points
         # Начисляем опыт сотруднику
         test_attempt.employee.increase_experience(experience_reward)
-
-
-
-@receiver(pre_delete, sender=models.Model)
-def reorder_ids(sender, instance, **kwargs):
-    # Получаем класс модели удаляемого экземпляра
-    model_class = instance.__class__
-
-    # Получаем список записей, у которых идентификатор больше чем у удаляемой записи
-    records_to_reorder = model_class.objects.filter(id__gt=instance.id)
-
-    # Перенумеровываем идентификаторы
-    for record in records_to_reorder:
-        record.id -= 1
-        record.save(update_fields=['id'])
 
 

@@ -1,4 +1,5 @@
 from django.contrib.auth.models import User
+from django.utils.crypto import get_random_string
 from rest_framework import serializers
 
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
@@ -52,12 +53,10 @@ class EmployeeRegSerializer(serializers.ModelSerializer):
         # Используем часть email до символа '@' в качестве имени пользователя
         username = email.split('@')[0]
         # Генерируем случайный пароль
-        password = User.objects.make_random_password()
-        user = User.objects.create_user(username=username, password=password, email=email)
-        # Создаем сотрудника, указывая пользователя как его владельца
-        employee = Employee.objects.create(password=password, **validated_data)
-        # Возвращаем созданный сотрудник и сгенерированный пароль
-        return employee, password
+        password = get_random_string(length=10)
+        # Создаем сотрудника, указывая валидированные данные и сгенерированный пароль
+        employee = Employee.objects.create(password=password, username=username, **validated_data)
+        return employee
 
 class AcoinSerializer(serializers.ModelSerializer):
     class Meta:
@@ -154,7 +153,7 @@ class TestQuestionSerializer(serializers.ModelSerializer):
 class TestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Test
-        fields = ['id', 'name', 'author', 'description', 'duration_seconds', 'max_score', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma','experience_points', 'acoin_reward', 'min_experience', 'achievement', 'total_questions', 'can_attempt_twice','retry_delay_days', 'send_results_to_email', 'required_test']
+        fields = ['id', 'name', 'author', 'description', 'duration_seconds', 'max_score', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma','experience_points', 'acoin_reward', 'min_experience', 'achievement', 'total_questions', 'can_attempt_twice','retry_delay_days', 'send_results_to_email', 'required_test', 'image']
 
 
 class RequestSerializer(serializers.ModelSerializer):
