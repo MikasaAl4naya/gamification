@@ -338,12 +338,14 @@ class TestAttempt(models.Model):
     IN_PROGRESS = 'In Progress'
     FAILED = 'Failed'
     MODERATION = 'На модерации'
+    TEST = 'ТЕСТ'
     STATUS_CHOICES = [
         (PASSED, 'Пройден'),
         (NOT_STARTED, 'Не начат'),
         (IN_PROGRESS, 'В процессе'),
         (FAILED, 'Не пройден'),
-        (MODERATION, 'На модерации')
+        (MODERATION, 'На модерации'),
+        (TEST, 'ТЕСТ')
     ]
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     test = models.ForeignKey(Test, on_delete=models.CASCADE)
