@@ -1,5 +1,6 @@
 import ast
-from collections import Counter
+import math
+from collections import Counter, defaultdict
 from datetime import timedelta
 
 from django.contrib.auth import login, logout, get_user_model
@@ -21,7 +22,7 @@ from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, Emplo
 from rest_framework.decorators import api_view
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
-    ClassificationSerializer, TestAttemptSerializer
+    ClassificationSerializer, TestAttemptSerializer, TestAttemptModerationSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -131,7 +132,8 @@ def create_request(request):
     return render(request, 'create_request.html', {'form': form})
 
 
-from django.db import transaction
+from django.db import transaction, IntegrityError
+
 
 def registration_success(request):
     # Получение сгенерированного пароля из сессии
@@ -426,6 +428,40 @@ class UpdateTestAndContent(APIView):
             return Response({"message": "Test and content updated successfully"}, status=status.HTTP_200_OK)
         else:
             return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+def test_moderation_result(request, test_attempt_id):
+    try:
+        test_attempt = TestAttempt.objects.get(id=test_attempt_id, status=TestAttempt.MODERATION)
+    except TestAttempt.DoesNotExist:
+        return Response({"message": "Test attempt not found or not in moderation"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Формируем ответ, указывая статус теста
+    response_data = {
+        "status": test_attempt.status
+    }
+
+    # Если тест находится на модерации, возвращаем информацию о статусе и ничего больше не отображаем
+    if test_attempt.status == TestAttempt.MODERATION:
+        # Если тест не находится на модерации, возвращаем полные результаты теста
+        test_results = json.loads(test_attempt.test_results)
+        # Фильтруем вопросы с типом "question"
+        answers_info = test_results.get("answers_info", [])
+
+        filtered_answers_info = [
+            answer_info['type'] for answer_info in answers_info
+            if answer_info['type'] == "question"
+        ]
+
+        # Формируем ответ в нужном формате
+        response_data.update({
+            "score": test_results.get("Набранное количество баллов"),
+            "max_score": test_results.get("Максимальное количество баллов"),
+            "answers_info": filtered_answers_info
+        })
+
+    return Response(response_data, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -799,12 +835,27 @@ def test_attempt_moderation_list(request):
     # Получаем все попытки прохождения тестов на модерации
     test_attempts_moderation = TestAttempt.objects.filter(status=TestAttempt.MODERATION)
 
-    # Сериализуем данные
-    serializer = TestAttemptSerializer(test_attempts_moderation, many=True)  # Предположим, что у вас есть соответствующий сериализатор
+    # Сортируем по темам тестов
+    sorted_attempts = sorted(test_attempts_moderation, key=lambda x: x.test.theme.name)
 
-    # Возвращаем ответ с данными
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    # Группируем по темам тестов
+    grouped_by_theme = {}
+    for attempt in sorted_attempts:
+        theme_name = attempt.test.theme.name
+        if theme_name not in grouped_by_theme:
+            grouped_by_theme[theme_name] = []
+        grouped_by_theme[theme_name].append(attempt)
 
+    # Формируем ответные данные
+    response_data = []
+    for theme, attempts in grouped_by_theme.items():
+        serializer = TestAttemptModerationSerializer(attempts, many=True)
+        response_data.append({
+            'theme': theme,
+            'test_attempts': serializer.data
+        })
+
+    return Response(response_data, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
@@ -1455,8 +1506,291 @@ class UpdateTestAndContent(APIView):
             return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+class FullStatisticsAPIView(APIView):
 
+    def get(self, request):
+        # Initialize response dictionary
+        response_data = {}
 
+        # Statistics for test questions
+        try:
+            test_attempts = TestAttempt.objects.all()
+            question_errors = Counter()
+            question_correct = Counter()
+            question_most_selected = {}
+
+            for test_attempt in test_attempts:
+                test_results = test_attempt.test_results
+                if test_results:
+                    answers_info = test_results.get("answers_info", [])
+
+                    for answer_info in answers_info:
+                        question_key = (answer_info["question_text"], test_attempt.test_id)
+
+                        if not answer_info["is_correct"]:
+                            question_errors[question_key] += 1
+                        else:
+                            question_correct[question_key] += 1
+
+                        selected_option = answer_info.get("selected_option", "")
+                        if selected_option:
+                            if question_key not in question_most_selected:
+                                question_most_selected[question_key] = Counter()
+                            question_most_selected[question_key][selected_option] += 1
+
+            most_common_errors = question_errors.most_common()
+            most_common_correct = question_correct.most_common()
+            most_common_selected = {k: v.most_common(1)[0] for k, v in question_most_selected.items()}
+
+            response_data["most_common_errors"] = [
+                {"question": q, "test_id": t, "count": c, "most_selected": most_common_selected.get((q, t))}
+                for (q, t), c in most_common_errors
+            ]
+            response_data["most_common_correct"] = [
+                {"question": q, "test_id": t, "count": c, "most_selected": most_common_selected.get((q, t))}
+                for (q, t), c in most_common_correct
+            ]
+        except Exception as e:
+            response_data["question_statistics_error"] = str(e)
+
+        # Statistics for test duration
+        try:
+            test_stats = {}
+            tests = Test.objects.all()
+
+            for test in tests:
+                test_attempts = TestAttempt.objects.filter(test=test, status=TestAttempt.PASSED)
+
+                if test_attempts.exists():
+                    durations = [
+                        (attempt.end_time - attempt.start_time).total_seconds()
+                        for attempt in test_attempts
+                        if attempt.end_time and attempt.start_time
+                    ]
+                    if durations:
+                        avg_duration = sum(durations) / len(durations)
+                        max_duration = max(durations)
+                    else:
+                        avg_duration = None
+                        max_duration = None
+
+                    individual_durations = [
+                        {"employee_id": attempt.employee_id, "duration": (attempt.end_time - attempt.start_time).total_seconds()}
+                        for attempt in test_attempts
+                        if attempt.end_time and attempt.start_time
+                    ]
+
+                    test_stats[test.id] = {
+                        "average_duration": avg_duration,
+                        "max_duration": max_duration,
+                        "individual_durations": individual_durations
+                    }
+                else:
+                    test_stats[test.id] = {
+                        "average_duration": None,
+                        "max_duration": None,
+                        "individual_durations": []
+                    }
+
+            response_data["test_duration_statistics"] = test_stats
+        except Exception as e:
+            response_data["test_duration_statistics_error"] = str(e)
+
+        # Statistics for employee achievements, currency, and experience
+        try:
+            employees = Employee.objects.all()
+            employee_stats = []
+
+            for employee in employees:
+                acoin_transactions = AcoinTransaction.objects.filter(employee=employee)
+                total_acoins = acoin_transactions.aggregate(total=Sum('amount'))['total']
+
+                employee_stats.append({
+                    "employee_id": employee.id,
+                    "total_acoins": total_acoins or 0,
+                    "total_experience": employee.experience,
+                    "total_achievements": employee.achievement_set.count()  # Make sure you have related_name='achievement_set' in your Achievement model
+                })
+
+            response_data["employee_statistics"] = employee_stats
+        except Exception as e:
+            response_data["employee_statistics_error"] = str(e)
+
+        return Response(response_data)
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from django.db.models import Avg, Max, Sum
+import json
+from collections import Counter
+from .models import Test, TestAttempt, Employee, AcoinTransaction
+
+class FullStatisticsAPIView(APIView):
+    def get(self, request):
+        # Initialize response dictionary
+        response_data = {}
+
+        # Statistics for test questions
+        try:
+            test_attempts = TestAttempt.objects.all()
+            question_errors = Counter()
+            question_correct = Counter()
+            question_most_selected = {}
+
+            for test_attempt in test_attempts:
+                test_results = test_attempt.test_results
+
+                # Ensure test_results is a dictionary
+                if isinstance(test_results, str):
+                    test_results = json.loads(test_results)
+
+                if test_results:
+                    answers_info = test_results.get("answers_info", [])
+
+                    for answer_info in answers_info:
+                        question_key = (answer_info["question_text"], test_attempt.test_id)
+
+                        if not answer_info["is_correct"]:
+                            question_errors[question_key] += 1
+                        else:
+                            question_correct[question_key] += 1
+
+                        selected_option = answer_info.get("selected_option", "")
+                        if selected_option:
+                            if question_key not in question_most_selected:
+                                question_most_selected[question_key] = Counter()
+                            question_most_selected[question_key][selected_option] += 1
+
+            most_common_errors = question_errors.most_common()
+            most_common_correct = question_correct.most_common()
+            most_common_selected = {k: v.most_common(1)[0] for k, v in question_most_selected.items()}
+
+            response_data["most_common_errors"] = [
+                {"question": q, "test_id": t, "count": c, "most_selected": most_common_selected.get((q, t))}
+                for (q, t), c in most_common_errors
+            ]
+            response_data["most_common_correct"] = [
+                {"question": q, "test_id": t, "count": c, "most_selected": most_common_selected.get((q, t))}
+                for (q, t), c in most_common_correct
+            ]
+        except Exception as e:
+            response_data["question_statistics_error"] = str(e)
+
+        # Statistics for test duration
+        try:
+            test_stats = {}
+            tests = Test.objects.all()
+
+            for test in tests:
+                test_attempts = TestAttempt.objects.filter(test=test, status=TestAttempt.PASSED)
+
+                if test_attempts.exists():
+                    durations = [
+                        (attempt.end_time - attempt.start_time).total_seconds()
+                        for attempt in test_attempts
+                        if attempt.end_time and attempt.start_time
+                    ]
+                    if durations:
+                        avg_duration = sum(durations) / len(durations)
+                        max_duration = max(durations)
+                    else:
+                        avg_duration = None
+                        max_duration = None
+
+                    individual_durations = [
+                        {"employee_id": attempt.employee_id, "duration": (attempt.end_time - attempt.start_time).total_seconds()}
+                        for attempt in test_attempts
+                        if attempt.end_time and attempt.start_time
+                    ]
+
+                    test_stats[test.id] = {
+                        "average_duration": avg_duration,
+                        "max_duration": max_duration,
+                        "individual_durations": individual_durations
+                    }
+                else:
+                    test_stats[test.id] = {
+                        "average_duration": None,
+                        "max_duration": None,
+                        "individual_durations": []
+                    }
+
+            response_data["test_duration_statistics"] = test_stats
+        except Exception as e:
+            response_data["test_duration_statistics_error"] = str(e)
+
+        # Statistics for employee achievements, currency, and experience
+        try:
+            employees = Employee.objects.all()
+            employee_stats = []
+
+            for employee in employees:
+                employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
+                total_acoins = AcoinTransaction.objects.filter(employee=employee).aggregate(total=Sum('amount'))[
+                    'total']
+
+                employee_stats.append({
+                    "employee_id": employee.id,
+                    "total_acoins": total_acoins or 0,
+                    "total_experience": employee.experience,
+                    "total_achievements": employee_achievements.count()
+                })
+
+            response_data["employee_statistics"] = employee_stats
+        except Exception as e:
+            response_data["employee_statistics_error"] = str(e)
+
+        # Statistics for test score percentage
+        try:
+            test_scores = {}
+            for test in tests:
+                test_attempts = TestAttempt.objects.filter(test=test, status=TestAttempt.PASSED)
+                total_attempts = test_attempts.count()
+                if total_attempts > 0:
+                    total_correct_attempts = test_attempts.aggregate(Sum('score'))['score__sum']
+                    if total_correct_attempts is not None:
+                        percentage_correct = math.ceil((total_correct_attempts / total_attempts))
+                    else:
+                        percentage_correct = 0
+                else:
+                    percentage_correct = 0
+                test_scores[test.id] = percentage_correct
+
+            response_data["test_score_percentage"] = test_scores
+        except Exception as e:
+            response_data["test_score_percentage_error"] = str(e)
+
+        # Statistics for most frequently selected answers
+        try:
+            most_selected_answers = {}
+            for test_attempt in test_attempts:
+                test_results = test_attempt.test_results
+                if isinstance(test_results, str):
+                    test_results = json.loads(test_results)
+                if test_results:
+                    answers_info = test_results.get("answers_info", [])
+                    for answer_info in answers_info:
+                        question_key = (answer_info["question_text"], test_attempt.test_id)
+                        selected_option = answer_info.get("selected_option", "")
+                        if selected_option:
+                            if question_key not in most_selected_answers:
+                                most_selected_answers[question_key] = Counter()
+                            most_selected_answers[question_key][selected_option] += 1
+
+            most_common_selected = {k: v.most_common(1)[0] for k, v in most_selected_answers.items()}
+            response_data["most_common_selected_answers"] = [
+                {"question": q, "test_id": t, "most_selected": most_common_selected.get((q, t))}
+                for (q, t) in most_common_selected
+            ]
+        except Exception as e:
+            response_data["most_common_selected_answers"] = [
+                {"question": q, "test_id": t, "most_selected": most_common_selected.get((q, t))}
+                for (q, t) in most_common_selected
+            ]
+        except Exception as e:
+            response_data["most_selected_answers_error"] = str(e)
+
+        return Response(response_data)
 
 
 class UpdateTest(generics.UpdateAPIView):

@@ -71,6 +71,8 @@ urlpatterns = [
     path('employee-stats/', StatisticsAPIView.as_view(), name='employee_stats'),
     path('test-time-stat/', TestStatisticsAPIView.as_view(), name='test-time-stat'),
     path('questions-stat/', QuestionStatisticsAPIView.as_view(), name='questions_stat'),
+    path('full_statistics/', FullStatisticsAPIView.as_view(), name='full_statistics'),
+    path('test_moderation_result/<int:test_attempt_id>/', test_moderation_result, name='test_moderation_result'),
     # Другие URL-адреса вашего приложения...
 
 

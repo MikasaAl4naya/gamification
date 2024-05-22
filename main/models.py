@@ -9,6 +9,8 @@ from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 
+from gamefication import settings
+
 logger = logging.getLogger(__name__)
 
 def validate_custom_email(value):
@@ -350,8 +352,12 @@ class TestAttempt(models.Model):
     end_time = models.DateTimeField(null=True, blank=True)
     attempts = models.IntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=NOT_STARTED)
-    test_results = models.JSONField(null=True, blank=True,default=dict)
+    test_results = models.JSONField(null=True, blank=True, default=dict)
     free_response = models.TextField(null=True, blank=True)
+    moderator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderated_attempts')  # Добавляем поле модератора
+
+    def __str__(self):
+        return f'{self.test.name} - {self.employee.username}'
 
     def save(self, *args, **kwargs):
         if not self.pk:  # Проверяем, что это новая запись

@@ -29,11 +29,26 @@ class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = ['id', 'username', 'email', 'position', 'level', 'experience']
+from rest_framework import serializers
 
-class TestAttemptSerializer(serializers.ModelSerializer):
+class TestAttemptModerationSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.user.username', read_only=True)
+    test_name = serializers.CharField(source='test.name', read_only=True)
+    moderator_name = serializers.CharField(source='moderator.username', read_only=True, default=None)
+
     class Meta:
         model = TestAttempt
-        fields = '__all__'
+        fields = ['id', 'employee_name', 'test_name', 'moderator_name']
+
+class TestAttemptSerializer(serializers.ModelSerializer):
+    employee_name = serializers.CharField(source='employee.user.username', read_only=True)
+    test_name = serializers.CharField(source='test.name', read_only=True)
+    moderator_name = serializers.CharField(source='moderator.username', read_only=True)
+    theme_name = serializers.CharField(source='test.theme.name', read_only=True)  # Предполагаем, что есть поле theme в модели Test
+
+    class Meta:
+        model = TestAttempt
+        fields = ['id', 'employee_name', 'test_name', 'moderator_name', 'theme_name']
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
