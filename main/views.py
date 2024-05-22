@@ -22,7 +22,7 @@ from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, Emplo
 from rest_framework.decorators import api_view
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
-    ClassificationSerializer, TestAttemptSerializer, TestAttemptModerationSerializer
+    ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -446,12 +446,12 @@ def test_moderation_result(request, test_attempt_id):
     if test_attempt.status == TestAttempt.MODERATION:
         # Если тест не находится на модерации, возвращаем полные результаты теста
         test_results = json.loads(test_attempt.test_results)
-        # Фильтруем вопросы с типом "question"
+        # Фильтруем вопросы с типом "text"
         answers_info = test_results.get("answers_info", [])
 
         filtered_answers_info = [
-            answer_info['type'] for answer_info in answers_info
-            if answer_info['type'] == "question"
+            answer_info for answer_info in answers_info
+            if answer_info.get('type') == "text"
         ]
 
         # Формируем ответ в нужном формате

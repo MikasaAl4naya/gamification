@@ -242,7 +242,7 @@ class Test(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)  # Дата создания теста
     name = models.CharField(max_length=255)
     description = models.TextField(null=True, blank=True)
-    duration_seconds = models.PositiveIntegerField(default=3600)  # Время в секундах
+    duration_seconds = models.PositiveIntegerField(default=10000)  # Время в секундах
     passing_score = models.PositiveIntegerField(default=70)
     unlimited_time = models.BooleanField(default=False)  # Флаг для неограниченного времени
     show_correct_answers = models.BooleanField(default=False)  # Показывать правильные ответы
@@ -356,7 +356,7 @@ class TestAttempt(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=NOT_STARTED)
     test_results = models.JSONField(null=True, blank=True, default=dict)
     free_response = models.TextField(null=True, blank=True)
-    moderator_emp = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderated_attempts')  # Добавляем поле модератора
+    #moderator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderated_attempts')  # Добавляем поле модератора
 
     def __str__(self):
         return f'{self.test.name} - {self.employee.username}'
