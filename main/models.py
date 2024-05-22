@@ -356,7 +356,7 @@ class TestAttempt(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=NOT_STARTED)
     test_results = models.JSONField(null=True, blank=True, default=dict)
     free_response = models.TextField(null=True, blank=True)
-    moderator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderated_attempts')  # Добавляем поле модератора
+    moderator_emp = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderated_attempts')  # Добавляем поле модератора
 
     def __str__(self):
         return f'{self.test.name} - {self.employee.username}'
