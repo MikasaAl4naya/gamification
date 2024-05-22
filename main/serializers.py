@@ -34,11 +34,11 @@ from rest_framework import serializers
 class TestAttemptModerationSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.user.username', read_only=True)
     test_name = serializers.CharField(source='test.name', read_only=True)
-    moderator_name = serializers.CharField(source='moderator.username', read_only=True, default=None)
+    # moderator_name = serializers.CharField(source='moderator.username', read_only=True, default=None)
 
     class Meta:
         model = TestAttempt
-        fields = ['id', 'employee_name', 'test_name', 'moderator_name']
+        fields = ['id', 'employee_name', 'test_name']
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
