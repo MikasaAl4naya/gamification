@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Permission
 from django.utils.crypto import get_random_string
 from rest_framework import serializers
 
@@ -34,7 +34,7 @@ from rest_framework import serializers
 class TestAttemptModerationSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.username', read_only=True)
     test_name = serializers.CharField(source='test.name', read_only=True)
-    moderator_name = serializers.CharField(source='moderator.username', read_only=True, default=None)
+    #moderator_name = serializers.CharField(source='moderator.username', read_only=True, default=None)
 
     class Meta:
         model = TestAttempt
@@ -52,6 +52,11 @@ class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['username', 'password']
+
+class PermissionsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Permission
+        fields = ['Name', 'Content_type','Codename']
 
 class ExperienceIncreaseSerializer(serializers.Serializer):
     employee_id = serializers.IntegerField()

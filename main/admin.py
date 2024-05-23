@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from main.models import Employee, Achievement, Classifications, Request, Test, TestAttempt, TestQuestion, Theme
+from main.models import Employee, Achievement, Classifications, Request, Test, TestAttempt, TestQuestion, Theme, Permission
 
 # Register your models here.
 admin.site.register(Employee)
@@ -11,3 +11,4 @@ admin.site.register(Test)
 admin.site.register(TestAttempt)
 admin.site.register(TestQuestion)
 admin.site.register(Theme)
+admin.site.register(Permission)

@@ -5,11 +5,12 @@ from datetime import timedelta
 
 from django.contrib.auth import login, logout, get_user_model
 from django.core.checks import messages
+from django.core.serializers import serialize
 from django.db.models import Max, FloatField, Avg, Count, Q, F, Sum, ExpressionWrapper, DurationField, OuterRef, \
-    Subquery
-from django.db.models.functions import Coalesce
+    Subquery, Window
+from django.db.models.functions import Coalesce, RowNumber
 from django.http import HttpResponse, JsonResponse
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Permission
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 from rest_framework.generics import RetrieveAPIView
@@ -23,7 +24,7 @@ from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, Emplo
 from rest_framework.decorators import api_view
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
-    ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer
+    ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics
@@ -101,41 +102,56 @@ class TestScoreAPIView(APIView):
         }
 
         return Response(result)
-
+class PermissionsList(APIView):
+    def get(self, request):
+        permissions = Permission.objects.all()
+        serializer = PermissionsSerializer(permissions, many=True)
+        return Response(serializer.data)
 
 @api_view(['GET'])
 def latest_test_attempts(request):
-    # Подзапрос для получения последних попыток для каждого сотрудника по каждому тесту
-    latest_attempts_subquery = TestAttempt.objects.filter(
-        employee_id=OuterRef('employee_id'),
-        test_id=OuterRef('test_id')
-    ).order_by('-end_time').values('id')[:1]
+    # Проверяем, принадлежит ли пользователь к группе модераторов или администраторов
+    # is_moderator_or_admin = request.user.groups.filter(name__in=['Модераторы', 'Администраторы']).exists()
+    #
+    # if not is_moderator_or_admin:
+    #     return Response({"error": "Доступ запрещен"}, status=status.HTTP_403_FORBIDDEN)
+    # Используем оконную функцию для присвоения номера строки каждой попытке
+    attempts_with_row_number = TestAttempt.objects.annotate(
+        row_number=Window(
+            expression=RowNumber(),
+            partition_by=[F('employee_id'), F('test_id')],
+            order_by=F('end_time').desc()
+        )
+    ).filter(row_number=1).select_related('employee', 'test', 'test__theme')
 
-    # Основной запрос для получения информации о последних попытках
-    latest_attempts = TestAttempt.objects.filter(
-        id__in=Subquery(latest_attempts_subquery)
-    ).select_related('employee', 'test', 'test__theme')
-
-    # Формируем словарь с результатами, сгруппированными по сотруднику
-    grouped_result = {}
-    for attempt in latest_attempts:
-        employee_name = attempt.employee.first_name + " " + attempt.employee.last_name # предположим, что у модели Employee есть поле name
+    # Формируем словарь с результатами, сгруппированными по сотруднику и теме теста
+    grouped_result = defaultdict(lambda: defaultdict(list))
+    for attempt in attempts_with_row_number:
+        employee_name = attempt.employee.first_name + " " + attempt.employee.last_name  # предположим, что у модели Employee есть поле name
+        theme_name = attempt.test.theme.name  # предположим, что у модели Test есть ForeignKey на Theme с полем name
         test_info = {
-            'test_id': attempt.test_id,
-            'test_theme': attempt.test.theme.name,
             'test_name': attempt.test.name,  # предположим, что у модели Test есть поле name
             'score': attempt.score,
             'max_score': attempt.test.max_score,  # предположим, что у модели Test есть поле max_score
             'status': attempt.status
         }
 
-        if employee_name not in grouped_result:
-            grouped_result[employee_name] = []
-
-        grouped_result[employee_name].append(test_info)
+        grouped_result[employee_name][theme_name].append(test_info)
 
     # Формируем окончательный результат и сортируем по имени сотрудника
-    sorted_result = [{'employee': employee, 'tests': tests} for employee, tests in sorted(grouped_result.items())]
+    sorted_result = [
+        {
+            'employee': employee,
+            'themes': [
+                {
+                    'theme_name': theme,
+                    'tests': tests
+                }
+                for theme, tests in sorted(themes.items())
+            ]
+        }
+        for employee, themes in sorted(grouped_result.items())
+    ]
 
     return Response(sorted_result, status=status.HTTP_200_OK)
 class MostIncorrectQuestionsAPIView(APIView):
