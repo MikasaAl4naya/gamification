@@ -129,7 +129,9 @@ def latest_test_attempts(request):
     for attempt in attempts_with_row_number:
         employee_name = attempt.employee.first_name + " " + attempt.employee.last_name  # предположим, что у модели Employee есть поле name
         theme_name = attempt.test.theme.name  # предположим, что у модели Test есть ForeignKey на Theme с полем name
+        test_attempt = attempt.id
         test_info = {
+            'test_attempt': test_attempt,
             'test_name': attempt.test.name,  # предположим, что у модели Test есть поле name
             'score': attempt.score,
             'max_score': attempt.test.max_score,  # предположим, что у модели Test есть поле max_score
@@ -528,15 +530,18 @@ def test_results(request, test_attempt_id):
         return Response({"message": "Test attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
     # Проверяем статус теста
-    if test_attempt.status == TestAttempt.MODERATION:
-        # Если тест находится на модерации, возвращаем информацию о статусе и ничего больше не отображаем
+    if test_attempt.status in [TestAttempt.MODERATION, TestAttempt.IN_PROGRESS]:
+        # Если тест находится на модерации или в процессе, возвращаем информацию о статусе и ничего больше не отображаем
         response_data = {
             "status": test_attempt.status
         }
         return Response(response_data, status=status.HTTP_200_OK)
 
-    # Если тест не находится на модерации, получаем результаты теста в виде словаря Python из поля test_results
-    test_results = json.loads(test_attempt.test_results)
+    # Если тест завершен, получаем результаты теста в виде словаря Python из поля test_results
+    try:
+        test_results = json.loads(test_attempt.test_results)
+    except (TypeError, json.JSONDecodeError):
+        return Response({"message": "Invalid test results format"}, status=status.HTTP_400_BAD_REQUEST)
 
     # Формируем ответ в нужном формате
     response_data = {
@@ -545,6 +550,12 @@ def test_results(request, test_attempt_id):
         "status": test_attempt.status,
         "answers_info": test_results.get("answers_info")
     }
+
+    # Если тест прошел модерацию, добавляем комментарий модерации в ответ, если он не пустой
+    moderation_comment = test_results.get("moderation_comment", "")
+    if moderation_comment:
+        response_data["moderation_comment"] = moderation_comment
+
     return Response(response_data, status=status.HTTP_200_OK)
 
 
@@ -941,6 +952,7 @@ def moderate_test_attempt(request, test_attempt_id):
         for moderated_question in moderated_questions:
             question_number = moderated_question.get('question_number')
             moderation_score = moderated_question.get('moderation_score')
+            moderation_comment = moderated_question.get('moderation_comment', '')
 
             # Проверяем, что номер вопроса корректный
             if question_number < 1 or question_number > len(answers_info):
@@ -960,8 +972,9 @@ def moderate_test_attempt(request, test_attempt_id):
             if moderation_score > max_question_score:
                 return Response({"message": f"Moderation score exceeds the maximum allowed score ({max_question_score})"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Обновляем баллы за вопрос
+            # Обновляем баллы за вопрос и добавляем пояснение
             question_to_moderate['question_score'] = moderation_score
+            question_to_moderate['moderation_comment'] = moderation_comment
 
         # Обновляем информацию об ответах на вопросы
         test_results['answers_info'] = answers_info
@@ -983,6 +996,7 @@ def moderate_test_attempt(request, test_attempt_id):
         response_data = {
             "message": "Test moderated successfully",
             "status": test_attempt.status
+
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
@@ -1205,13 +1219,15 @@ class QuestionErrorAPIView(APIView):
 
         # Проходим по каждой попытке
         for test_attempt in test_attempts:
-            test_results = json.loads(test_attempt.test_results)
-            answers_info = test_results.get("answers_info", [])
+            # Проверяем, что test_results не является None
+            if test_attempt.test_results:
+                test_results = json.loads(test_attempt.test_results)
+                answers_info = test_results.get("answers_info", [])
 
-            # Для каждого вопроса проверяем, был ли ответ неправильным
-            for answer_info in answers_info:
-                if not answer_info["is_correct"]:
-                    question_errors[answer_info["question_text"]] += 1
+                # Для каждого вопроса проверяем, был ли ответ неправильным
+                for answer_info in answers_info:
+                    if not answer_info["is_correct"]:
+                        question_errors[answer_info["question_text"]] += 1
 
         # Находим список вопросов, на которые чаще всего ошибаются
         most_common_errors = question_errors.most_common()

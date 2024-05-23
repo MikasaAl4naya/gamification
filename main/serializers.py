@@ -44,10 +44,10 @@ class TestAttemptSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.username', read_only=True)
     test_name = serializers.CharField(source='test.name', read_only=True)
     theme_name = serializers.CharField(source='test.theme.name', read_only=True)  # Предполагаем, что есть поле theme в модели Test
-
+    test_id = serializers.CharField(source='test.id', read_only=True)
     class Meta:
         model = TestAttempt
-        fields = ['id', 'employee_name', 'test_name', 'theme_name', 'status','test_results' ]
+        fields = ['id', 'employee_name', 'test_name', 'theme_name', 'status','test_results', 'test_id' ]
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User

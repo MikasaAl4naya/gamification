@@ -73,7 +73,7 @@ urlpatterns = [
     path('questions-stat/', QuestionStatisticsAPIView.as_view(), name='questions_stat'),
     path('full_statistics/', FullStatisticsAPIView.as_view(), name='full_statistics'),
     path('test_moderation_result/<int:test_attempt_id>/', test_moderation_result, name='test_moderation_result'),
-    path('emp_test_stat/', latest_test_attempts, name='latest_test_attempts'),
+    path('emp_test_stat/', latest_test_attempts, name='emp_test_stat'),
     path('permissions/', PermissionsList.as_view(), name='permissions'),
     # Другие URL-адреса вашего приложения...
 
