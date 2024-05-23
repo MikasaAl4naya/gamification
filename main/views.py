@@ -5,7 +5,8 @@ from datetime import timedelta
 
 from django.contrib.auth import login, logout, get_user_model
 from django.core.checks import messages
-from django.db.models import Max, FloatField, Avg, Count, Q, F, Sum, ExpressionWrapper, DurationField
+from django.db.models import Max, FloatField, Avg, Count, Q, F, Sum, ExpressionWrapper, DurationField, OuterRef, \
+    Subquery
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.models import User
@@ -81,16 +82,17 @@ def achievement_list(request):
 
 class TestScoreAPIView(APIView):
     def get(self, request, test_id):
-        # Получаем максимальное количество баллов для каждого сотрудника
+        # Получаем максимальное количество баллов и количество попыток для каждого сотрудника
         max_scores = TestAttempt.objects.filter(test_id=test_id).values('employee_id').annotate(
-            max_score=Coalesce(Max('score'), 0, output_field=FloatField())
+            max_score=Coalesce(Max('score'), 0, output_field=FloatField()),
+            attempts=Count('id')
         )
 
         # Вычисляем средний балл теста по всем участникам
         average_score = TestAttempt.objects.filter(test_id=test_id).aggregate(avg_score=Avg('score'))['avg_score'] or 0
 
         # Формируем список с результатами для каждого сотрудника
-        scores = [{'employee_id': item['employee_id'], 'max_score': item['max_score']} for item in max_scores]
+        scores = [{'employee_id': item['employee_id'], 'max_score': item['max_score'], 'attempts': item['attempts']} for item in max_scores]
 
         # Добавляем средний балл теста к результатам
         result = {
@@ -99,6 +101,43 @@ class TestScoreAPIView(APIView):
         }
 
         return Response(result)
+
+
+@api_view(['GET'])
+def latest_test_attempts(request):
+    # Подзапрос для получения последних попыток для каждого сотрудника по каждому тесту
+    latest_attempts_subquery = TestAttempt.objects.filter(
+        employee_id=OuterRef('employee_id'),
+        test_id=OuterRef('test_id')
+    ).order_by('-end_time').values('id')[:1]
+
+    # Основной запрос для получения информации о последних попытках
+    latest_attempts = TestAttempt.objects.filter(
+        id__in=Subquery(latest_attempts_subquery)
+    ).select_related('employee', 'test', 'test__theme')
+
+    # Формируем словарь с результатами, сгруппированными по сотруднику
+    grouped_result = {}
+    for attempt in latest_attempts:
+        employee_name = attempt.employee.first_name + " " + attempt.employee.last_name # предположим, что у модели Employee есть поле name
+        test_info = {
+            'test_id': attempt.test_id,
+            'test_theme': attempt.test.theme.name,
+            'test_name': attempt.test.name,  # предположим, что у модели Test есть поле name
+            'score': attempt.score,
+            'max_score': attempt.test.max_score,  # предположим, что у модели Test есть поле max_score
+            'status': attempt.status
+        }
+
+        if employee_name not in grouped_result:
+            grouped_result[employee_name] = []
+
+        grouped_result[employee_name].append(test_info)
+
+    # Формируем окончательный результат и сортируем по имени сотрудника
+    sorted_result = [{'employee': employee, 'tests': tests} for employee, tests in sorted(grouped_result.items())]
+
+    return Response(sorted_result, status=status.HTTP_200_OK)
 class MostIncorrectQuestionsAPIView(APIView):
     def get(self, request):
         # Получаем список вопросов, по которым сотрудники чаще всего ошибаются
@@ -438,30 +477,31 @@ def test_moderation_result(request, test_attempt_id):
         return Response({"message": "Test attempt not found or not in moderation"}, status=status.HTTP_404_NOT_FOUND)
 
     # Формируем ответ, указывая статус теста
-    response_data = {
-        "status": test_attempt.status
-    }
+    response_data = {}
 
     # Если тест находится на модерации, возвращаем информацию о статусе и ничего больше не отображаем
     if test_attempt.status == TestAttempt.MODERATION:
-        # Если тест не находится на модерации, возвращаем полные результаты теста
+        test = test_attempt.test
         test_results = json.loads(test_attempt.test_results)
-        # Фильтруем вопросы с типом "text"
         answers_info = test_results.get("answers_info", [])
 
         filtered_answers_info = [
-            answer_info for answer_info in answers_info
-            if answer_info.get('type') == "text"
+            {
+                "question_text": answer_info.get("question_text"),
+                "text_answer": answer_info.get("text_answer"),
+                "max_question_score": answer_info.get("max_question_score")
+            }
+            for answer_info in answers_info
+            if answer_info.get("type") == "text"
         ]
 
-        # Формируем ответ в нужном формате
         response_data.update({
-            "score": test_results.get("Набранное количество баллов"),
-            "max_score": test_results.get("Максимальное количество баллов"),
+            "test": test.name,
             "answers_info": filtered_answers_info
         })
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 
 
 @api_view(['GET'])
