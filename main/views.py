@@ -505,11 +505,12 @@ def test_moderation_result(request, test_attempt_id):
 
         filtered_answers_info = [
             {
+                "question_number": idx + 1,  # Добавляем номер вопроса (индекс + 1)
                 "question_text": answer_info.get("question_text"),
                 "text_answer": answer_info.get("text_answer"),
                 "max_question_score": answer_info.get("max_question_score")
             }
-            for answer_info in answers_info
+            for idx, answer_info in enumerate(answers_info)
             if answer_info.get("type") == "text"
         ]
 
@@ -972,9 +973,15 @@ def moderate_test_attempt(request, test_attempt_id):
             if moderation_score > max_question_score:
                 return Response({"message": f"Moderation score exceeds the maximum allowed score ({max_question_score})"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Обновляем баллы за вопрос и добавляем пояснение
+            # Обновляем баллы за вопрос и комментарий модератора
             question_to_moderate['question_score'] = moderation_score
             question_to_moderate['moderation_comment'] = moderation_comment
+
+            # Определяем статус ответа
+            if moderation_score == max_question_score:
+                question_to_moderate['is_correct'] = True
+            elif 0 < moderation_score < max_question_score:
+                question_to_moderate['is_partially_correct'] = True
 
         # Обновляем информацию об ответах на вопросы
         test_results['answers_info'] = answers_info
@@ -996,11 +1003,9 @@ def moderate_test_attempt(request, test_attempt_id):
         response_data = {
             "message": "Test moderated successfully",
             "status": test_attempt.status
-
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
-
 @api_view(['GET'])
 def required_tests_chain(request, employee_id, test_id):
     try:
