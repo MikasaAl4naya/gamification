@@ -440,13 +440,21 @@ def test_results(request, test_attempt_id):
         test_results = json.loads(test_attempt.test_results)
     except (TypeError, json.JSONDecodeError):
         return Response({"message": "Invalid test results format"}, status=status.HTTP_400_BAD_REQUEST)
-
+    test_id = test_attempt.test_id
+    test = Test.objects.get(id = test_id)
     # Формируем ответ в нужном формате
     response_data = {
         "score": test_results.get("Набранное количество баллов"),
         "max_score": test_results.get("Максимальное количество баллов"),
         "status": test_attempt.status,
-        "answers_info": test_results.get("answers_info")
+        "answers_info": test_results.get("answers_info"),
+        "test_creation_date": test.created_at,
+        "test_end_date": test_attempt.end_time.strftime("%Y-%m-%d %H:%M:%S") if test_attempt.end_time else None,
+        "employee": {
+            "id": test_attempt.employee.id,
+            "name": f"{test_attempt.employee.first_name} {test_attempt.employee.last_name}"
+        },
+        "duration_seconds": (test_attempt.end_time - test_attempt.start_time).total_seconds() if test_attempt.end_time else None
     }
 
     # Если тест прошел модерацию, добавляем комментарий модерации в ответ, если он не пустой
@@ -455,6 +463,7 @@ def test_results(request, test_attempt_id):
         response_data["moderation_comment"] = moderation_comment
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 
 
 @api_view(['GET'])
@@ -577,6 +586,7 @@ def get_themes_with_tests(request, employee_id):
         # Добавляем информацию о текущей теме и ее тестах в список
         theme_with_tests = {
             'theme': theme.name,
+            'theme_id': theme.id,
             'tests': tests_info
         }
         themes_with_tests.append(theme_with_tests)
@@ -1021,25 +1031,31 @@ def start_test(request, employee_id, test_id):
         except (Employee.DoesNotExist, Test.DoesNotExist):
             return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Проверяем, достаточно ли у сотрудника опыта для прохождения теста
+        # Проверка на достаточно опыта и кармы у сотрудника (раскомментируйте, если требуется)
         # if employee.experience < test.experience_points:
         #     return Response({"message": "Not enough experience to start this test"},
         #                     status=status.HTTP_400_BAD_REQUEST)
         #
-        # # Проверяем, достаточно ли у сотрудника кармы для прохождения теста
         # if employee.karma < test.required_karma:
         #     return Response({"message": "Not enough karma to start this test"},
         #                     status=status.HTTP_400_BAD_REQUEST)
 
-        # Проверяем, есть ли предыдущий тест, который необходимо пройти
+        # Проверка на наличие обязательного предыдущего теста
         required_test = test.required_test
         if required_test:
-            # Проверяем, пройден ли предыдущий тест
             if not TestAttempt.objects.filter(employee=employee, test=required_test, status=TestAttempt.PASSED).exists():
                 return Response({"message": f"You must pass test {required_test.id} before starting this test"},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-        # Создаем объект TestAttempt для отслеживания попытки прохождения теста
+        # Проверка на наличие старых попыток в статусе "В процессе" или "Не начат"
+        old_attempts = TestAttempt.objects.filter(
+            employee=employee, test=test, status__in=[TestAttempt.IN_PROGRESS, TestAttempt.NOT_STARTED]
+        )
+
+        if old_attempts.exists():
+            old_attempts.delete()
+
+        # Создаем новую попытку прохождения теста с тем же ID, если старая попытка была удалена
         test_attempt = TestAttempt.objects.create(
             employee=employee,
             test=test,
