@@ -524,42 +524,49 @@ def get_themes_with_tests(request, employee_id):
 
         # Создаем список для хранения информации о тестах
         tests_info = []
-        test_status = []
+
         # Проходимся по всем тестам и собираем информацию о каждом из них
         for test in tests:
             created_at = test.created_at.strftime("%Y-%m-%dT%H:%M")
 
             # Проверяем наличие попыток прохождения теста
             test_attempt = TestAttempt.objects.filter(employee=employee, test=test).first()
-            if test_attempt and test_attempt.test_results:
-                try:
-                    # Десериализуем строку JSON в объект Python
-                    test_results = json.loads(test_attempt.test_results)
-                    total_score = test_results.get("Набранное количество баллов", 0)
-                    max_score = test.max_score
-                    answers_info = test_results.get("answers_info", [])
+            if test_attempt:
+                if test_attempt.test_results:
+                    try:
+                        # Десериализуем строку JSON в объект Python
+                        test_results = json.loads(test_attempt.test_results)
+                        total_score = test_results.get("Набранное количество баллов", 0)
+                        max_score = test.max_score
+                        answers_info = test_results.get("answers_info", [])
 
-                    # Подсчет количества правильных ответов
-                    correct_answers_count = sum(1 for answer_info in answers_info if answer_info["is_correct"])
+                        # Подсчет количества правильных ответов
+                        correct_answers_count = sum(1 for answer_info in answers_info if answer_info["is_correct"])
 
-                    # Формирование сообщения в зависимости от статуса теста
-                    if test_attempt.status == TestAttempt.PASSED:
-                        status_message = "Test Passed."
-                        correct_answers_info = f"{correct_answers_count}/{len(answers_info)}"
-                    elif test_attempt.status == TestAttempt.FAILED:
-                        status_message = "Test Failed."
-                        correct_answers_info = f"{correct_answers_count}/{len(answers_info)}"
-                    else:
-                        status_message = "Test in Progress"
-                        correct_answers_info = ""
+                        # Формирование сообщения в зависимости от статуса теста
+                        if test_attempt.status == TestAttempt.PASSED:
+                            status_message = "Test Passed."
+                            correct_answers_info = f"{correct_answers_count}/{len(answers_info)}"
+                        elif test_attempt.status == TestAttempt.FAILED:
+                            status_message = "Test Failed."
+                            correct_answers_info = f"{correct_answers_count}/{len(answers_info)}"
+                        else:
+                            status_message = "Test in Progress"
+                            correct_answers_info = ""
 
-                    test_status = {
-                        "status": status_message,
-                        "total_score": total_score,
-                        "max_score": max_score
-                    }
-                except (json.JSONDecodeError, TypeError, KeyError):
-                    test_status = None
+                        test_status = {
+                            "status": status_message,
+                            "total_score": total_score,
+                            "max_score": max_score
+                        }
+                    except (json.JSONDecodeError, TypeError, KeyError):
+                        test_status = None
+                else:
+                    # Если попытка есть, но результатов еще нет, то статус "Не начато"
+                    test_status = {"status": "Не начато", "total_score": 0, "max_score": 0}
+            else:
+                # Если попытки прохождения теста нет, то статус "Не начато"
+                test_status = {"status": "Не начато", "total_score": 0, "max_score": 0}
 
             # Проверка достаточно ли у сотрудника опыта и кармы для прохождения теста
             has_sufficient_karma = employee.karma >= test.required_karma
@@ -572,7 +579,7 @@ def get_themes_with_tests(request, employee_id):
                 'min_exp': test.min_experience,
                 'achievement': test.achievement.name if test.achievement else None,
                 'created_at': created_at,
-                'author': test.author.name if test.author else "",
+                'author': test.author.name if test.author else None,
                 'status': test_status,
                 'has_sufficient_karma': has_sufficient_karma,
                 'has_sufficient_experience': has_sufficient_experience
