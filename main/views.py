@@ -532,7 +532,7 @@ def get_themes_with_tests(request, employee_id):
             created_at = test.created_at.strftime("%Y-%m-%dT%H:%M")
 
             # Проверяем наличие попыток прохождения теста
-            test_attempt = TestAttempt.objects.filter(employee=employee, test=test).first()
+            test_attempt = TestAttempt.objects.filter(employee=employee, test=test).last()
             if test_attempt:
                 if test_attempt.test_results:
                     try:
@@ -606,6 +606,25 @@ class ThemeDeleteAPIView(APIView):
 
         theme.delete()
         return Response({"message": "Theme deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+
+@api_view(['PATCH'])
+def update_theme_name(request, theme_id):
+    try:
+        # Получаем тему по идентификатору
+        theme = Theme.objects.get(id=theme_id)
+    except Theme.DoesNotExist:
+        return Response({"message": "Theme not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Получаем новое название из запроса
+    new_name = request.data.get('name')
+    if not new_name:
+        return Response({"message": "New name is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Обновляем название темы
+    theme.name = new_name
+    theme.save()
+
+    return Response({"message": "Theme name updated successfully"}, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
 def create_achievement(request):

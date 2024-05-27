@@ -68,6 +68,7 @@ urlpatterns = [
     path('emp_test_stat/', latest_test_attempts, name='emp_test_stat'),
     path('permissions/', PermissionsList.as_view(), name='permissions'),
     path('themes/<int:theme_id>/delete', ThemeDeleteAPIView.as_view(), name='theme_delete'),
+    path('themes/<int:theme_id>/update-name/', update_theme_name, name='update_theme_name'),
 
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
