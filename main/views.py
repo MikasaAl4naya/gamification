@@ -625,7 +625,18 @@ def update_theme_name(request, theme_id):
     theme.save()
 
     return Response({"message": "Theme name updated successfully"}, status=status.HTTP_200_OK)
+@api_view(['DELETE'])
+def delete_test_attempt(request, attempt_id):
+    try:
+        # Находим попытку прохождения теста по её ID
+        test_attempt = TestAttempt.objects.get(id=attempt_id)
+    except TestAttempt.DoesNotExist:
+        return Response({"message": "Test attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    # Удаляем попытку прохождения теста
+    test_attempt.delete()
+
+    return Response({"message": "Test attempt deleted successfully"}, status=status.HTTP_200_OK)
 @api_view(['POST'])
 def create_achievement(request):
     if request.method == 'POST':
