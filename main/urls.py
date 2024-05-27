@@ -6,16 +6,9 @@ from . import views
 from .views import *
 
 urlpatterns = [
-    path('achievements/', views.achievement_list, name='achievement_list'),
-    path('create_request/', create_request, name='create_request'),
-    path('success/', success_view, name='success'),
-    path('registration_success/', registration_success, name='registration_success'),
-    path('profile/', user_profile, name='user_profile'),
-    path('logout/', logout_view, name='logout'),
     path('api/login/', LoginAPIView.as_view(), name='api-login'),
     path('employees/<str:username>/', EmployeeDetails.as_view(), name='employee_details'),
     path('api/register/', RegisterAPIView.as_view(), name='register'),
-    path('test/<int:test_id>/', views.test_detail, name='test_detail'),
     path('create_test/', create_test, name='create_test'),
     path('create_question/', CreateQuestion.as_view(), name='create_question'),
     path('create_answer/', CreateAnswer.as_view(), name='create_answer'),
@@ -25,7 +18,6 @@ urlpatterns = [
     path('update_test/<int:id>/', UpdateTest.as_view(), name='update_test'),
     path('update_question/<int:id>/', UpdateQuestion.as_view(), name='update_question'),
     path('update_answer/<int:id>/', UpdateAnswer.as_view(), name='update_answer'),
-    path('test_constructor/', test_constructor, name='test_constructor'),
     path('api/test/<int:test_id>/', views.get_test_by_id, name='get_test'),
     path('api/question/<int:question_id>/', views.get_question, name='get_question'),
     path('api/answer/<int:answer_id>/', views.get_answer, name='get_answer'),
@@ -40,7 +32,7 @@ urlpatterns = [
     path('theories/', TheoryList.as_view(), name='theory-list'),
     path('theories/create/', TheoryCreate.as_view(), name='theory-create'),
     path('theories/<int:id>/', TheoryDetail.as_view(), name='theory-detail'),
-    path('themes-with-tests/', get_themes_with_tests, name='themes_with_tests'),
+    path('themes-with-tests/<int:employee_id>/', get_themes_with_tests, name='themes_with_tests'),
     path('achievements/create/', views.create_achievement, name='create_achievement'),
     path('requests/create/', create_request, name='create_request'),
     path('requests/complete_test/<int:employee_id>/<int:test_id>/', complete_test, name='complete_test'),
@@ -75,8 +67,7 @@ urlpatterns = [
     path('test_moderation_result/<int:test_attempt_id>/', test_moderation_result, name='test_moderation_result'),
     path('emp_test_stat/', latest_test_attempts, name='emp_test_stat'),
     path('permissions/', PermissionsList.as_view(), name='permissions'),
-    # Другие URL-адреса вашего приложения...
-
+    path('themes/<int:theme_id>/delete', ThemeDeleteAPIView.as_view(), name='theme_delete'),
 
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки

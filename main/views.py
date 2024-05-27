@@ -34,10 +34,6 @@ from .models import Theory
 from .serializers import TheorySerializer
 
 
-def test_constructor(request):
-    return render(request, 'test_constructor.html')
-
-
 class LoginAPIView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
@@ -74,12 +70,6 @@ class LoginAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-def index(request):
-    return HttpResponse("Hello, world. You're at the")
-
-def achievement_list(request):
-    achievements = Achievement.objects.all()
-    return render(request, 'achievement_list.html', {'achievements': achievements})
 
 class TestScoreAPIView(APIView):
     def get(self, request, test_id):
@@ -168,41 +158,12 @@ class MostIncorrectQuestionsAPIView(APIView):
 
         return Response(result)
 
-def create_achievement(request):
-    if request.method == 'POST':
-        form = AchievementForm(request.POST, request.FILES)
-        if form.is_valid():
-            form.save()
-            return redirect('achievement_list')  # Перенаправляем пользователя на список ачивок после создания
-    else:
-        form = AchievementForm()
-    return render(request, 'create_achievement.html', {'form': form})
-
-def create_request(request):
-    if request.method == 'POST':
-        form = RequestForm(request.POST)
-        if form.is_valid():
-            form.save()
-            # return redirect('success')  # Перенаправляем на страницу "успешного создания"
-    else:
-        form = RequestForm()
-    return render(request, 'create_request.html', {'form': form})
 
 
 from django.db import transaction, IntegrityError
 
 
-def registration_success(request):
-    # Получение сгенерированного пароля из сессии
-    generated_password = request.session.pop('generated_password', None)
 
-    if generated_password:
-        # Отображение страницы успешной регистрации с сгенерированным паролем
-        return render(request, 'registration_success.html', {'generated_password': generated_password})
-    else:
-        # Если сгенерированный пароль отсутствует, вернуть сообщение об ошибке
-        messages.error(request, "Generated password not found.")
-        return redirect('register_employee')
 
 class EmployeeDetails(APIView):
     def get(self, request, username):
@@ -215,54 +176,9 @@ class EmployeeDetails(APIView):
 
 
 
-def some_other_view(request):
-    # Получение идентификатора пользователя из сессии
-    user_id = request.session.get('user_id')
-    if user_id:
-        # Получение объекта пользователя из базы данных
-        user = User.objects.get(pk=user_id)
-        # Использование пользователя для выполнения нужных действий
-        # Например, передача его в шаблон для отображения информации о пользователе
-        return render(request, 'some_template.html', {'user': user})
-    else:
-        # Если пользователь не аутентифицирован, выполните необходимые действия
-        return render(request, 'not_authenticated.html')
-
-def logout_view(request):
-    # Удаление идентификатора пользователя из сессии
-    if 'user_id' in request.session:
-        del request.session['user_id']
-    # Выход пользователя из системы
-    logout(request)
-    # Перенаправление на нужную страницу
-    return redirect('user_profile')
-
-
-def user_profile(request):
-    if request.user.is_authenticated:
-        try:
-            employee = Employee.objects.get(username=request.user.username)
-            achievements = EmployeeAchievement.objects.filter(employee=employee)
-            available_tests = Test.objects.all()  # Получаем все доступные тесты
-            if available_tests.exists():
-                required_experience = Test.required_experience
-                required_karma_percentage = Test.required_karma_percentage
-            return render(request, 'user_profile.html', {'employee': employee, 'achievements': achievements, 'available_tests': available_tests})
-        except Employee.DoesNotExist:
-            return HttpResponse("Employee not found")
-    else:
-        return HttpResponse("Please log in")
 
 
 
-def test_detail(request, test_id):
-    test = get_object_or_404(Test, pk=test_id)
-    questions = test.testquestion_set.all()
-    return render(request, 'test_detail.html', {'test': test})
-
-def success_view(request):
-    # Получаем текущего аутентифицированного пользователя
-    return render(request, 'success.html', )
 
 class RegisterAPIView(APIView):
     @transaction.atomic
@@ -291,27 +207,6 @@ class RegisterAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-
-def create_question(request):
-    if request.method == 'POST':
-        question_form = QuestionForm(request.POST)
-        answer_forms = [AnswerOptionForm(request.POST, prefix=str(x)) for x in range(4)]  # Четыре варианта ответа
-
-        if question_form.is_valid() and all([form.is_valid() for form in answer_forms]):
-            question = question_form.save()  # Сохраняем вопрос
-            for form in answer_forms:
-                answer = form.save(commit=False)
-                answer.question = question  # Привязываем ответ к вопросу
-                answer.save()
-
-            return redirect('success')  # Перенаправление на страницу успешного создания
-
-    else:
-        question_form = QuestionForm()
-        answer_forms = [AnswerOptionForm(prefix=str(x)) for x in range(4)]  # Четыре варианта ответа
-
-    return render(request, 'quest_create.html', {'question_form': question_form, 'answer_forms': answer_forms})
 @api_view(['POST'])
 def create_theme(request):
     if request.method == 'POST':
@@ -609,11 +504,13 @@ def get_test_by_id(request, test_id):
     return Response(response_data)
 
 
-
-
-
 @api_view(['GET'])
-def get_themes_with_tests(request):
+def get_themes_with_tests(request, employee_id):
+    try:
+        employee = Employee.objects.get(id=employee_id)
+    except Employee.DoesNotExist:
+        return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
     # Получаем все темы
     themes = Theme.objects.all().order_by('name')
 
@@ -627,10 +524,47 @@ def get_themes_with_tests(request):
 
         # Создаем список для хранения информации о тестах
         tests_info = []
-
+        test_status = []
         # Проходимся по всем тестам и собираем информацию о каждом из них
         for test in tests:
             created_at = test.created_at.strftime("%Y-%m-%dT%H:%M")
+
+            # Проверяем наличие попыток прохождения теста
+            test_attempt = TestAttempt.objects.filter(employee=employee, test=test).first()
+            if test_attempt and test_attempt.test_results:
+                try:
+                    # Десериализуем строку JSON в объект Python
+                    test_results = json.loads(test_attempt.test_results)
+                    total_score = test_results.get("Набранное количество баллов", 0)
+                    max_score = test.max_score
+                    answers_info = test_results.get("answers_info", [])
+
+                    # Подсчет количества правильных ответов
+                    correct_answers_count = sum(1 for answer_info in answers_info if answer_info["is_correct"])
+
+                    # Формирование сообщения в зависимости от статуса теста
+                    if test_attempt.status == TestAttempt.PASSED:
+                        status_message = "Test Passed."
+                        correct_answers_info = f"{correct_answers_count}/{len(answers_info)}"
+                    elif test_attempt.status == TestAttempt.FAILED:
+                        status_message = "Test Failed."
+                        correct_answers_info = f"{correct_answers_count}/{len(answers_info)}"
+                    else:
+                        status_message = "Test in Progress"
+                        correct_answers_info = ""
+
+                    test_status = {
+                        "status": status_message,
+                        "total_score": total_score,
+                        "max_score": max_score
+                    }
+                except (json.JSONDecodeError, TypeError, KeyError):
+                    test_status = None
+
+            # Проверка достаточно ли у сотрудника опыта и кармы для прохождения теста
+            has_sufficient_karma = employee.karma >= test.required_karma
+            has_sufficient_experience = employee.experience >= test.min_experience
+
             test_info = {
                 'test': test.id,
                 'name': test.name,
@@ -638,7 +572,10 @@ def get_themes_with_tests(request):
                 'min_exp': test.min_experience,
                 'achievement': test.achievement.name if test.achievement else None,
                 'created_at': created_at,
-                'author': test.author.name if test.author else None
+                'author': test.author.name if test.author else "",
+                'status': test_status,
+                'has_sufficient_karma': has_sufficient_karma,
+                'has_sufficient_experience': has_sufficient_experience
             }
 
             tests_info.append(test_info)
@@ -651,6 +588,7 @@ def get_themes_with_tests(request):
         themes_with_tests.append(theme_with_tests)
 
     return Response(themes_with_tests)
+
 
 @api_view(['GET'])
 def get_question(request, question_id):
@@ -665,7 +603,15 @@ def create_request(request):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class ThemeDeleteAPIView(APIView):
+    def delete(self, request, theme_id):
+        try:
+            theme = Theme.objects.get(id=theme_id)
+        except Theme.DoesNotExist:
+            return Response({"message": "Theme not found"}, status=status.HTTP_404_NOT_FOUND)
 
+        theme.delete()
+        return Response({"message": "Theme deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
 
 @api_view(['POST'])
 def create_achievement(request):
@@ -872,7 +818,7 @@ def test_status(request, employee_id, test_id):
     test_results = json.loads(test_attempt.test_results)
 
     total_score = test_results.get("Набранное количество баллов", 0)
-    max_score = test_results.get("Максимальное количество баллов", 0)
+    max_score = test.max_score
     answers_info = test_results.get("answers_info", [])
 
     # Подсчет количества правильных ответов
@@ -1080,7 +1026,6 @@ def start_test(request, employee_id, test_id):
         return Response({"test_attempt_id": test_attempt.id}, status=status.HTTP_201_CREATED)
 
 
-
 @api_view(['POST'])
 def complete_test(request, employee_id, test_id):
     if request.method == 'POST':
@@ -1090,7 +1035,8 @@ def complete_test(request, employee_id, test_id):
         except (Employee.DoesNotExist, Test.DoesNotExist):
             return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        test_attempt = TestAttempt.objects.filter(employee=employee, test=test, status=TestAttempt.IN_PROGRESS).order_by('-start_time').last()
+        test_attempt = TestAttempt.objects.filter(employee=employee, test=test,
+                                                  status=TestAttempt.IN_PROGRESS).order_by('-start_time').last()
 
         if not test_attempt:
             return Response({"message": "Test attempt not found"}, status=status.HTTP_404_NOT_FOUND)
@@ -1141,20 +1087,28 @@ def complete_test(request, employee_id, test_id):
                     correct_option_numbers = [index + 1 for index, option in enumerate(answer_options) if
                                               option['is_correct']]
 
-                    # Считаем количество выбранных правильных ответов
+                    # Считаем количество выбранных правильных и неправильных ответов
                     selected_correct_answers = sum(
                         1 for answer in submitted_answer_numbers if answer in correct_option_numbers)
-                    if selected_correct_answers > 0:
-                        # Рассчитываем баллы за каждый правильный ответ
-                        question_score_per_answer = question.points / len(correct_option_numbers)
-                        # Умножаем количество правильных ответов на баллы за каждый ответ
-                        question_score = round(selected_correct_answers * question_score_per_answer, 2)
-                        correct_answers_count += selected_correct_answers
-                        score += question_score
-                        is_correct = True  # Помечаем вопрос как правильный, если есть хотя бы один правильный ответ
-                    else:
+                    selected_incorrect_answers = sum(
+                        1 for answer in submitted_answer_numbers if answer not in correct_option_numbers)
+
+                    # Рассчитываем баллы за каждый правильный и неправильный ответ
+                    question_score_per_correct_answer = question.points / len(correct_option_numbers)
+                    question_score_per_incorrect_answer = question.points / len(correct_option_numbers)
+
+                    # Вычисляем итоговый балл за вопрос
+                    question_score = (selected_correct_answers * question_score_per_correct_answer) - \
+                                     (selected_incorrect_answers * question_score_per_incorrect_answer)
+
+                    # Не позволяем общему баллу за вопрос быть отрицательным
+                    if question_score < 0:
                         question_score = 0
 
+                    if selected_correct_answers == len(correct_option_numbers) and selected_incorrect_answers == 0:
+                        is_correct = True
+
+                    score += question_score
 
                 # Обновляем данные в answers_info
                 answer_info = {
