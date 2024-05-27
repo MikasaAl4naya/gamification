@@ -125,7 +125,8 @@ def latest_test_attempts(request):
             'test_name': attempt.test.name,  # предположим, что у модели Test есть поле name
             'score': attempt.score,
             'max_score': attempt.test.max_score,  # предположим, что у модели Test есть поле max_score
-            'status': attempt.status
+            'status': attempt.status,
+            'end_time': attempt.end_time.strftime("%Y-%m-%dT%H:%M") if attempt.end_time else None  # Добавляем дату окончания теста
         }
 
         grouped_result[employee_name][theme_name].append(test_info)
@@ -146,6 +147,7 @@ def latest_test_attempts(request):
     ]
 
     return Response(sorted_result, status=status.HTTP_200_OK)
+
 class MostIncorrectQuestionsAPIView(APIView):
     def get(self, request):
         # Получаем список вопросов, по которым сотрудники чаще всего ошибаются
@@ -539,23 +541,8 @@ def get_themes_with_tests(request, employee_id):
                         total_score = test_results.get("Набранное количество баллов", 0)
                         max_score = test.max_score
                         answers_info = test_results.get("answers_info", [])
-
-                        # Подсчет количества правильных ответов
-                        correct_answers_count = sum(1 for answer_info in answers_info if answer_info["is_correct"])
-
-                        # Формирование сообщения в зависимости от статуса теста
-                        if test_attempt.status == TestAttempt.PASSED:
-                            status_message = "Test Passed."
-                            correct_answers_info = f"{correct_answers_count}/{len(answers_info)}"
-                        elif test_attempt.status == TestAttempt.FAILED:
-                            status_message = "Test Failed."
-                            correct_answers_info = f"{correct_answers_count}/{len(answers_info)}"
-                        else:
-                            status_message = "Test in Progress"
-                            correct_answers_info = ""
-
                         test_status = {
-                            "status": status_message,
+                            "status": test_attempt.status,
                             "total_score": total_score,
                             "max_score": max_score
                         }
