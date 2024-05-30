@@ -451,8 +451,6 @@ def test_results(request, test_attempt_id):
             selected_incorrect = [opt for opt in incorrect_answers if opt["submitted_answer"]]
             answer_info["is_partially_true"] = len(selected_correct) > 0 and len(selected_incorrect) > 0
 
-
-
     response_data = {
         "score": test_attempt.score,
         "max_score": test_results.get("Максимальное количество баллов"),
@@ -465,13 +463,18 @@ def test_results(request, test_attempt_id):
             "name": f"{test_attempt.employee.first_name} {test_attempt.employee.last_name}"
         },
         "duration_seconds": (
-            test_attempt.end_time - test_attempt.start_time).total_seconds() if test_attempt.end_time else None
+                test_attempt.end_time - test_attempt.start_time).total_seconds() if test_attempt.end_time else None
     }
 
     moderation_comment = test_results.get("moderation_comment", "")
-    print(moderation_comment)
     if moderation_comment:
         response_data["moderation_comment"] = moderation_comment
+
+    # Добавляем имя модератора, если оно доступно
+    moderator_name = test_results.get("moderator")
+    print(moderator_name)
+    if moderator_name:
+        response_data["moderator"] = moderator_name
 
     return Response(response_data, status=status.HTTP_200_OK)
 
@@ -926,95 +929,87 @@ def test_attempt_moderation_list(request):
 
 
 
-
-
-
 @api_view(['POST'])
 def moderate_test_attempt(request, test_attempt_id):
-    if request.method == 'POST':
-        try:
-            test_attempt = TestAttempt.objects.get(id=test_attempt_id)
-        except TestAttempt.DoesNotExist:
-            return Response({"message": "Test Attempt not found"}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        test_attempt = TestAttempt.objects.get(id=test_attempt_id)
+    except TestAttempt.DoesNotExist:
+        return Response({"message": "Test Attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Проверяем, что запрос содержит необходимые данные
-        if 'moderated_questions' not in request.data:
-            return Response({"message": "Moderated questions are required"}, status=status.HTTP_400_BAD_REQUEST)
+    if 'moderated_questions' not in request.data:
+        return Response({"message": "Moderated questions are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        moderated_questions = request.data['moderated_questions']
+    if 'moderator_id' not in request.data:
+        return Response({"message": "Moderator ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Преобразуем строку test_results в словарь
-        test_results = json.loads(test_attempt.test_results)
+    moderated_questions = request.data['moderated_questions']
+    moderator_id = request.data['moderator_id']
 
-        # Получаем информацию о ответах на вопросы
-        answers_info = test_results.get('answers_info', [])
+    # Преобразуем строку test_results в словарь
+    test_results = json.loads(test_attempt.test_results)
 
-        # Проверяем, находится ли тест на модерации
-        if test_attempt.status != TestAttempt.MODERATION:
-            return Response({"message": "Test attempt is not on moderation"}, status=status.HTTP_400_BAD_REQUEST)
+    # Получаем информацию о ответах на вопросы
+    answers_info = test_results.get('answers_info', [])
 
-        for moderated_question in moderated_questions:
-            question_number = moderated_question.get('question_number')
-            moderation_score = moderated_question.get('moderation_score')
-            moderation_comment = moderated_question.get('moderation_comment', '')
+    if test_attempt.status != TestAttempt.MODERATION:
+        return Response({"message": "Test attempt is not on moderation"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Проверяем, что номер вопроса корректный
-            if question_number < 1 or question_number > len(answers_info):
-                return Response({"message": "Invalid question number"}, status=status.HTTP_400_BAD_REQUEST)
+    for moderated_question in moderated_questions:
+        question_number = moderated_question.get('question_number')
+        moderation_score = moderated_question.get('moderation_score')
+        moderation_comment = moderated_question.get('moderation_comment', '')
 
-            # Находим вопрос, который нужно модерировать
-            question_to_moderate = answers_info[question_number - 1]
+        if question_number < 1 or question_number > len(answers_info):
+            return Response({"message": "Invalid question number"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Проверяем, что вопрос имеет тип "text"
-            if 'type' not in question_to_moderate or question_to_moderate['type'] != 'text':
-                return Response({"message": "You can only moderate questions with type 'text'"}, status=status.HTTP_400_BAD_REQUEST)
+        question_to_moderate = answers_info[question_number - 1]
 
-            # Получаем максимальное количество баллов, которое можно установить за ответ на вопрос
-            max_question_score = question_to_moderate.get('max_question_score', 0)
+        if 'type' not in question_to_moderate or question_to_moderate['type'] != 'text':
+            return Response({"message": "You can only moderate questions with type 'text'"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Проверяем, что установленное количество баллов не превышает максимальное
-            if moderation_score > max_question_score:
-                return Response({"message": f"Moderation score exceeds the maximum allowed score ({max_question_score})"}, status=status.HTTP_400_BAD_REQUEST)
+        max_question_score = question_to_moderate.get('max_question_score', 0)
 
-            # Обновляем баллы за вопрос и добавляем пояснение
-            question_to_moderate['question_score'] = moderation_score
-            question_to_moderate['moderation_comment'] = moderation_comment
+        if moderation_score > max_question_score:
+            return Response({"message": f"Moderation score exceeds the maximum allowed score ({max_question_score})"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Устанавливаем флаг partially_true
-            if 0 < moderation_score < max_question_score:
-                question_to_moderate['is_partially_true'] = True
-            else:
-                question_to_moderate['is_partially_true'] = False
+        question_to_moderate['question_score'] = moderation_score
+        question_to_moderate['moderation_comment'] = moderation_comment
 
-        # Обновляем информацию об ответах на вопросы
-        test_results['answers_info'] = answers_info
-
-        # Добавляем moderation_comment в test_results
-        test_attempt.test_results = json.dumps(test_results)
-
-        # Пересчитываем общее количество баллов
-        total_score = sum(question.get('question_score', 0) for question in answers_info)
-
-        # Обновляем общее количество баллов в объекте TestAttempt
-        test_attempt.score = round(total_score, 1)
-
-        # Проверяем, пройден ли тест
-        if total_score >= test_attempt.test.passing_score:
-            test_attempt.status = TestAttempt.PASSED
+        if 0 < moderation_score < max_question_score:
+            question_to_moderate['is_partially_true'] = True
         else:
-            test_attempt.status = TestAttempt.FAILED
+            question_to_moderate['is_partially_true'] = False
 
-        # Сохраняем изменения
-        test_attempt.end_time = timezone.now()  # Устанавливаем время окончания модерации
-        test_attempt.save()
+    test_results['answers_info'] = answers_info
 
-        response_data = {
-            "score": test_attempt.score,
-            "message": "Test moderated successfully",
-            "status": test_attempt.status
-        }
+    # Добавляем информацию о модераторе в test_results
+    try:
+        moderator = Employee.objects.get(id=moderator_id)
+    except Employee.DoesNotExist:
+        return Response({"message": "Moderator not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        return Response(response_data, status=status.HTTP_200_OK)
+    test_results['moderator'] = moderator.first_name + " " + moderator.last_name
+    test_attempt.test_results = json.dumps(test_results)
+
+    total_score = sum(question.get('question_score', 0) for question in answers_info)
+    test_attempt.score = round(total_score, 1)
+
+    if total_score >= test_attempt.test.passing_score:
+        test_attempt.status = TestAttempt.PASSED
+    else:
+        test_attempt.status = TestAttempt.FAILED
+
+    test_attempt.end_time = timezone.now()
+    test_attempt.save()
+
+    response_data = {
+        "score": test_attempt.score,
+        "message": "Test moderated successfully",
+        "status": test_attempt.status,
+        "moderator": moderator.first_name + " " + moderator.last_name
+    }
+
+    return Response(response_data, status=status.HTTP_200_OK)
 
 
 
