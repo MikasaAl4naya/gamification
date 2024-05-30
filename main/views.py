@@ -1525,6 +1525,10 @@ class UpdateTestAndContent(APIView):
         if test_serializer.is_valid():
             test_serializer.save()
 
+            # Удаляем все старые вопросы и теории, связанные с тестом
+            TestQuestion.objects.filter(test=test).delete()
+            Theory.objects.filter(test=test).delete()
+
             # Обновление блоков
             if 'blocks' in request.data:
                 blocks_data = request.data['blocks']
@@ -1532,47 +1536,27 @@ class UpdateTestAndContent(APIView):
                 for block_data in blocks_data:
                     if block_data['type'] == 'question':
                         question_data = block_data['content']
-                        question_id = question_data.get('id', None)
-                        if question_id:
-                            try:
-                                question = TestQuestion.objects.get(id=question_id)
-                            except TestQuestion.DoesNotExist:
-                                continue
-                            question_serializer = TestQuestionSerializer(question, data=question_data, partial=True)
-                            if question_serializer.is_valid():
-                                question_serializer.save(position=position)  # Устанавливаем позицию вопроса
-                        else:
-                            question_data['test'] = test.id  # Устанавливаем связь с тестом
-                            question_serializer = TestQuestionSerializer(data=question_data)
-                            if question_serializer.is_valid():
-                                question_serializer.save(position=position)  # Устанавливаем позицию вопроса
-                                position += 1  # Увеличиваем счетчик позиции
+                        question_data['test'] = test.id  # Устанавливаем связь с тестом
+                        question_serializer = TestQuestionSerializer(data=question_data)
+                        if question_serializer.is_valid():
+                            question_instance = question_serializer.save(position=position)  # Устанавливаем позицию вопроса
+                            position += 1  # Увеличиваем счетчик позиции
 
-                                # Сохраняем ответы для текущего вопроса
-                                answers_data = question_data.get('answer_options', [])
-                                for answer_data in answers_data:
-                                    answer_data['question'] = question_serializer.instance.id
-                                    answer_serializer = AnswerOptionSerializer(data=answer_data)
-                                    if answer_serializer.is_valid():
-                                        answer_serializer.save()
+                            # Сохраняем ответы для текущего вопроса
+                            answers_data = question_data.get('answer_options', [])
+                            for answer_data in answers_data:
+                                answer_data['question'] = question_instance.id
+                                answer_serializer = AnswerOptionSerializer(data=answer_data)
+                                if answer_serializer.is_valid():
+                                    answer_serializer.save()
 
                     elif block_data['type'] == 'theory':
                         theory_data = block_data['content']
-                        theory_id = theory_data.get('id', None)
-                        if theory_id:
-                            try:
-                                theory = Theory.objects.get(id=theory_id)
-                            except Theory.DoesNotExist:
-                                continue
-                            theory_serializer = TheorySerializer(theory, data=theory_data, partial=True)
-                            if theory_serializer.is_valid():
-                                theory_serializer.save(position=position)  # Устанавливаем позицию теории
-                        else:
-                            theory_data['test'] = test.id  # Устанавливаем связь с тестом
-                            theory_serializer = TheorySerializer(data=theory_data)
-                            if theory_serializer.is_valid():
-                                theory_serializer.save(position=position)  # Устанавливаем позицию теории
-                                position += 1  # Увеличиваем счетчик позиции
+                        theory_data['test'] = test.id  # Устанавливаем связь с тестом
+                        theory_serializer = TheorySerializer(data=theory_data)
+                        if theory_serializer.is_valid():
+                            theory_serializer.save(position=position)  # Устанавливаем позицию теории
+                            position += 1  # Увеличиваем счетчик позиции
 
             return Response({"message": "Test and content updated successfully"}, status=status.HTTP_200_OK)
         else:
