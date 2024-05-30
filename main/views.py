@@ -889,7 +889,6 @@ def test_status(request, employee_id, test_id):
     return Response(response_data, status=status.HTTP_200_OK)
 
 
-
 @api_view(['GET'])
 def test_attempt_moderation_list(request):
     # Получаем последние попытки прохождения тестов на модерации для каждого пользователя и теста
@@ -904,13 +903,28 @@ def test_attempt_moderation_list(request):
         end_time__in=[attempt['max_end_time'] for attempt in latest_attempts]
     )
 
+    # Сортируем попытки прохождения тестов по темам тестов
+    sorted_attempts = sorted(test_attempts, key=lambda x: x.test.theme.name)
+
+    # Группируем попытки прохождения тестов по темам
+    grouped_by_theme = {}
+    for attempt in sorted_attempts:
+        theme_name = attempt.test.theme.name
+        if theme_name not in grouped_by_theme:
+            grouped_by_theme[theme_name] = []
+        grouped_by_theme[theme_name].append(attempt)
+
     # Формируем ответные данные
     response_data = []
-    for attempt in test_attempts:
-        serializer = TestAttemptModerationSerializer(attempt)
-        response_data.append(serializer.data)
+    for theme, attempts in grouped_by_theme.items():
+        serializer = TestAttemptModerationSerializer(attempts, many=True)
+        response_data.append({
+            'theme': theme,
+            'test_attempts': serializer.data
+        })
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 
 
 
