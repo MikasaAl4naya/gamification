@@ -130,7 +130,7 @@ class TestQuestionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TestQuestion
-        fields = ['id', 'test', 'question_text', 'duration_seconds', 'question_type', 'points', 'explanation', 'image',  'answer_options']
+        fields = ['id', 'test', 'question_text', 'duration_seconds', 'question_type', 'points', 'explanation', 'image','position' , 'answer_options']
 
     def get_image_url(self, obj):
         request = self.context.get('request')

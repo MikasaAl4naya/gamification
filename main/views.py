@@ -1551,32 +1551,74 @@ class UpdateTestAndContent(APIView):
         if test_serializer.is_valid():
             test_serializer.save()
 
-            # Удаляем все старые вопросы и теории, связанные с тестом
+            # Удаляем все старые вопросы, ответы и теории, связанные с тестом
+            print("Deleting old questions, answers, and theories...")
             TestQuestion.objects.filter(test=test).delete()
+            AnswerOption.objects.filter(question__test=test).delete()
             Theory.objects.filter(test=test).delete()
 
-            # Создание новых вопросов, теории и сохранение их в нужном порядке
+            # Создаем новые вопросы, теорию и сохраняем их в нужном порядке
             blocks_data = request.data.get('blocks', [])
+            print("Blocks data:", blocks_data)
             position = 1
+            created_questions = []
+            created_theories = []
+            created_answers = []
+
             for block_data in blocks_data:
                 block_type = block_data.get('type')
+                content_data = block_data.get('content', {})
+                content_data['position'] = position  # Устанавливаем позицию
+                content_data['test'] = test.id
+
                 if block_type == 'question':
-                    question_serializer = TestQuestionSerializer(data=block_data)
+                    print("Creating new question...")
+                    question_serializer = TestQuestionSerializer(data=content_data)
                     if question_serializer.is_valid():
-                        question_serializer.save(test=test, position=position)
+                        question = question_serializer.save()
+                        created_questions.append(question_serializer.data)
+                        created_questions.append(position)
+                        print(position)
                         position += 1
+
+                        # Сохраняем ответы для текущего вопроса
+                        answers_data = block_data.get('content', {}).get('answer_options', [])
+                        for answer_data in answers_data:
+                            answer_data['question'] = question.id
+                            answer_serializer = AnswerOptionSerializer(data=answer_data)
+                            if answer_serializer.is_valid():
+                                answer = answer_serializer.save()
+                                created_answers.append(answer_serializer.data)
+                            else:
+                                print("Answer serialization errors:", answer_serializer.errors)
+                    else:
+                        print("Question serialization errors:", question_serializer.errors)
+                        return Response(question_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                 elif block_type == 'theory':
-                    theory_serializer = TheorySerializer(data=block_data)
+                    theory_serializer = TheorySerializer(data=content_data)
                     if theory_serializer.is_valid():
-                        theory_serializer.save(test=test, position=position)
+                        theory = theory_serializer.save()
+                        created_theories.append(theory_serializer.data)
+                        created_theories.append(position)
+                        print(position)
                         position += 1
+                    else:
+                        print("Theory serialization errors:", theory_serializer.errors)
+                        return Response(theory_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                 else:
                     return Response({'error': 'Invalid block type'}, status=status.HTTP_400_BAD_REQUEST)
 
-            return Response({"message": "Test and content updated successfully"}, status=status.HTTP_200_OK)
+            print("Test and content updated successfully")
+            response_data = {
+                "message": "Test and content updated successfully",
+                "created_questions": created_questions,
+                "created_theories": created_theories,
+                "created_answers": created_answers,
+                'position': position
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
         else:
             return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 class FullStatisticsAPIView(APIView):
