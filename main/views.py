@@ -451,8 +451,12 @@ def test_results(request, test_attempt_id):
             selected_incorrect = [opt for opt in incorrect_answers if opt["submitted_answer"]]
             answer_info["is_partially_true"] = len(selected_correct) > 0 and len(selected_incorrect) > 0
 
+        # Добавляем проверку для частично правильных текстовых ответов
+        if answer_info.get("type") == "text" and answer_info.get("is_partially_true", False):
+            answer_info["partial_correct_message"] = "Ответ частично верный"
+
     response_data = {
-        "score": test_results.get("Набранное количество баллов"),
+        "score": test_attempt.score,
         "max_score": test_results.get("Максимальное количество баллов"),
         "status": test_attempt.status,
         "answers_info": answers_info,
@@ -463,7 +467,7 @@ def test_results(request, test_attempt_id):
             "name": f"{test_attempt.employee.first_name} {test_attempt.employee.last_name}"
         },
         "duration_seconds": (
-                    test_attempt.end_time - test_attempt.start_time).total_seconds() if test_attempt.end_time else None
+            test_attempt.end_time - test_attempt.start_time).total_seconds() if test_attempt.end_time else None
     }
 
     moderation_comment = test_results.get("moderation_comment", "")
@@ -967,15 +971,16 @@ def moderate_test_attempt(request, test_attempt_id):
             # Определяем статус ответа
             if moderation_score == max_question_score:
                 question_to_moderate['is_correct'] = True
-            elif 0 < moderation_score < max_question_score:
-                question_to_moderate['is_partially_correct'] = True
-
-        # Обновляем информацию об ответах на вопросы
-        test_results['answers_info'] = answers_info
-        test_attempt.test_results = json.dumps(test_results)
+                question_to_moderate['is_partially_true'] = False  # Убедимся, что нет флага частично верного
+            else:
+                question_to_moderate['is_correct'] = False
+                question_to_moderate['is_partially_true'] = True
 
         # Пересчитываем общее количество баллов
         total_score = sum(question.get('question_score', 0) for question in answers_info)
+        total_score = round(total_score, 1)  # Округляем до десятых
+
+        # Обновляем общее количество баллов в объекте TestAttempt
         test_attempt.score = total_score
 
         # Проверяем, пройден ли тест
@@ -985,14 +990,18 @@ def moderate_test_attempt(request, test_attempt_id):
             test_attempt.status = TestAttempt.FAILED
 
         # Сохраняем изменения
+        test_attempt.end_time = timezone.now()  # Устанавливаем время окончания модерации
         test_attempt.save()
 
         response_data = {
+            "score" : test_attempt.score,
             "message": "Test moderated successfully",
             "status": test_attempt.status
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
+
+
 @api_view(['GET'])
 def required_tests_chain(request, employee_id, test_id):
     try:
