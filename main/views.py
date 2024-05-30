@@ -451,9 +451,7 @@ def test_results(request, test_attempt_id):
             selected_incorrect = [opt for opt in incorrect_answers if opt["submitted_answer"]]
             answer_info["is_partially_true"] = len(selected_correct) > 0 and len(selected_incorrect) > 0
 
-        # Добавляем проверку для частично правильных текстовых ответов
-        if answer_info.get("type") == "text" and answer_info.get("is_partially_true", False):
-            answer_info["partial_correct_message"] = "Ответ частично верный"
+
 
     response_data = {
         "score": test_attempt.score,
@@ -471,6 +469,7 @@ def test_results(request, test_attempt_id):
     }
 
     moderation_comment = test_results.get("moderation_comment", "")
+    print(moderation_comment)
     if moderation_comment:
         response_data["moderation_comment"] = moderation_comment
 
@@ -977,24 +976,27 @@ def moderate_test_attempt(request, test_attempt_id):
             if moderation_score > max_question_score:
                 return Response({"message": f"Moderation score exceeds the maximum allowed score ({max_question_score})"}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Обновляем баллы за вопрос и комментарий модератора
+            # Обновляем баллы за вопрос и добавляем пояснение
             question_to_moderate['question_score'] = moderation_score
             question_to_moderate['moderation_comment'] = moderation_comment
 
-            # Определяем статус ответа
-            if moderation_score == max_question_score:
-                question_to_moderate['is_correct'] = True
-                question_to_moderate['is_partially_true'] = False  # Убедимся, что нет флага частично верного
-            else:
-                question_to_moderate['is_correct'] = False
+            # Устанавливаем флаг partially_true
+            if 0 < moderation_score < max_question_score:
                 question_to_moderate['is_partially_true'] = True
+            else:
+                question_to_moderate['is_partially_true'] = False
+
+        # Обновляем информацию об ответах на вопросы
+        test_results['answers_info'] = answers_info
+
+        # Добавляем moderation_comment в test_results
+        test_attempt.test_results = json.dumps(test_results)
 
         # Пересчитываем общее количество баллов
         total_score = sum(question.get('question_score', 0) for question in answers_info)
-        total_score = round(total_score, 1)  # Округляем до десятых
 
         # Обновляем общее количество баллов в объекте TestAttempt
-        test_attempt.score = total_score
+        test_attempt.score = round(total_score, 1)
 
         # Проверяем, пройден ли тест
         if total_score >= test_attempt.test.passing_score:
@@ -1007,12 +1009,14 @@ def moderate_test_attempt(request, test_attempt_id):
         test_attempt.save()
 
         response_data = {
-            "score" : test_attempt.score,
+            "score": test_attempt.score,
             "message": "Test moderated successfully",
             "status": test_attempt.status
         }
 
         return Response(response_data, status=status.HTTP_200_OK)
+
+
 
 
 @api_view(['GET'])
@@ -1551,38 +1555,28 @@ class UpdateTestAndContent(APIView):
             TestQuestion.objects.filter(test=test).delete()
             Theory.objects.filter(test=test).delete()
 
-            # Обновление блоков
-            if 'blocks' in request.data:
-                blocks_data = request.data['blocks']
-                position = 1  # Инициализация счетчика позиции
-                for block_data in blocks_data:
-                    if block_data['type'] == 'question':
-                        question_data = block_data['content']
-                        question_data['test'] = test.id  # Устанавливаем связь с тестом
-                        question_serializer = TestQuestionSerializer(data=question_data)
-                        if question_serializer.is_valid():
-                            question_instance = question_serializer.save(position=position)  # Устанавливаем позицию вопроса
-                            position += 1  # Увеличиваем счетчик позиции
-
-                            # Сохраняем ответы для текущего вопроса
-                            answers_data = question_data.get('answer_options', [])
-                            for answer_data in answers_data:
-                                answer_data['question'] = question_instance.id
-                                answer_serializer = AnswerOptionSerializer(data=answer_data)
-                                if answer_serializer.is_valid():
-                                    answer_serializer.save()
-
-                    elif block_data['type'] == 'theory':
-                        theory_data = block_data['content']
-                        theory_data['test'] = test.id  # Устанавливаем связь с тестом
-                        theory_serializer = TheorySerializer(data=theory_data)
-                        if theory_serializer.is_valid():
-                            theory_serializer.save(position=position)  # Устанавливаем позицию теории
-                            position += 1  # Увеличиваем счетчик позиции
+            # Создание новых вопросов, теории и сохранение их в нужном порядке
+            blocks_data = request.data.get('blocks', [])
+            position = 1
+            for block_data in blocks_data:
+                block_type = block_data.get('type')
+                if block_type == 'question':
+                    question_serializer = TestQuestionSerializer(data=block_data)
+                    if question_serializer.is_valid():
+                        question_serializer.save(test=test, position=position)
+                        position += 1
+                elif block_type == 'theory':
+                    theory_serializer = TheorySerializer(data=block_data)
+                    if theory_serializer.is_valid():
+                        theory_serializer.save(test=test, position=position)
+                        position += 1
+                else:
+                    return Response({'error': 'Invalid block type'}, status=status.HTTP_400_BAD_REQUEST)
 
             return Response({"message": "Test and content updated successfully"}, status=status.HTTP_200_OK)
         else:
             return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class FullStatisticsAPIView(APIView):
