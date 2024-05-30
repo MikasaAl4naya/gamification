@@ -1513,7 +1513,7 @@ class DeleteAnswer(generics.DestroyAPIView):
     queryset = AnswerOption.objects.all()
     serializer_class = AnswerOptionSerializer
     lookup_field = 'id'  # Или какой у вас ключ в модели
-
+#основное обновление тестов
 class UpdateTestAndContent(APIView):
     def put(self, request, test_id):
         try:
