@@ -2,6 +2,7 @@ import ast
 import math
 from collections import Counter, defaultdict
 from datetime import timedelta
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.contrib.auth import login, logout, get_user_model
 from django.core.checks import messages
@@ -419,7 +420,6 @@ def test_moderation_result(request, test_attempt_id):
     return Response(response_data, status=status.HTTP_200_OK)
 
 
-
 @api_view(['GET'])
 def test_results(request, test_attempt_id):
     try:
@@ -429,41 +429,48 @@ def test_results(request, test_attempt_id):
 
     # Проверяем статус теста
     if test_attempt.status in [TestAttempt.MODERATION, TestAttempt.IN_PROGRESS]:
-        # Если тест находится на модерации или в процессе, возвращаем информацию о статусе и ничего больше не отображаем
         response_data = {
             "status": test_attempt.status
         }
         return Response(response_data, status=status.HTTP_200_OK)
 
-    # Если тест завершен, получаем результаты теста в виде словаря Python из поля test_results
     try:
         test_results = json.loads(test_attempt.test_results)
     except (TypeError, json.JSONDecodeError):
         return Response({"message": "Invalid test results format"}, status=status.HTTP_400_BAD_REQUEST)
+
     test_id = test_attempt.test_id
-    test = Test.objects.get(id = test_id)
-    # Формируем ответ в нужном формате
+    test = Test.objects.get(id=test_id)
+
+    answers_info = test_results.get("answers_info", [])
+    for answer_info in answers_info:
+        if answer_info.get("type") == "multiple":
+            correct_answers = [opt for opt in answer_info["answer_options"] if opt["correct_options"]]
+            incorrect_answers = [opt for opt in answer_info["answer_options"] if not opt["correct_options"]]
+            selected_correct = [opt for opt in correct_answers if opt["submitted_answer"]]
+            selected_incorrect = [opt for opt in incorrect_answers if opt["submitted_answer"]]
+            answer_info["is_partially_true"] = len(selected_correct) > 0 and len(selected_incorrect) > 0
+
     response_data = {
         "score": test_results.get("Набранное количество баллов"),
         "max_score": test_results.get("Максимальное количество баллов"),
         "status": test_attempt.status,
-        "answers_info": test_results.get("answers_info"),
-        "test_creation_date": test.created_at,
+        "answers_info": answers_info,
+        "test_creation_date": test.created_at.strftime("%Y-%m-%d %H:%M:%S") if test.created_at else None,
         "test_end_date": test_attempt.end_time.strftime("%Y-%m-%d %H:%M:%S") if test_attempt.end_time else None,
         "employee": {
             "id": test_attempt.employee.id,
             "name": f"{test_attempt.employee.first_name} {test_attempt.employee.last_name}"
         },
-        "duration_seconds": (test_attempt.end_time - test_attempt.start_time).total_seconds() if test_attempt.end_time else None
+        "duration_seconds": (
+                    test_attempt.end_time - test_attempt.start_time).total_seconds() if test_attempt.end_time else None
     }
 
-    # Если тест прошел модерацию, добавляем комментарий модерации в ответ, если он не пустой
     moderation_comment = test_results.get("moderation_comment", "")
     if moderation_comment:
         response_data["moderation_comment"] = moderation_comment
 
     return Response(response_data, status=status.HTTP_200_OK)
-
 
 
 @api_view(['GET'])
@@ -1075,27 +1082,23 @@ def complete_test(request, employee_id, test_id):
         except (Employee.DoesNotExist, Test.DoesNotExist):
             return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        test_attempt = TestAttempt.objects.filter(employee=employee, test=test,
-                                                  status=TestAttempt.IN_PROGRESS).order_by('-start_time').last()
+        test_attempt = TestAttempt.objects.filter(employee=employee, test=test, status=TestAttempt.IN_PROGRESS).order_by('-start_time').last()
 
         if not test_attempt:
             return Response({"message": "Test attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
         questions = TestQuestion.objects.filter(test=test)
-        correct_answers_count = 0
-        total_questions = 0
-        max_score = 0
-        score = 0
+        total_score = Decimal('0.0')
+        max_score = Decimal('0.0')
         answers_info = []
 
         for question_number, question in enumerate(questions, start=1):
             submitted_text_answer = ""
-            total_questions += 1
             question_text = question.question_text
             answer_options = [
                 {'option_number': index + 1, 'option_text': option.option_text, 'is_correct': option.is_correct} for
                 index, option in enumerate(question.answer_options.all())]
-            max_score += question.points
+            max_score += Decimal(str(question.points))
 
             answer_key = str(question_number)
             if answer_key in request.data:
@@ -1110,80 +1113,79 @@ def complete_test(request, employee_id, test_id):
                     submitted_answer_option = answer_options[submitted_answer_number - 1]
                     is_correct = submitted_answer_option['is_correct']
                     if is_correct:
-                        correct_answers_count += 1
-                        score += question.points
-                        question_score = question.points
+                        total_score += Decimal(str(question.points))
+                        question_score = Decimal(str(question.points))
                     else:
-                        question_score = 0
+                        question_score = Decimal('0.0')
                 elif question.question_type == 'text':
                     # Для вопросов с типом "text" сохраняем текстовый ответ
                     submitted_text_answer = submitted_answer
-                    question_score = 0
+                    question_score = Decimal('0.0')
                 elif question.question_type == 'multiple':
                     if isinstance(submitted_answer, int):
-                        submitted_answer = [
-                            submitted_answer]  # Если только один вариант был выбран, преобразуем его в список
+                        submitted_answer = [submitted_answer]  # Если только один вариант был выбран, преобразуем его в список
                     submitted_answer_numbers = [int(answer) for answer in submitted_answer]
-                    correct_option_numbers = [index + 1 for index, option in enumerate(answer_options) if
-                                              option['is_correct']]
+                    correct_option_numbers = [index + 1 for index, option in enumerate(answer_options) if option['is_correct']]
 
                     # Считаем количество выбранных правильных и неправильных ответов
-                    selected_correct_answers = sum(
-                        1 for answer in submitted_answer_numbers if answer in correct_option_numbers)
-                    selected_incorrect_answers = sum(
-                        1 for answer in submitted_answer_numbers if answer not in correct_option_numbers)
+                    selected_correct_answers = sum(1 for answer in submitted_answer_numbers if answer in correct_option_numbers)
+                    selected_incorrect_answers = sum(1 for answer in submitted_answer_numbers if answer not in correct_option_numbers)
 
                     # Рассчитываем баллы за каждый правильный и неправильный ответ
-                    question_score_per_correct_answer = question.points / len(correct_option_numbers)
-                    question_score_per_incorrect_answer = question.points / len(correct_option_numbers)
+                    question_score_per_correct_answer = Decimal(str(question.points)) / Decimal(len(correct_option_numbers))
+                    question_score_per_incorrect_answer = Decimal(str(question.points)) / Decimal(len(correct_option_numbers))
 
                     # Вычисляем итоговый балл за вопрос
-                    question_score = (selected_correct_answers * question_score_per_correct_answer) - \
-                                     (selected_incorrect_answers * question_score_per_incorrect_answer)
+                    question_score = (selected_correct_answers * question_score_per_correct_answer) - (selected_incorrect_answers * question_score_per_incorrect_answer)
 
                     # Не позволяем общему баллу за вопрос быть отрицательным
                     if question_score < 0:
-                        question_score = 0
+                        question_score = Decimal('0.0')
 
                     if selected_correct_answers == len(correct_option_numbers) and selected_incorrect_answers == 0:
                         is_correct = True
 
-                    score += question_score
+                    total_score += question_score
+
+                # Округляем балл до десятых
+                question_score = question_score.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
 
                 # Обновляем данные в answers_info
                 answer_info = {
                     "question_text": question_text,
                     "type": question.question_type,
-                    "is_correct": is_correct,  # Используем переменную is_correct
-                    "question_score": question_score,
+                    "is_correct": is_correct,
+                    "question_score": float(question_score),
                     "answer_options": [],
                     "explanation": question.explanation
                 }
                 if question.question_type == 'text':
                     # Добавляем текстовый ответ в информацию о вопросе
                     answer_info['text_answer'] = submitted_text_answer
-                    answer_info['max_question_score'] = question.points
+                    answer_info['max_question_score'] = float(question.points)
                 else:
                     for option in answer_options:
                         option_info = {
                             "option_number": option["option_number"],
                             "option_text": option["option_text"],
-                            "submitted_answer": option["option_number"] in submitted_answer_numbers if isinstance(
-                                submitted_answer, list) else option["option_number"] == int(submitted_answer),
+                            "submitted_answer": option["option_number"] in submitted_answer_numbers if isinstance(submitted_answer, list) else option["option_number"] == int(submitted_answer),
                             "correct_options": option["is_correct"]
                         }
                         answer_info["answer_options"].append(option_info)
                 answers_info.append(answer_info)
 
+        # Округляем общий балл до десятых
+        total_score = total_score.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
+
         # Обновляем данные в test_attempt
-        test_attempt.score = score
+        test_attempt.score = float(total_score)
         test_attempt.end_time = timezone.now()
         test_attempt.save()
 
         # Сохраняем ответы сотрудника и вопросы в test_attempt
         test_attempt.test_results = json.dumps({
-            "Набранное количество баллов": score,
-            "Максимальное количество баллов": max_score,
+            "Набранное количество баллов": float(total_score),
+            "Максимальное количество баллов": float(max_score),
             "answers_info": answers_info
         }, ensure_ascii=False)
         test_attempt.save()
@@ -1192,7 +1194,7 @@ def complete_test(request, employee_id, test_id):
         has_text_questions = TestQuestion.objects.filter(test=test, question_type='text').exists()
 
         # Проверяем, пройден ли тест
-        if score >= test.passing_score:
+        if total_score >= Decimal(str(test.passing_score)):
             test_attempt.status = TestAttempt.PASSED
         elif has_text_questions:
             test_attempt.status = TestAttempt.MODERATION
