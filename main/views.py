@@ -118,9 +118,17 @@ def latest_test_attempts(request):
     # Формируем словарь с результатами, сгруппированными по сотруднику и теме теста
     grouped_result = defaultdict(lambda: defaultdict(list))
     for attempt in attempts_with_row_number:
+        test_results = {}
+        # if attempt.test_results:  # Проверяем, существуют ли результаты теста
+        #     try:
+        #         test_results = json.loads(attempt.test_results)
+        #     except (TypeError, json.JSONDecodeError):
+        #         return Response({"message": "Invalid test results format"}, status=status.HTTP_400_BAD_REQUEST)
+
         employee_name = attempt.employee.first_name + " " + attempt.employee.last_name  # предположим, что у модели Employee есть поле name
         theme_name = attempt.test.theme.name  # предположим, что у модели Test есть ForeignKey на Theme с полем name
         test_attempt = attempt.id
+        # moderator_name = test_results.get("moderator") if test_results else None  # Получаем имя модератора из результатов теста, если они существуют
         test_info = {
             'test_attempt': test_attempt,
             'test_name': attempt.test.name,  # предположим, что у модели Test есть поле name
@@ -128,6 +136,7 @@ def latest_test_attempts(request):
             'max_score': attempt.test.max_score,  # предположим, что у модели Test есть поле max_score
             'status': attempt.status,
             'end_time': attempt.end_time.strftime("%Y-%m-%dT%H:%M") if attempt.end_time else None  # Добавляем дату окончания теста
+            # 'moderator': moderator_name  # Добавляем имя модератора в результаты
         }
 
         grouped_result[employee_name][theme_name].append(test_info)
@@ -148,6 +157,8 @@ def latest_test_attempts(request):
     ]
 
     return Response(sorted_result, status=status.HTTP_200_OK)
+
+
 
 class MostIncorrectQuestionsAPIView(APIView):
     def get(self, request):
@@ -939,11 +950,11 @@ def moderate_test_attempt(request, test_attempt_id):
     if 'moderated_questions' not in request.data:
         return Response({"message": "Moderated questions are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    if 'moderator_id' not in request.data:
-        return Response({"message": "Moderator ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+    # if 'moderator_id' not in request.data:
+    #     return Response({"message": "Moderator ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
     moderated_questions = request.data['moderated_questions']
-    moderator_id = request.data['moderator_id']
+    # moderator_id = request.data['moderator_id']
 
     # Преобразуем строку test_results в словарь
     test_results = json.loads(test_attempt.test_results)
@@ -983,12 +994,12 @@ def moderate_test_attempt(request, test_attempt_id):
     test_results['answers_info'] = answers_info
 
     # Добавляем информацию о модераторе в test_results
-    try:
-        moderator = Employee.objects.get(id=moderator_id)
-    except Employee.DoesNotExist:
-        return Response({"message": "Moderator not found"}, status=status.HTTP_404_NOT_FOUND)
+    # try:
+    #     moderator = Employee.objects.get(id=moderator_id)
+    # except Employee.DoesNotExist:
+    #     return Response({"message": "Moderator not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    test_results['moderator'] = moderator.first_name + " " + moderator.last_name
+    # test_results['moderator'] = moderator.first_name + " " + moderator.last_name
     test_attempt.test_results = json.dumps(test_results)
 
     total_score = sum(question.get('question_score', 0) for question in answers_info)
@@ -1006,7 +1017,7 @@ def moderate_test_attempt(request, test_attempt_id):
         "score": test_attempt.score,
         "message": "Test moderated successfully",
         "status": test_attempt.status,
-        "moderator": moderator.first_name + " " + moderator.last_name
+        # "moderator": moderator.first_name + " " + moderator.last_name
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
