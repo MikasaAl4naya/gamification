@@ -579,7 +579,7 @@ def get_themes_with_tests(request, employee_id):
                         answers_info = test_results.get("answers_info", [])
                         test_status = {
                             "status": test_attempt.status,
-                            "total_score": total_score,
+                            "total_score": test_attempt.score,
                             "max_score": max_score
                         }
                     except (json.JSONDecodeError, TypeError, KeyError):
@@ -1571,6 +1571,11 @@ class UpdateTestAndContent(APIView):
                 # Сначала сохраняем изменения в тесте
                 test_serializer.save()
 
+                # Удаляем старые вопросы, ответы и теории, связанные с тестом
+                TestQuestion.objects.filter(test=test).delete()
+                AnswerOption.objects.filter(question__test=test).delete()
+                Theory.objects.filter(test=test).delete()
+
                 # Создаем новые вопросы, теорию и сохраняем их в нужном порядке
                 position = 1
                 for block_data in blocks_data:
@@ -1609,11 +1614,6 @@ class UpdateTestAndContent(APIView):
                     else:
                         raise ValueError("Invalid block type")
 
-                # Если все прошло успешно, удаляем старые данные
-                TestQuestion.objects.filter(test=test).delete()
-                AnswerOption.objects.filter(question__test=test).delete()
-                Theory.objects.filter(test=test).delete()
-
                 response_data = {
                     "message": "Test and content updated successfully",
                     "created_questions": created_questions,
@@ -1623,6 +1623,7 @@ class UpdateTestAndContent(APIView):
                 return Response(response_data, status=status.HTTP_200_OK)
         except ValueError as e:
             return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
