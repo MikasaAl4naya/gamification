@@ -1602,6 +1602,7 @@ class UpdateTestAndContent(APIView):
                                 else:
                                     raise ValueError("Invalid answer data")
                         else:
+                            print("Question serialization errors:", question_serializer.errors)
                             raise ValueError("Invalid question data")
                     elif block_type == 'theory':
                         theory_serializer = TheorySerializer(data=content_data)
@@ -1610,6 +1611,7 @@ class UpdateTestAndContent(APIView):
                             created_theories.append(theory_serializer.data)
                             position += 1
                         else:
+                            print("Theory serialization errors:", theory_serializer.errors)
                             raise ValueError("Invalid theory data")
                     else:
                         raise ValueError("Invalid block type")
