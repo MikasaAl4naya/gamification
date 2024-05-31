@@ -4,6 +4,7 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
+import pytz
 from django.contrib.auth import login, logout, get_user_model
 from django.core.checks import messages
 from django.core.serializers import serialize
@@ -14,6 +15,7 @@ from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.models import User, Permission
 from django.utils import timezone
 from django.utils.crypto import get_random_string
+from django.utils.timezone import localtime
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.utils import json
 
@@ -462,19 +464,21 @@ def test_results(request, test_attempt_id):
             selected_incorrect = [opt for opt in incorrect_answers if opt["submitted_answer"]]
             answer_info["is_partially_true"] = len(selected_correct) > 0 and len(selected_incorrect) > 0
 
+    irkutsk_tz = pytz.timezone('Asia/Irkutsk')
+
     response_data = {
         "score": test_attempt.score,
         "max_score": test_results.get("Максимальное количество баллов"),
         "status": test_attempt.status,
         "answers_info": answers_info,
-        "test_creation_date": test.created_at.strftime("%Y-%m-%d %H:%M:%S") if test.created_at else None,
-        "test_end_date": test_attempt.end_time.strftime("%Y-%m-%d %H:%M:%S") if test_attempt.end_time else None,
+        "test_creation_date": localtime(test.created_at, irkutsk_tz).strftime("%Y-%m-%d %H:%M:%S") if test.created_at else None,
+        "test_end_date": localtime(test_attempt.end_time, irkutsk_tz).strftime("%Y-%m-%d %H:%M:%S") if test_attempt.end_time else None,
         "employee": {
             "id": test_attempt.employee.id,
             "name": f"{test_attempt.employee.first_name} {test_attempt.employee.last_name}"
         },
         "duration_seconds": (
-                test_attempt.end_time - test_attempt.start_time).total_seconds() if test_attempt.end_time else None
+            test_attempt.end_time - test_attempt.start_time).total_seconds() if test_attempt.end_time else None
     }
 
     moderation_comment = test_results.get("moderation_comment", "")
@@ -483,7 +487,6 @@ def test_results(request, test_attempt_id):
 
     # Добавляем имя модератора, если оно доступно
     moderator_name = test_results.get("moderator")
-    print(moderator_name)
     if moderator_name:
         response_data["moderator"] = moderator_name
 
