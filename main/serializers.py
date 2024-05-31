@@ -32,13 +32,17 @@ class EmployeeSerializer(serializers.ModelSerializer):
 from rest_framework import serializers
 
 class TestAttemptModerationSerializer(serializers.ModelSerializer):
-    employee_name = serializers.CharField(source='employee.username', read_only=True)
+    employee_name = serializers.SerializerMethodField()
     test_name = serializers.CharField(source='test.name', read_only=True)
-    #moderator_name = serializers.CharField(source='moderator.username', read_only=True, default=None)вапрывапр
 
     class Meta:
         model = TestAttempt
         fields = ['id', 'employee_name', 'test_name']
+
+    def get_employee_name(self, obj):
+        return f"{obj.employee.first_name} {obj.employee.last_name}"
+
+
 
 class TestAttemptSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.username', read_only=True)
