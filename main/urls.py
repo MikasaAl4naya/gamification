@@ -70,6 +70,7 @@ urlpatterns = [
     path('question_errors_stat/', QuestionErrorsStatistics.as_view(), name='emp_test_stat'),
     path('question_correct_stat/', QuestionCorrectStatistics.as_view(), name='emp_test_stat'),
     path('test_statistics/', test_statistics, name='get_statistics'),
+    path('test/<int:test_id>/top_participants/', top_test_participants, name='top_test_participants'),
 
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки

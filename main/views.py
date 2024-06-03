@@ -134,10 +134,12 @@ def test_statistics(request):
         test_status = attempt.status
         test_acoin_reward = attempt.test.acoin_reward
         test_experience_points = attempt.test.experience_points
+        test_id = attempt.test.id if attempt.test is not None else None
 
         statistics.append({
             'employee_name': employee_name,
             'theme_name': theme_name,
+            'test_id': test_id,
             'test_name': test_name,
             'score': score,
             'max_score': max_score,
@@ -1330,7 +1332,19 @@ def complete_test(request, employee_id, test_id):
         return Response(response_data, status=status.HTTP_200_OK)
 
 
+@api_view(['GET'])
+def top_test_participants(request, test_id):
+    # Агрегируем результаты тестов по сотрудникам для конкретного теста
+    top_participants = TestAttempt.objects.filter(test_id=test_id).values('employee').annotate(total_score=Sum('score')).order_by('-total_score')[:10]
 
+    # Получаем данные о сотрудниках и их суммарном балле за тест
+    participants_data = []
+    for participant in top_participants:
+        employee = Employee.objects.get(id=participant['employee'])
+        total_score = participant['total_score']
+        participants_data.append({'employee_name': f"{employee.first_name} {employee.last_name}", 'total_score': total_score})
+
+    return Response(participants_data, status=status.HTTP_200_OK)
 
 class StatisticsAPIView(APIView):
     def get(self, request):
