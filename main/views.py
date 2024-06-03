@@ -1642,6 +1642,7 @@ class UpdateTestAndContent(APIView):
                     content_data['test'] = test.id
 
                     if block_type == 'question':
+                        content_data.pop('id', None)  # Убираем id если он есть в данных
                         question_serializer = TestQuestionSerializer(data=content_data)
                         if question_serializer.is_valid():
                             question = question_serializer.save()
@@ -1652,6 +1653,7 @@ class UpdateTestAndContent(APIView):
                             answers_data = block_data.get('content', {}).get('answer_options', [])
                             for answer_data in answers_data:
                                 answer_data['question'] = question.id
+                                answer_data.pop('id', None)  # Убираем id если он есть в данных
                                 answer_serializer = AnswerOptionSerializer(data=answer_data)
                                 if answer_serializer.is_valid():
                                     answer = answer_serializer.save()
@@ -1663,6 +1665,7 @@ class UpdateTestAndContent(APIView):
                             print("Question serialization errors:", question_serializer.errors)
                             return Response({"message": "Invalid question data", "errors": question_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
                     elif block_type == 'theory':
+                        content_data.pop('id', None)  # Убираем id если он есть в данных
                         theory_serializer = TheorySerializer(data=content_data)
                         if theory_serializer.is_valid():
                             theory = theory_serializer.save()
@@ -1683,8 +1686,6 @@ class UpdateTestAndContent(APIView):
                 return Response(response_data, status=status.HTTP_200_OK)
         except ValueError as e:
             return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 
 
