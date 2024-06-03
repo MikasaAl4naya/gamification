@@ -58,8 +58,6 @@ urlpatterns = [
     path('tests/required_tests_chain/<int:employee_id>/<int:test_id>/', required_tests_chain, name='required_tests'),
     path('test_duration/<int:test_id>/', get_test_duration, name='get_test_duration'),
     path('test-score/<int:test_id>/', TestScoreAPIView.as_view(), name='test-score'),
-    path('most-incorrect-questions/<int:test_id>/', QuestionErrorAPIView.as_view(), name='most_incorrect_questions_api'),
-    path('most-correct-questions/<int:test_id>/', QuestionSuccessAPIView.as_view(), name='most_correct_questions_api'),
     path('employee-stats/', StatisticsAPIView.as_view(), name='employee_stats'),
     path('test-time-stat/', TestStatisticsAPIView.as_view(), name='test-time-stat'),
     path('full_statistics/', FullStatisticsAPIView.as_view(), name='full_statistics'),
@@ -71,6 +69,7 @@ urlpatterns = [
     path('test-attempts/<int:attempt_id>/delete/', delete_test_attempt, name='delete_test_attempt'),
     path('question_errors_stat/', QuestionErrorsStatistics.as_view(), name='emp_test_stat'),
     path('question_correct_stat/', QuestionCorrectStatistics.as_view(), name='emp_test_stat'),
+    path('test_statistics/', test_statistics, name='get_statistics'),
 
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки

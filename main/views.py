@@ -3,19 +3,21 @@ import math
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from multiprocessing import Value
 
 import pytz
 from django.contrib.auth import login, logout, get_user_model
 from django.core.checks import messages
 from django.core.serializers import serialize
 from django.db.models import Max, FloatField, Avg, Count, Q, F, Sum, ExpressionWrapper, DurationField, OuterRef, \
-    Subquery, Window
+    Subquery, Window, When, Case
 from django.db.models.functions import Coalesce, RowNumber
 from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.models import User, Permission
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 from django.utils.timezone import localtime
+from rest_framework.fields import IntegerField
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.utils import json
 
@@ -100,6 +102,54 @@ class PermissionsList(APIView):
         permissions = Permission.objects.all()
         serializer = PermissionsSerializer(permissions, many=True)
         return Response(serializer.data)
+@api_view(['GET'])
+def test_statistics(request):
+    attempts_with_statistics = TestAttempt.objects.annotate(
+        duration=ExpressionWrapper(
+            F('end_time') - F('start_time'),
+            output_field=DurationField()
+        ),
+        score_percentage=ExpressionWrapper(
+            F('score') * 100 / F('test__max_score'),
+            output_field=FloatField()
+        )
+    ).select_related('employee', 'test', 'test__theme')
+
+    statistics = []
+
+    for attempt in attempts_with_statistics:
+        employee_name = f"{attempt.employee.first_name} {attempt.employee.last_name}"
+        theme_name = attempt.test.theme.name
+        test_name = attempt.test.name
+        score = attempt.score
+        max_score = attempt.test.max_score
+        duration_seconds = round(attempt.duration.total_seconds(), 0) if attempt.end_time else None
+        if duration_seconds is not None:
+            duration_minutes = int(duration_seconds // 60)
+        else:
+            duration_minutes = None
+        end_time = attempt.end_time.strftime("%Y-%m-%d %H:%M") if attempt.end_time else None
+        duration_seconds = int(duration_seconds%60) if duration_seconds is not None else None
+        duration = f"{duration_minutes}:{duration_seconds:02}" if duration_minutes is not None and duration_seconds is not None else None
+        test_status = attempt.status
+        test_acoin_reward = attempt.test.acoin_reward
+        test_experience_points = attempt.test.experience_points
+
+        statistics.append({
+            'employee_name': employee_name,
+            'theme_name': theme_name,
+            'test_name': test_name,
+            'score': score,
+            'max_score': max_score,
+            'duration': duration,
+            'end_time': end_time,
+            'status': test_status,
+            'test_acoin_reward': test_acoin_reward,
+            'test_experience_points': test_experience_points
+        })
+
+    return Response(statistics, status=status.HTTP_200_OK)
+
 
 @api_view(['GET'])
 def latest_test_attempts(request):
@@ -491,7 +541,33 @@ def test_results(request, test_attempt_id):
         response_data["moderator"] = moderator_name
 
     return Response(response_data, status=status.HTTP_200_OK)
+def get_statistics():
+    statistics = TestAttempt.objects.annotate(
+        total_score=F('score'),
+        max_score=F('test__max_score'),
+        result=Case(
+            When(is_passed=True, then=Value('Пройден')),
+            When(is_failed=True, then=Value('Провален')),
+            When(is_moderated=True, then=Value('На модерации')),
+            default=Value('Не завершен'),
+            output_field=IntegerField(),
+        ),
+        duration_seconds=ExpressionWrapper(
+            F('end_time') - F('start_time'),
+            output_field=IntegerField()
+        ),
+    ).values(
+        'employee__full_name',
+        'test__theme__name',
+        'test__name',
+        'total_score',
+        'max_score',
+        'result',
+        'duration_seconds',
+        'end_time__date',
+    )
 
+    return statistics
 
 @api_view(['GET'])
 def get_test_by_id(request, test_id):
@@ -1254,31 +1330,7 @@ def complete_test(request, employee_id, test_id):
         return Response(response_data, status=status.HTTP_200_OK)
 
 
-class QuestionErrorAPIView(APIView):
-    def get(self, request, test_id):
-        # Получаем все попытки прохождения теста
-        test_attempts = TestAttempt.objects.filter(test_id=test_id)
 
-        # Список для хранения количества неправильных ответов на каждый вопрос
-        question_errors = Counter()
-
-        # Проходим по каждой попытке
-        for test_attempt in test_attempts:
-            # Проверяем, что test_results не является None
-            if test_attempt.test_results:
-                test_results = json.loads(test_attempt.test_results)
-                answers_info = test_results.get("answers_info", [])
-
-                # Для каждого вопроса проверяем, был ли ответ неправильным
-                for answer_info in answers_info:
-                    if not answer_info["is_correct"]:
-                        question_errors[answer_info["question_text"]] += 1
-
-        # Находим список вопросов, на которые чаще всего ошибаются
-        most_common_errors = question_errors.most_common()
-
-        # Возвращаем список вопросов
-        return Response({"most_common_errors": most_common_errors})
 
 class StatisticsAPIView(APIView):
     def get(self, request):
@@ -1419,29 +1471,6 @@ class TestStatisticsAPIView(APIView):
         return Response({
             'test_statistics': list(test_statistics)
         })
-class QuestionSuccessAPIView(APIView):
-    def get(self, request, test_id):
-        # Получаем все попытки прохождения теста
-        test_attempts = TestAttempt.objects.filter(test_id=test_id)
-
-        # Список для хранения количества правильных ответов на каждый вопрос
-        question_successes = Counter()
-
-        # Проходим по каждой попытке
-        for test_attempt in test_attempts:
-            test_results = json.loads(test_attempt.test_results)
-            answers_info = test_results.get("answers_info", [])
-
-            # Для каждого вопроса проверяем, был ли ответ правильным
-            for answer_info in answers_info:
-                if answer_info["is_correct"]:
-                    question_successes[answer_info["question_text"]] += 1
-
-        # Находим список вопросов, на которые чаще всего отвечают правильно
-        most_common_successes = question_successes.most_common()
-
-        # Возвращаем список вопросов
-        return Response({"most_common_successes": most_common_successes})
 @api_view(['GET'])
 def reattempt_delay(request, employee_id, test_id):
     try:
@@ -1687,124 +1716,6 @@ class UpdateTestAndContent(APIView):
 
 
 
-class FullStatisticsAPIView(APIView):
-
-    def get(self, request):
-        # Initialize response dictionary
-        response_data = {}
-
-        # Statistics for test questions
-        try:
-            test_attempts = TestAttempt.objects.all()
-            question_errors = Counter()
-            question_correct = Counter()
-            question_most_selected = {}
-
-            for test_attempt in test_attempts:
-                test_results = test_attempt.test_results
-                if test_results:
-                    answers_info = test_results.get("answers_info", [])
-
-                    for answer_info in answers_info:
-                        question_key = (answer_info["question_text"], test_attempt.test_id)
-
-                        if not answer_info["is_correct"]:
-                            question_errors[question_key] += 1
-                        else:
-                            question_correct[question_key] += 1
-
-                        selected_option = answer_info.get("selected_option", "")
-                        if selected_option:
-                            if question_key not in question_most_selected:
-                                question_most_selected[question_key] = Counter()
-                            question_most_selected[question_key][selected_option] += 1
-
-            most_common_errors = question_errors.most_common()
-            most_common_correct = question_correct.most_common()
-            most_common_selected = {k: v.most_common(1)[0] for k, v in question_most_selected.items()}
-
-            response_data["most_common_errors"] = [
-                {"question": q, "test_id": t, "count": c, "most_selected": most_common_selected.get((q, t))}
-                for (q, t), c in most_common_errors
-            ]
-            response_data["most_common_correct"] = [
-                {"question": q, "test_id": t, "count": c, "most_selected": most_common_selected.get((q, t))}
-                for (q, t), c in most_common_correct
-            ]
-        except Exception as e:
-            response_data["question_statistics_error"] = str(e)
-
-        # Statistics for test duration
-        try:
-            test_stats = {}
-            tests = Test.objects.all()
-
-            for test in tests:
-                test_attempts = TestAttempt.objects.filter(test=test, status=TestAttempt.PASSED)
-
-                if test_attempts.exists():
-                    durations = [
-                        (attempt.end_time - attempt.start_time).total_seconds()
-                        for attempt in test_attempts
-                        if attempt.end_time and attempt.start_time
-                    ]
-                    if durations:
-                        avg_duration = sum(durations) / len(durations)
-                        max_duration = max(durations)
-                    else:
-                        avg_duration = None
-                        max_duration = None
-
-                    individual_durations = [
-                        {"employee_id": attempt.employee_id, "duration": (attempt.end_time - attempt.start_time).total_seconds()}
-                        for attempt in test_attempts
-                        if attempt.end_time and attempt.start_time
-                    ]
-
-                    test_stats[test.id] = {
-                        "average_duration": avg_duration,
-                        "max_duration": max_duration,
-                        "individual_durations": individual_durations
-                    }
-                else:
-                    test_stats[test.id] = {
-                        "average_duration": None,
-                        "max_duration": None,
-                        "individual_durations": []
-                    }
-
-            response_data["test_duration_statistics"] = test_stats
-        except Exception as e:
-            response_data["test_duration_statistics_error"] = str(e)
-
-        # Statistics for employee achievements, currency, and experience
-        try:
-            employees = Employee.objects.all()
-            employee_stats = []
-
-            for employee in employees:
-                acoin_transactions = AcoinTransaction.objects.filter(employee=employee)
-                total_acoins = acoin_transactions.aggregate(total=Sum('amount'))['total']
-
-                employee_stats.append({
-                    "employee_id": employee.id,
-                    "total_acoins": total_acoins or 0,
-                    "total_experience": employee.experience,
-                    "total_achievements": employee.achievement_set.count()  # Make sure you have related_name='achievement_set' in your Achievement model
-                })
-
-            response_data["employee_statistics"] = employee_stats
-        except Exception as e:
-            response_data["employee_statistics_error"] = str(e)
-
-        return Response(response_data)
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from django.db.models import Avg, Max, Sum
-import json
-from collections import Counter
-from .models import Test, TestAttempt, Employee, AcoinTransaction
 
 class FullStatisticsAPIView(APIView):
     def get(self, request):
