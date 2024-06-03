@@ -510,17 +510,27 @@ def get_test_by_id(request, test_id):
 
     # Добавляем данные о вопросах в список блоков
     for question in questions:
+        question_data = TestQuestionSerializer(question).data
+        del question_data['id']  # Удаляем поле "id"
+        del question_data['test']  # Удаляем поле "test"
+        answer_options = question_data.get('answer_options', [])
+        for answer in answer_options:
+            del answer['id']  # Удаляем поле "id" из каждого ответа
+            del answer['question']
         block_data = {
             'type': 'question',
-            'content': TestQuestionSerializer(question).data
+            'content': question_data
         }
         blocks.append(block_data)
 
     # Добавляем данные о теории в список блоков
     for theory in theories:
+        theory_data = TheorySerializer(theory).data
+        del theory_data['id']  # Удаляем поле "id"
+        del theory_data['test']  # Удаляем поле "test"
         block_data = {
             'type': 'theory',
-            'content': TheorySerializer(theory).data
+            'content': theory_data
         }
         blocks.append(block_data)
 
@@ -529,10 +539,7 @@ def get_test_by_id(request, test_id):
 
     # Добавляем позицию вопроса к соответствующим блокам
     for block in sorted_blocks:
-        if block['type'] == 'question':
-            block['content']['position'] = TestQuestion.objects.get(id=block['content']['id']).position
-        elif block['type'] == 'theory':
-            block['content']['position'] = Theory.objects.get(id=block['content']['id']).position
+        block['content']['position'] = block['content'].get('position', 0)
 
     # Возвращаем данные о тесте и его блоках
     response_data = {
@@ -540,6 +547,8 @@ def get_test_by_id(request, test_id):
         'blocks': sorted_blocks
     }
     return Response(response_data)
+
+
 
 
 @api_view(['GET'])
