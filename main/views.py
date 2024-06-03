@@ -1301,10 +1301,58 @@ class StatisticsAPIView(APIView):
 
         # Возвращаем информацию по каждому сотруднику
         return JsonResponse(employees_statistics, safe=False)
-class QuestionStatisticsAPIView(APIView):
+class QuestionErrorsStatistics(APIView):
+    def get(self, request):
+        # Создаем словарь для хранения информации о частоте ошибок
+        error_counter = Counter()
+        total_answers_counter = Counter()  # Для подсчета общего числа ответов на каждый вопрос
+
+        # Обходим все попытки прохождения тестов
+        for attempt in TestAttempt.objects.all():
+            # Получаем результаты теста для текущей попытки
+            test_results = attempt.test_results
+            if isinstance(test_results, str):
+                # Если test_results - строка, пытаемся преобразовать ее в словарь
+                try:
+                    results_dict = json.loads(test_results)
+                    for answer_info in results_dict.get("answers_info", []):
+                        question_text = answer_info.get("question_text")
+                        test_id = attempt.test_id
+                        question_id = f"{question_text}_{test_id}"
+                        # Увеличиваем счетчик общего числа ответов только один раз для каждого вопроса
+                        total_answers_counter[question_id] += 1
+                        # Проверяем, является ли ответ неправильным
+                        if not answer_info["is_correct"]:
+                            error_counter[question_id] += 1
+                except ValueError:
+                    # Если не удалось преобразовать строку в JSON, пропускаем эту попытку
+                    pass
+
+        # Формируем список вопросов, по которым чаще всего ошибаются
+        most_common_errors = [
+            {
+                "question_id": qid.split('_')[0],
+                "test_id": qid.split('_')[1],
+                "question_text": qid.split('_')[0],
+                "total_answers": total_answers_counter[qid],
+                "error_count": count,
+                "error_ratio": round(count / total_answers_counter[qid] * 100,1) if total_answers_counter[qid] != 0 else 0
+            }
+            for qid, count in error_counter.items()
+        ]
+
+        # Сортируем список по соотношению неверных ответов к общему количеству ответов
+        most_common_errors = sorted(most_common_errors, key=lambda x: x["error_ratio"], reverse=True)
+
+        return Response({
+            "most_common_errors": most_common_errors
+        })
+
+
+
+class QuestionCorrectStatistics(APIView):
     def get(self, request):
         # Создаем словари для хранения информации о частоте ошибок и правильных ответов
-        error_counter = Counter()
         correct_counter = Counter()
 
         # Обходим все попытки прохождения тестов
@@ -1317,25 +1365,19 @@ class QuestionStatisticsAPIView(APIView):
                     results_dict = json.loads(test_results)
                     for answer_info in results_dict.get("answers_info", []):
                         # Проверяем, является ли ответ неправильным или правильным
-                        if not answer_info["is_correct"]:
-                            error_counter[(answer_info["question_text"], attempt.test_id)] += 1
-                        else:
+                        if  answer_info["is_correct"]:
                             correct_counter[(answer_info["question_text"], attempt.test_id)] += 1
                 except ValueError:
                     # Если не удалось преобразовать строку в JSON, пропускаем эту попытку
                     pass
 
         # Получаем список вопросов, по которым чаще всего ошибаются
-        most_common_errors = error_counter.most_common()
-
-        # Получаем список вопросов, на которые чаще всего отвечают верно
         most_common_correct = correct_counter.most_common()
 
-        return Response({
-            "most_common_errors": most_common_errors,
-            "most_common_correct": most_common_correct
-        })
 
+        return Response({
+            "most_common_errors": most_common_correct
+        })
 class TestStatisticsAPIView(APIView):
     def get(self, request):
         # Определите начальную и конечную даты для анализа
@@ -1549,6 +1591,7 @@ class DeleteAnswer(generics.DestroyAPIView):
     serializer_class = AnswerOptionSerializer
     lookup_field = 'id'  # Или какой у вас ключ в модели
 
+
 class UpdateTestAndContent(APIView):
     def put(self, request, test_id):
         try:
@@ -1568,7 +1611,6 @@ class UpdateTestAndContent(APIView):
 
         try:
             with transaction.atomic():
-                # Сначала сохраняем изменения в тесте
                 test_serializer.save()
 
                 # Удаляем старые вопросы, ответы и теории, связанные с тестом
@@ -1581,40 +1623,54 @@ class UpdateTestAndContent(APIView):
                 for block_data in blocks_data:
                     block_type = block_data.get('type')
                     content_data = block_data.get('content', {})
-                    content_data['position'] = position  # Устанавливаем позицию
+                    content_data['position'] = position
                     content_data['test'] = test.id
 
                     if block_type == 'question':
-                        question_serializer = TestQuestionSerializer(data=content_data)
+                        if 'id' in content_data:
+                            question = TestQuestion.objects.get(id=content_data['id'])
+                            question_serializer = TestQuestionSerializer(question, data=content_data, partial=True)
+                        else:
+                            question_serializer = TestQuestionSerializer(data=content_data)
+
                         if question_serializer.is_valid():
                             question = question_serializer.save()
                             created_questions.append(question_serializer.data)
                             position += 1
 
-                            # Сохраняем ответы для текущего вопроса
                             answers_data = block_data.get('content', {}).get('answer_options', [])
                             for answer_data in answers_data:
-                                answer_data['question'] = question.id
-                                answer_serializer = AnswerOptionSerializer(data=answer_data)
+                                if 'id' in answer_data:
+                                    answer = AnswerOption.objects.get(id=answer_data['id'])
+                                    answer_serializer = AnswerOptionSerializer(answer, data=answer_data, partial=True)
+                                else:
+                                    answer_serializer = AnswerOptionSerializer(data=answer_data)
+
                                 if answer_serializer.is_valid():
                                     answer = answer_serializer.save()
                                     created_answers.append(answer_serializer.data)
                                 else:
-                                    raise ValueError("Invalid answer data")
+                                    print("Answer serialization errors:", answer_serializer.errors)
+                                    return Response(answer_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                         else:
                             print("Question serialization errors:", question_serializer.errors)
-                            raise ValueError("Invalid question data")
+                            return Response(question_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                     elif block_type == 'theory':
-                        theory_serializer = TheorySerializer(data=content_data)
+                        if 'id' in content_data:
+                            theory = Theory.objects.get(id=content_data['id'])
+                            theory_serializer = TheorySerializer(theory, data=content_data, partial=True)
+                        else:
+                            theory_serializer = TheorySerializer(data=content_data)
+
                         if theory_serializer.is_valid():
                             theory = theory_serializer.save()
                             created_theories.append(theory_serializer.data)
                             position += 1
                         else:
                             print("Theory serialization errors:", theory_serializer.errors)
-                            raise ValueError("Invalid theory data")
+                            return Response(theory_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                     else:
-                        raise ValueError("Invalid block type")
+                        return Response({"message": "Invalid block type"}, status=status.HTTP_400_BAD_REQUEST)
 
                 response_data = {
                     "message": "Test and content updated successfully",
