@@ -1592,6 +1592,13 @@ class DeleteAnswer(generics.DestroyAPIView):
     lookup_field = 'id'  # Или какой у вас ключ в модели
 
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.db import transaction
+from .models import Test, TestQuestion, AnswerOption, Theory
+from .serializers import TestSerializer, TestQuestionSerializer, AnswerOptionSerializer, TheorySerializer
+
 class UpdateTestAndContent(APIView):
     def put(self, request, test_id):
         try:
@@ -1611,66 +1618,62 @@ class UpdateTestAndContent(APIView):
 
         try:
             with transaction.atomic():
+                # Сначала сохраняем изменения в тесте
                 test_serializer.save()
 
                 # Удаляем старые вопросы, ответы и теории, связанные с тестом
-                TestQuestion.objects.filter(test=test).delete()
-                AnswerOption.objects.filter(question__test=test).delete()
-                Theory.objects.filter(test=test).delete()
+                old_questions = TestQuestion.objects.filter(test=test)
+                old_answers = AnswerOption.objects.filter(question__test=test)
+                old_theories = Theory.objects.filter(test=test)
+
+                # Проверяем, существуют ли старые вопросы, ответы и теории
+                if not old_questions.exists() and not old_answers.exists() and not old_theories.exists():
+                    raise ValueError("No related questions, answers, or theories found for the test")
+
+                old_questions.delete()
+                old_answers.delete()
+                old_theories.delete()
 
                 # Создаем новые вопросы, теорию и сохраняем их в нужном порядке
                 position = 1
                 for block_data in blocks_data:
                     block_type = block_data.get('type')
                     content_data = block_data.get('content', {})
-                    content_data['position'] = position
+                    content_data['position'] = position  # Устанавливаем позицию
                     content_data['test'] = test.id
 
                     if block_type == 'question':
-                        if 'id' in content_data:
-                            question = TestQuestion.objects.get(id=content_data['id'])
-                            question_serializer = TestQuestionSerializer(question, data=content_data, partial=True)
-                        else:
-                            question_serializer = TestQuestionSerializer(data=content_data)
-
+                        question_serializer = TestQuestionSerializer(data=content_data)
                         if question_serializer.is_valid():
                             question = question_serializer.save()
                             created_questions.append(question_serializer.data)
                             position += 1
 
+                            # Сохраняем ответы для текущего вопроса
                             answers_data = block_data.get('content', {}).get('answer_options', [])
                             for answer_data in answers_data:
-                                if 'id' in answer_data:
-                                    answer = AnswerOption.objects.get(id=answer_data['id'])
-                                    answer_serializer = AnswerOptionSerializer(answer, data=answer_data, partial=True)
-                                else:
-                                    answer_serializer = AnswerOptionSerializer(data=answer_data)
-
+                                answer_data['question'] = question.id
+                                answer_serializer = AnswerOptionSerializer(data=answer_data)
                                 if answer_serializer.is_valid():
                                     answer = answer_serializer.save()
                                     created_answers.append(answer_serializer.data)
                                 else:
                                     print("Answer serialization errors:", answer_serializer.errors)
-                                    return Response(answer_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                                    raise ValueError("Invalid answer data")
                         else:
                             print("Question serialization errors:", question_serializer.errors)
-                            return Response(question_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                            raise ValueError("Invalid question data")
                     elif block_type == 'theory':
-                        if 'id' in content_data:
-                            theory = Theory.objects.get(id=content_data['id'])
-                            theory_serializer = TheorySerializer(theory, data=content_data, partial=True)
-                        else:
-                            theory_serializer = TheorySerializer(data=content_data)
-
+                        theory_serializer = TheorySerializer(data=content_data)
                         if theory_serializer.is_valid():
                             theory = theory_serializer.save()
                             created_theories.append(theory_serializer.data)
                             position += 1
                         else:
                             print("Theory serialization errors:", theory_serializer.errors)
-                            return Response(theory_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                            raise ValueError("Invalid theory data")
                     else:
-                        return Response({"message": "Invalid block type"}, status=status.HTTP_400_BAD_REQUEST)
+                        raise ValueError("Invalid block type")
 
                 response_data = {
                     "message": "Test and content updated successfully",
