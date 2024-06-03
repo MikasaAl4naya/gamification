@@ -1599,6 +1599,13 @@ from django.db import transaction
 from .models import Test, TestQuestion, AnswerOption, Theory
 from .serializers import TestSerializer, TestQuestionSerializer, AnswerOptionSerializer, TheorySerializer
 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.db import transaction
+from .models import Test, TestQuestion, AnswerOption, Theory
+from .serializers import TestSerializer, TestQuestionSerializer, AnswerOptionSerializer, TheorySerializer
+
 class UpdateTestAndContent(APIView):
     def put(self, request, test_id):
         try:
@@ -1622,17 +1629,9 @@ class UpdateTestAndContent(APIView):
                 test_serializer.save()
 
                 # Удаляем старые вопросы, ответы и теории, связанные с тестом
-                old_questions = TestQuestion.objects.filter(test=test)
-                old_answers = AnswerOption.objects.filter(question__test=test)
-                old_theories = Theory.objects.filter(test=test)
-
-                # Проверяем, существуют ли старые вопросы, ответы и теории
-                if not old_questions.exists() and not old_answers.exists() and not old_theories.exists():
-                    raise ValueError("No related questions, answers, or theories found for the test")
-
-                old_questions.delete()
-                old_answers.delete()
-                old_theories.delete()
+                TestQuestion.objects.filter(test=test).delete()
+                AnswerOption.objects.filter(question__test=test).delete()
+                Theory.objects.filter(test=test).delete()
 
                 # Создаем новые вопросы, теорию и сохраняем их в нужном порядке
                 position = 1
@@ -1659,10 +1658,10 @@ class UpdateTestAndContent(APIView):
                                     created_answers.append(answer_serializer.data)
                                 else:
                                     print("Answer serialization errors:", answer_serializer.errors)
-                                    raise ValueError("Invalid answer data")
+                                    return Response({"message": "Invalid answer data", "errors": answer_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
                         else:
                             print("Question serialization errors:", question_serializer.errors)
-                            raise ValueError("Invalid question data")
+                            return Response({"message": "Invalid question data", "errors": question_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
                     elif block_type == 'theory':
                         theory_serializer = TheorySerializer(data=content_data)
                         if theory_serializer.is_valid():
@@ -1671,9 +1670,9 @@ class UpdateTestAndContent(APIView):
                             position += 1
                         else:
                             print("Theory serialization errors:", theory_serializer.errors)
-                            raise ValueError("Invalid theory data")
+                            return Response({"message": "Invalid theory data", "errors": theory_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
                     else:
-                        raise ValueError("Invalid block type")
+                        return Response({"message": "Invalid block type"}, status=status.HTTP_400_BAD_REQUEST)
 
                 response_data = {
                     "message": "Test and content updated successfully",
@@ -1684,6 +1683,7 @@ class UpdateTestAndContent(APIView):
                 return Response(response_data, status=status.HTTP_200_OK)
         except ValueError as e:
             return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
