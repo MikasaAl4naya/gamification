@@ -1592,20 +1592,6 @@ class DeleteAnswer(generics.DestroyAPIView):
     lookup_field = 'id'  # Или какой у вас ключ в модели
 
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.db import transaction
-from .models import Test, TestQuestion, AnswerOption, Theory
-from .serializers import TestSerializer, TestQuestionSerializer, AnswerOptionSerializer, TheorySerializer
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.db import transaction
-from .models import Test, TestQuestion, AnswerOption, Theory
-from .serializers import TestSerializer, TestQuestionSerializer, AnswerOptionSerializer, TheorySerializer
-
 class UpdateTestAndContent(APIView):
     def put(self, request, test_id):
         try:
@@ -1642,7 +1628,8 @@ class UpdateTestAndContent(APIView):
                     content_data['test'] = test.id
 
                     if block_type == 'question':
-                        content_data.pop('id', None)  # Убираем id если он есть в данных
+                        # Убираем id если он есть в данных
+                        content_data.pop('id', None)
                         question_serializer = TestQuestionSerializer(data=content_data)
                         if question_serializer.is_valid():
                             question = question_serializer.save()
@@ -1653,7 +1640,8 @@ class UpdateTestAndContent(APIView):
                             answers_data = block_data.get('content', {}).get('answer_options', [])
                             for answer_data in answers_data:
                                 answer_data['question'] = question.id
-                                answer_data.pop('id', None)  # Убираем id если он есть в данных
+                                # Убираем id если он есть в данных
+                                answer_data.pop('id', None)
                                 answer_serializer = AnswerOptionSerializer(data=answer_data)
                                 if answer_serializer.is_valid():
                                     answer = answer_serializer.save()
@@ -1665,7 +1653,8 @@ class UpdateTestAndContent(APIView):
                             print("Question serialization errors:", question_serializer.errors)
                             return Response({"message": "Invalid question data", "errors": question_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
                     elif block_type == 'theory':
-                        content_data.pop('id', None)  # Убираем id если он есть в данных
+                        # Убираем id если он есть в данных
+                        content_data.pop('id', None)
                         theory_serializer = TheorySerializer(data=content_data)
                         if theory_serializer.is_valid():
                             theory = theory_serializer.save()
