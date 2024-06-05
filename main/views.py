@@ -4,7 +4,7 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import pytz
 from django.contrib.auth import login, logout, get_user_model
 from django.core.checks import messages
@@ -874,12 +874,17 @@ def get_answer(request, answer_id):
 
 
 @api_view(['POST'])
-@parser_classes([MultiPartParser, FormParser])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def create_test(request):
-    try:
-        blocks_data = json.loads(request.data.get('blocks', '[]'))  # Парсим JSON из строки
-    except json.JSONDecodeError:
-        return Response({'error': 'Invalid JSON format for blocks'}, status=status.HTTP_400_BAD_REQUEST)
+    if request.content_type == 'application/json':
+        blocks_data = request.data.get('blocks', [])
+    elif 'multipart/form-data' in request.content_type:
+        try:
+            blocks_data = json.loads(request.data.get('blocks', '[]'))
+        except json.JSONDecodeError:
+            return Response({'error': 'Invalid JSON format for blocks'}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        return Response({'error': 'Unsupported media type'}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
     if not isinstance(blocks_data, list):
         return Response({'error': 'Blocks should be a list'}, status=status.HTTP_400_BAD_REQUEST)
