@@ -165,7 +165,11 @@ def test_statistics(request):
             'test_experience_points': test_experience_points
         })
 
-    return Response(statistics, status=status.HTTP_200_OK)
+    # Сортируем список по имени сотрудника, а затем по имени темы
+    sorted_statistics = sorted(statistics, key=lambda x: (x['employee_name'], x['theme_name']))
+
+    return Response(sorted_statistics, status=status.HTTP_200_OK)
+
 
 
 
