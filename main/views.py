@@ -119,6 +119,9 @@ def test_statistics(request):
     ).select_related('employee', 'test', 'test__theme')
 
     statistics = []
+    all_tests = set()
+    all_themes = set()
+    all_employees = set()
 
     for attempt in attempts_with_statistics:
         employee_name = f"{attempt.employee.first_name} {attempt.employee.last_name}"
@@ -165,10 +168,27 @@ def test_statistics(request):
             'test_experience_points': test_experience_points
         })
 
+        all_tests.add((test_id, test_name))
+        all_themes.add(theme_name)
+        all_employees.add(employee_name)
+
     # Сортируем список по имени сотрудника, а затем по имени темы
     sorted_statistics = sorted(statistics, key=lambda x: (x['employee_name'], x['theme_name']))
 
-    return Response(sorted_statistics, status=status.HTTP_200_OK)
+    # Преобразуем множества в отсортированные списки
+    sorted_tests = sorted(list(all_tests), key=lambda x: x[1])  # сортируем по названию теста
+    sorted_themes = sorted(list(all_themes))
+    sorted_employees = sorted(list(all_employees))
+
+    result = {
+        'statistics': sorted_statistics,
+        'tests': [{'test_id': test_id, 'test_name': test_name} for test_id, test_name in sorted_tests],
+        'themes': sorted_themes,
+        'employees': sorted_employees
+    }
+
+    return Response(result, status=status.HTTP_200_OK)
+
 
 
 
