@@ -4,7 +4,7 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
-
+import json
 import pytz
 from django.contrib.auth import login, logout, get_user_model
 from django.core.checks import messages
@@ -102,6 +102,9 @@ class PermissionsList(APIView):
         permissions = Permission.objects.all()
         serializer = PermissionsSerializer(permissions, many=True)
         return Response(serializer.data)
+
+import json
+
 @api_view(['GET'])
 def test_statistics(request):
     attempts_with_statistics = TestAttempt.objects.annotate(
@@ -123,13 +126,23 @@ def test_statistics(request):
         test_name = attempt.test.name
         score = attempt.score
         max_score = attempt.test.max_score
+
+        test_results = attempt.test_results
+        moderator_name = None
+        if test_results:
+            try:
+                test_results_data = json.loads(test_results)
+                moderator_name = test_results_data.get("moderator")
+            except (TypeError, json.JSONDecodeError):
+                pass
+
         duration_seconds = round(attempt.duration.total_seconds(), 0) if attempt.end_time else None
         if duration_seconds is not None:
             duration_minutes = int(duration_seconds // 60)
         else:
             duration_minutes = None
         end_time = attempt.end_time.strftime("%Y-%m-%d %H:%M") if attempt.end_time else None
-        duration_seconds = int(duration_seconds%60) if duration_seconds is not None else None
+        duration_seconds = int(duration_seconds % 60) if duration_seconds is not None else None
         duration = f"{duration_minutes}:{duration_seconds:02}" if duration_minutes is not None and duration_seconds is not None else None
         test_status = attempt.status
         test_acoin_reward = attempt.test.acoin_reward
@@ -142,9 +155,11 @@ def test_statistics(request):
             'test_id': test_id,
             'test_name': test_name,
             'score': score,
+            'test_attempt': attempt.id,
             'max_score': max_score,
             'duration': duration,
             'end_time': end_time,
+            'moderator': moderator_name,
             'status': test_status,
             'test_acoin_reward': test_acoin_reward,
             'test_experience_points': test_experience_points
@@ -153,14 +168,10 @@ def test_statistics(request):
     return Response(statistics, status=status.HTTP_200_OK)
 
 
+
 @api_view(['GET'])
 def latest_test_attempts(request):
-    # Проверяем, принадлежит ли пользователь к группе модераторов или администраторов
-    # is_moderator_or_admin = request.user.groups.filter(name__in=['Модераторы', 'Администраторы']).exists()
-    #
-    # if not is_moderator_or_admin:
-    #     return Response({"error": "Доступ запрещен"}, status=status.HTTP_403_FORBIDDEN)
-    # Используем оконную функцию для присвоения номера строки каждой попытке
+
     attempts_with_row_number = TestAttempt.objects.annotate(
         row_number=Window(
             expression=RowNumber(),
@@ -182,7 +193,7 @@ def latest_test_attempts(request):
         employee_name = attempt.employee.first_name + " " + attempt.employee.last_name  # предположим, что у модели Employee есть поле name
         theme_name = attempt.test.theme.name  # предположим, что у модели Test есть ForeignKey на Theme с полем name
         test_attempt = attempt.id
-        # moderator_name = test_results.get("moderator") if test_results else None  # Получаем имя модератора из результатов теста, если они существуют
+
         test_info = {
             'test_attempt': test_attempt,
             'test_name': attempt.test.name,  # предположим, что у модели Test есть поле name
@@ -190,7 +201,7 @@ def latest_test_attempts(request):
             'max_score': attempt.test.max_score,  # предположим, что у модели Test есть поле max_score
             'status': attempt.status,
             'end_time': attempt.end_time.strftime("%Y-%m-%dT%H:%M") if attempt.end_time else None  # Добавляем дату окончания теста
-            # 'moderator': moderator_name  # Добавляем имя модератора в результаты
+
         }
 
         grouped_result[employee_name][theme_name].append(test_info)
@@ -1040,16 +1051,15 @@ def moderate_test_attempt(request, test_attempt_id):
     if 'moderated_questions' not in request.data:
         return Response({"message": "Moderated questions are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # if 'moderator_id' not in request.data:
-    #     return Response({"message": "Moderator ID is required"}, status=status.HTTP_400_BAD_REQUEST)
+    if 'moderator_id' not in request.data:
+        return Response({"message": "Moderator ID is required"}, status=status.HTTP_400_BAD_REQUEST)
 
     moderated_questions = request.data['moderated_questions']
-    # moderator_id = request.data['moderator_id']
+    moderator_id = request.data['moderator_id']
 
     # Преобразуем строку test_results в словарь
     test_results = json.loads(test_attempt.test_results)
 
-    # Получаем информацию о ответах на вопросы
     answers_info = test_results.get('answers_info', [])
 
     if test_attempt.status != TestAttempt.MODERATION:
@@ -1083,13 +1093,12 @@ def moderate_test_attempt(request, test_attempt_id):
 
     test_results['answers_info'] = answers_info
 
-    # Добавляем информацию о модераторе в test_results
-    # try:
-    #     moderator = Employee.objects.get(id=moderator_id)
-    # except Employee.DoesNotExist:
-    #     return Response({"message": "Moderator not found"}, status=status.HTTP_404_NOT_FOUND)
+    try:
+        moderator = Employee.objects.get(id=moderator_id)
+    except Employee.DoesNotExist:
+        return Response({"message": "Moderator not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # test_results['moderator'] = moderator.first_name + " " + moderator.last_name
+    test_results['moderator'] = moderator.first_name + " " + moderator.last_name
     test_attempt.test_results = json.dumps(test_results)
 
     total_score = sum(question.get('question_score', 0) for question in answers_info)
@@ -1107,7 +1116,7 @@ def moderate_test_attempt(request, test_attempt_id):
         "score": test_attempt.score,
         "message": "Test moderated successfully",
         "status": test_attempt.status,
-        # "moderator": moderator.first_name + " " + moderator.last_name
+        "moderator": moderator.first_name + " " + moderator.last_name
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
@@ -1333,18 +1342,37 @@ def complete_test(request, employee_id, test_id):
 
 
 @api_view(['GET'])
-def top_test_participants(request, test_id):
-    # Агрегируем результаты тестов по сотрудникам для конкретного теста
-    top_participants = TestAttempt.objects.filter(test_id=test_id).values('employee').annotate(total_score=Sum('score')).order_by('-total_score')[:10]
+def top_participants(request):
+    test_id = request.query_params.get('test_id')
 
-    # Получаем данные о сотрудниках и их суммарном балле за тест
-    participants_data = []
-    for participant in top_participants:
-        employee = Employee.objects.get(id=participant['employee'])
-        total_score = participant['total_score']
-        participants_data.append({'employee_name': f"{employee.first_name} {employee.last_name}", 'total_score': total_score})
+    if test_id:
+        # Фильтруем попытки по данному тесту
+        attempts = TestAttempt.objects.filter(test_id=test_id)
+    else:
+        # Выбираем все попытки
+        attempts = TestAttempt.objects.all()
 
-    return Response(participants_data, status=status.HTTP_200_OK)
+    top_statistics = attempts.values('employee_id', 'employee__first_name', 'employee__last_name').annotate(
+        total_score=Sum('score'),
+        total_attempts=Count('id'),
+        average_score=ExpressionWrapper(
+            Sum('score') / Count('id'),
+            output_field=FloatField()
+        )
+    ).order_by('-total_score')
+
+    top_participants = [
+        {
+            'employee_name': f"{item['employee__first_name']} {item['employee__last_name']}",
+            'total_score': item['total_score'],
+            'total_attempts': item['total_attempts'],
+            'average_score': round(item['average_score'], 2)
+        }
+        for item in top_statistics
+    ]
+
+    return Response(top_participants, status=status.HTTP_200_OK)
+
 
 class StatisticsAPIView(APIView):
     def get(self, request):
