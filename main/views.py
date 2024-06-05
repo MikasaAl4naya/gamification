@@ -4,7 +4,7 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
-import json
+from rest_framework.parsers import MultiPartParser, FormParser
 import pytz
 from django.contrib.auth import login, logout, get_user_model
 from django.core.checks import messages
@@ -26,7 +26,7 @@ from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, An
 from django.shortcuts import get_object_or_404, render, redirect
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, parser_classes
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
     ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer
@@ -872,38 +872,40 @@ def get_answer(request, answer_id):
     return Response(serializer.data)
 
 
-@api_view(['POST'])
-def create_test(request):
-    # Получаем данные о блоках из запроса
-    blocks_data = request.data.get('blocks', [])
 
-    # Проверяем, есть ли вопросы в блоках
-    if not any(block['type'] == 'question' for block in blocks_data):
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+def create_test(request):
+    try:
+        blocks_data = json.loads(request.data.get('blocks', '[]'))  # Парсим JSON из строки
+    except json.JSONDecodeError:
+        return Response({'error': 'Invalid JSON format for blocks'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not isinstance(blocks_data, list):
+        return Response({'error': 'Blocks should be a list'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not any(isinstance(block, dict) and block.get('type') == 'question' for block in blocks_data):
         return Response({'error': 'Test must contain at least one question'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Создаем сериализатор теста
     test_serializer = TestSerializer(data=request.data)
 
-    # Проверяем валидность данных теста
     if not test_serializer.is_valid():
         return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # Сохраняем тест
     test = test_serializer.save()
 
-    # Списки для хранения созданных вопросов, теории и ответов
     created_questions = []
     created_theories = []
     created_answers = []
 
-    # Устанавливаем начальную позицию для блоков
     position = 1
 
     for block_data in blocks_data:
-        # Добавляем айдишник теста в данные о блоке
+        if not isinstance(block_data, dict) or 'type' not in block_data or 'content' not in block_data:
+            return Response({'error': 'Invalid block format'}, status=status.HTTP_400_BAD_REQUEST)
+
         block_data['content']['test'] = test.id
 
-        # Определяем тип блока: вопрос или теория
         if block_data['type'] == 'question':
             serializer_class = TestQuestionSerializer
             created_list = created_questions
@@ -913,42 +915,31 @@ def create_test(request):
         else:
             return Response({'error': 'Invalid block type'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Создаем сериализатор для блока
         block_serializer = serializer_class(data=block_data['content'])
         if not block_serializer.is_valid():
             return Response(block_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        # Сохраняем блок
         block = block_serializer.save(position=position)
         created_list.append(block_serializer.data)
 
-        # Если это вопрос, сохраняем ответы
         if block_data['type'] == 'question':
-            # Получаем данные об ответах из блока вопроса
             answers_data = block_data['content'].get('answer_options', [])
 
-            # Сохраняем ответы для текущего вопроса
             for answer_data in answers_data:
-                # Добавляем айдишник вопроса в данные об ответе
                 answer_data['question'] = block.id
 
-                # Создаем сериализатор для ответа
                 answer_serializer = AnswerOptionSerializer(data=answer_data)
                 if not answer_serializer.is_valid():
                     return Response(answer_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-                # Сохраняем ответ
                 answer = answer_serializer.save()
                 created_answers.append(answer_serializer.data)
 
-            # Выводим количество правильных ответов для текущего вопроса
             correct_answers_count = len([answer for answer in answers_data if answer.get('is_correct')])
             print(correct_answers_count)
 
-        # Увеличиваем позицию для следующего блока
         position += 1
 
-    # Возвращаем успешный ответ с информацией о созданных блоках
     response_data = {
         'test_id': test.id,
         'created_questions': created_questions,
@@ -957,6 +948,7 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
+
 
 def get_questions_with_explanations(request, test_id):
     # Получаем объект теста по его идентификатору

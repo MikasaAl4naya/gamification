@@ -174,6 +174,7 @@ class TestQuestionSerializer(serializers.ModelSerializer):
 
 
 class TestSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(required=False)
     class Meta:
         model = Test
         fields = ['id', 'name', 'author', 'description', 'duration_seconds', 'max_score', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma','experience_points', 'acoin_reward', 'min_experience', 'achievement', 'total_questions', 'can_attempt_twice','retry_delay_days', 'send_results_to_email', 'required_test', 'image']
