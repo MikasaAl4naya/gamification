@@ -13,12 +13,13 @@ from django.db.models import Max, FloatField, Avg, Count, Q, F, Sum, ExpressionW
     Subquery, Window, When, Case
 from django.db.models.functions import Coalesce, RowNumber
 from django.http import HttpResponse, JsonResponse
-from django.contrib.auth.models import User, Permission
+from django.contrib.auth.models import User, Permission, Group
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 from django.utils.timezone import localtime
 from rest_framework.fields import IntegerField
 from rest_framework.generics import RetrieveAPIView
+from rest_framework.permissions import IsAdminUser
 from rest_framework.utils import json
 
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
@@ -29,10 +30,11 @@ from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, Emplo
 from rest_framework.decorators import api_view, parser_classes
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
-    ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer
+    ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer, \
+    GroupSerializer, PermissionSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, generics
+from rest_framework import status, generics, viewsets
 from .serializers import LoginSerializer, EmployeeSerializer, EmployeeRegSerializer  # Импортируем сериализатор
 from django.contrib.auth import authenticate
 from .models import Theory
@@ -375,7 +377,30 @@ def get_user(request, user_id):
     except Employee.DoesNotExist:
         # Если сотрудник не найден, возвращаем сообщение об ошибке
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+class GroupViewSet(viewsets.ModelViewSet):
+    queryset = Group.objects.all()
+    serializer_class = GroupSerializer
+    permission_classes = [IsAdminUser]
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+class PermissionViewSet(viewsets.ModelViewSet):
+    queryset = Permission.objects.all()
+    serializer_class = PermissionSerializer
+    permission_classes = [IsAdminUser]
 
 @api_view(['DELETE'])
 def delete_all_tests(request):
@@ -1094,6 +1119,9 @@ def moderate_test_attempt(request, test_attempt_id):
         moderation_score = moderated_question.get('moderation_score')
         moderation_comment = moderated_question.get('moderation_comment', '')
 
+        if moderation_score is None:
+            return Response({"message": "Moderation score is required for each question"}, status=status.HTTP_400_BAD_REQUEST)
+
         if question_number < 1 or question_number > len(answers_info):
             return Response({"message": "Invalid question number"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1122,7 +1150,7 @@ def moderate_test_attempt(request, test_attempt_id):
     except Employee.DoesNotExist:
         return Response({"message": "Moderator not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    test_results['moderator'] = moderator.first_name + " " + moderator.last_name
+    test_results['moderator'] = f"{moderator.first_name} {moderator.last_name}"
     test_attempt.test_results = json.dumps(test_results)
 
     total_score = sum(question.get('question_score', 0) for question in answers_info)
@@ -1140,10 +1168,11 @@ def moderate_test_attempt(request, test_attempt_id):
         "score": test_attempt.score,
         "message": "Test moderated successfully",
         "status": test_attempt.status,
-        "moderator": moderator.first_name + " " + moderator.last_name
+        "moderator": f"{moderator.first_name} {moderator.last_name}"
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 
 
 

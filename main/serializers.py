@@ -49,11 +49,18 @@ class PermissionSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'codename']
 
 class GroupSerializer(serializers.ModelSerializer):
-    permissions = PermissionSerializer(many=True, read_only=True)
+    permissions = serializers.PrimaryKeyRelatedField(queryset=Permission.objects.all(), many=True)
 
     class Meta:
         model = Group
         fields = ['id', 'name', 'permissions']
+
+    def update(self, instance, validated_data):
+        permissions = validated_data.pop('permissions', None)
+        instance = super(GroupSerializer, self).update(instance, validated_data)
+        if permissions is not None:
+            instance.permissions.set(permissions)
+        return instance
 
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
