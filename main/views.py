@@ -103,10 +103,11 @@ class PermissionsList(APIView):
         serializer = PermissionsSerializer(permissions, many=True)
         return Response(serializer.data)
 
-import json
 
 @api_view(['GET'])
 def test_statistics(request):
+    show_last_attempt_only = request.GET.get('show_last_attempt_only', 'false').lower() == 'true'
+
     attempts_with_statistics = TestAttempt.objects.annotate(
         duration=ExpressionWrapper(
             F('end_time') - F('start_time'),
@@ -117,6 +118,15 @@ def test_statistics(request):
             output_field=FloatField()
         )
     ).select_related('employee', 'test', 'test__theme')
+
+    if show_last_attempt_only:
+        # Оставляем только последнюю попытку для каждого теста и сотрудника
+        last_attempts = {}
+        for attempt in attempts_with_statistics:
+            key = (attempt.employee.id, attempt.test.id)
+            if key not in last_attempts or attempt.end_time > last_attempts[key].end_time:
+                last_attempts[key] = attempt
+        attempts_with_statistics = last_attempts.values()
 
     statistics = []
     all_tests = set()
@@ -172,11 +182,8 @@ def test_statistics(request):
         all_themes.add(theme_name)
         all_employees.add(employee_name)
 
-    # Сортируем список по имени сотрудника, а затем по имени темы
     sorted_statistics = sorted(statistics, key=lambda x: (x['employee_name'], x['theme_name']))
-
-    # Преобразуем множества в отсортированные списки
-    sorted_tests = sorted(list(all_tests), key=lambda x: x[1])  # сортируем по названию теста
+    sorted_tests = sorted(list(all_tests), key=lambda x: x[1])
     sorted_themes = sorted(list(all_themes))
     sorted_employees = sorted(list(all_employees))
 
@@ -193,59 +200,59 @@ def test_statistics(request):
 
 
 
-@api_view(['GET'])
-def latest_test_attempts(request):
-
-    attempts_with_row_number = TestAttempt.objects.annotate(
-        row_number=Window(
-            expression=RowNumber(),
-            partition_by=[F('employee_id'), F('test_id')],
-            order_by=F('end_time').desc()
-        )
-    ).filter(row_number=1).select_related('employee', 'test', 'test__theme')
-
-    # Формируем словарь с результатами, сгруппированными по сотруднику и теме теста
-    grouped_result = defaultdict(lambda: defaultdict(list))
-    for attempt in attempts_with_row_number:
-        test_results = {}
-        # if attempt.test_results:  # Проверяем, существуют ли результаты теста
-        #     try:
-        #         test_results = json.loads(attempt.test_results)
-        #     except (TypeError, json.JSONDecodeError):
-        #         return Response({"message": "Invalid test results format"}, status=status.HTTP_400_BAD_REQUEST)
-
-        employee_name = attempt.employee.first_name + " " + attempt.employee.last_name  # предположим, что у модели Employee есть поле name
-        theme_name = attempt.test.theme.name  # предположим, что у модели Test есть ForeignKey на Theme с полем name
-        test_attempt = attempt.id
-
-        test_info = {
-            'test_attempt': test_attempt,
-            'test_name': attempt.test.name,  # предположим, что у модели Test есть поле name
-            'score': attempt.score,
-            'max_score': attempt.test.max_score,  # предположим, что у модели Test есть поле max_score
-            'status': attempt.status,
-            'end_time': attempt.end_time.strftime("%Y-%m-%dT%H:%M") if attempt.end_time else None  # Добавляем дату окончания теста
-
-        }
-
-        grouped_result[employee_name][theme_name].append(test_info)
-
-    # Формируем окончательный результат и сортируем по имени сотрудника
-    sorted_result = [
-        {
-            'employee': employee,
-            'themes': [
-                {
-                    'theme_name': theme,
-                    'tests': tests
-                }
-                for theme, tests in sorted(themes.items())
-            ]
-        }
-        for employee, themes in sorted(grouped_result.items())
-    ]
-
-    return Response(sorted_result, status=status.HTTP_200_OK)
+# @api_view(['GET'])
+# def latest_test_attempts(request):
+#
+#     attempts_with_row_number = TestAttempt.objects.annotate(
+#         row_number=Window(
+#             expression=RowNumber(),
+#             partition_by=[F('employee_id'), F('test_id')],
+#             order_by=F('end_time').desc()
+#         )
+#     ).filter(row_number=1).select_related('employee', 'test', 'test__theme')
+#
+#     # Формируем словарь с результатами, сгруппированными по сотруднику и теме теста
+#     grouped_result = defaultdict(lambda: defaultdict(list))
+#     for attempt in attempts_with_row_number:
+#         test_results = {}
+#         # if attempt.test_results:  # Проверяем, существуют ли результаты теста
+#         #     try:
+#         #         test_results = json.loads(attempt.test_results)
+#         #     except (TypeError, json.JSONDecodeError):
+#         #         return Response({"message": "Invalid test results format"}, status=status.HTTP_400_BAD_REQUEST)
+#
+#         employee_name = attempt.employee.first_name + " " + attempt.employee.last_name  # предположим, что у модели Employee есть поле name
+#         theme_name = attempt.test.theme.name  # предположим, что у модели Test есть ForeignKey на Theme с полем name
+#         test_attempt = attempt.id
+#
+#         test_info = {
+#             'test_attempt': test_attempt,
+#             'test_name': attempt.test.name,  # предположим, что у модели Test есть поле name
+#             'score': attempt.score,
+#             'max_score': attempt.test.max_score,  # предположим, что у модели Test есть поле max_score
+#             'status': attempt.status,
+#             'end_time': attempt.end_time.strftime("%Y-%m-%dT%H:%M") if attempt.end_time else None  # Добавляем дату окончания теста
+#
+#         }
+#
+#         grouped_result[employee_name][theme_name].append(test_info)
+#
+#     # Формируем окончательный результат и сортируем по имени сотрудника
+#     sorted_result = [
+#         {
+#             'employee': employee,
+#             'themes': [
+#                 {
+#                     'theme_name': theme,
+#                     'tests': tests
+#                 }
+#                 for theme, tests in sorted(themes.items())
+#             ]
+#         }
+#         for employee, themes in sorted(grouped_result.items())
+#     ]
+#
+#     return Response(sorted_result, status=status.HTTP_200_OK)
 
 
 
@@ -662,8 +669,6 @@ def get_test_by_id(request, test_id):
     return Response(response_data)
 
 
-
-
 @api_view(['GET'])
 def get_themes_with_tests(request, employee_id):
     try:
@@ -671,30 +676,20 @@ def get_themes_with_tests(request, employee_id):
     except Employee.DoesNotExist:
         return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Получаем все темы
     themes = Theme.objects.all().order_by('name')
-
-    # Создаем список для хранения тем с их связанными тестами
     themes_with_tests = []
 
-    # Проходимся по всем темам
     for theme in themes:
-        # Получаем все тесты, связанные с текущей темой
         tests = Test.objects.filter(theme=theme)
-
-        # Создаем список для хранения информации о тестах
         tests_info = []
 
-        # Проходимся по всем тестам и собираем информацию о каждом из них
         for test in tests:
             created_at = test.created_at.strftime("%Y-%m-%dT%H:%M")
-
-            # Проверяем наличие попыток прохождения теста
             test_attempt = TestAttempt.objects.filter(employee=employee, test=test).last()
+
             if test_attempt:
                 if test_attempt.test_results:
                     try:
-                        # Десериализуем строку JSON в объект Python
                         test_results = json.loads(test_attempt.test_results)
                         total_score = test_results.get("Набранное количество баллов", 0)
                         max_score = test.max_score
@@ -707,15 +702,23 @@ def get_themes_with_tests(request, employee_id):
                     except (json.JSONDecodeError, TypeError, KeyError):
                         test_status = None
                 else:
-                    # Если попытка есть, но результатов еще нет, то статус "Не начато"
                     test_status = {"status": "Не начато", "total_score": 0, "max_score": 0}
             else:
-                # Если попытки прохождения теста нет, то статус "Не начато"
                 test_status = {"status": "Не начато", "total_score": 0, "max_score": 0}
 
-            # Проверка достаточно ли у сотрудника опыта и кармы для прохождения теста
             has_sufficient_karma = employee.karma >= test.required_karma
             has_sufficient_experience = employee.experience >= test.min_experience
+            test_available = has_sufficient_karma and has_sufficient_experience
+
+            remaining_days = None
+            if test_attempt and test.retry_delay_days is not None:
+                end_time = test_attempt.end_time or timezone.now()
+                time_since_last_attempt = timezone.now() - end_time
+                remaining_time = timedelta(days=test.retry_delay_days) - time_since_last_attempt
+                if remaining_time.total_seconds() > 0:
+                    remaining_days = remaining_time.days
+                else:
+                    remaining_days = 0
 
             test_info = {
                 'test': test.id,
@@ -727,12 +730,13 @@ def get_themes_with_tests(request, employee_id):
                 'author': test.author.name if test.author else None,
                 'status': test_status,
                 'has_sufficient_karma': has_sufficient_karma,
-                'has_sufficient_experience': has_sufficient_experience
+                'has_sufficient_experience': has_sufficient_experience,
+                'test_available': test_available,
+                'remaining_days': remaining_days
             }
 
             tests_info.append(test_info)
 
-        # Добавляем информацию о текущей теме и ее тестах в список
         theme_with_tests = {
             'theme': theme.name,
             'theme_id': theme.id,
@@ -953,7 +957,6 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
-
 
 def get_questions_with_explanations(request, test_id):
     # Получаем объект теста по его идентификатору

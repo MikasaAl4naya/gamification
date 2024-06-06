@@ -1,6 +1,7 @@
-from django.contrib.auth.models import User, Permission
+from django.contrib.auth.models import User, Permission, Group
 from django.utils.crypto import get_random_string
-from rest_framework import serializers
+from rest_framework import serializers, viewsets
+from rest_framework.permissions import IsAdminUser
 
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
     Request, Theme, Classifications, TestAttempt
@@ -42,7 +43,27 @@ class TestAttemptModerationSerializer(serializers.ModelSerializer):
     def get_employee_name(self, obj):
         return f"{obj.employee.first_name} {obj.employee.last_name}"
 
+class PermissionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Permission
+        fields = ['id', 'name', 'codename']
 
+class GroupSerializer(serializers.ModelSerializer):
+    permissions = PermissionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Group
+        fields = ['id', 'name', 'permissions']
+
+class GroupViewSet(viewsets.ModelViewSet):
+    queryset = Group.objects.all()
+    serializer_class = GroupSerializer
+    permission_classes = [IsAdminUser]
+
+class PermissionViewSet(viewsets.ModelViewSet):
+    queryset = Permission.objects.all()
+    serializer_class = PermissionSerializer
+    permission_classes = [IsAdminUser]
 
 class TestAttemptSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source='employee.username', read_only=True)
@@ -124,7 +145,7 @@ class ThemeSerializer(serializers.ModelSerializer):
         fields = ['id', 'name']
 class TestQuestionSerializer(serializers.ModelSerializer):
     answer_options = AnswerOptionSerializer(many=True, partial=True,required=False)
-    image = serializers.SerializerMethodField()
+    image = serializers.ImageField(required=False)
 
     def get_image(self, obj):
         if obj.image:

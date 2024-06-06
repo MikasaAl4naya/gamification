@@ -1,9 +1,18 @@
+# urls.py
 from django.conf import settings
 from django.conf.urls.static import static
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 
 from . import views
+from .serializers import GroupViewSet, PermissionViewSet
 from .views import *
+
+# Создание экземпляра DefaultRouter
+router = DefaultRouter()
+# Регистрация viewsets с маршрутизатором
+router.register(r'groups', GroupViewSet)
+router.register(r'permissions', PermissionViewSet)
 
 urlpatterns = [
     path('api/login/', LoginAPIView.as_view(), name='api-login'),
@@ -62,7 +71,6 @@ urlpatterns = [
     path('test-time-stat/', TestStatisticsAPIView.as_view(), name='test-time-stat'),
     path('full_statistics/', FullStatisticsAPIView.as_view(), name='full_statistics'),
     path('test_moderation_result/<int:test_attempt_id>/', test_moderation_result, name='test_moderation_result'),
-    path('emp_test_stat/', latest_test_attempts, name='emp_test_stat'),
     path('permissions/', PermissionsList.as_view(), name='permissions'),
     path('themes/<int:theme_id>/delete', ThemeDeleteAPIView.as_view(), name='theme_delete'),
     path('themes/<int:theme_id>/update-name/', update_theme_name, name='update_theme_name'),
@@ -73,7 +81,10 @@ urlpatterns = [
     # path('test/<int:test_id>/top_participants/', top_test_participants, name='top_test_participants'),
     path('top_participants/', top_participants, name='top_participants'),
 
+    # Включение маршрутов, зарегистрированных с помощью DefaultRouter
+    path('', include(router.urls)),
 ]
+
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
