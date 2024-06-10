@@ -4,6 +4,10 @@ from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
+
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.authtoken.models import Token
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import pytz
 from django.contrib.auth import login, logout, get_user_model
@@ -19,7 +23,7 @@ from django.utils.crypto import get_random_string
 from django.utils.timezone import localtime
 from rest_framework.fields import IntegerField
 from rest_framework.generics import RetrieveAPIView
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAdminUser, BasePermission, IsAuthenticated
 from rest_framework.utils import json
 
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
@@ -45,35 +49,34 @@ class LoginAPIView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
-            # Получаем имя пользователя и пароль из данных запроса
             username = serializer.validated_data.get('username')
             password = serializer.validated_data.get('password')
 
-            # Проверяем аутентификацию пользователя по имени пользователя и паролю
             user = authenticate(request, username=username, password=password)
             if user is not None:
-                # Если пользователь успешно аутентифицирован, получаем его
-                employee = Employee.objects.get(username=username)
+                # Получаем токен пользователя
+                token, created = Token.objects.get_or_create(user=user)
 
-                # Получаем опыт и карму сотрудника
+                employee = Employee.objects.get(username=username)
                 experience = employee.experience
                 karma = employee.karma
-
-                # Получаем количество акоинов сотрудника
                 acoin = Acoin.objects.get(employee=employee).amount
 
-                # Возвращаем успешный ответ с данными сотрудника
-                return Response({'message': 'Login successful', 'employee_id': employee.id,
-                                 'experience': experience, 'karma': karma, 'acoin': acoin},
-                                status=status.HTTP_200_OK)
+                # Возвращаем успешный ответ с данными сотрудника и токеном
+                return Response({
+                    'message': 'Login successful',
+                    'employee_id': employee.id,
+                    'experience': experience,
+                    'karma': karma,
+                    'acoin': acoin,
+                    'token': token.key
+                }, status=status.HTTP_200_OK)
             else:
-                # Если аутентификация не удалась, возвращаем сообщение об ошибке
                 return Response({
                     'message': 'Invalid username or password',
-                    'data': serializer.validated_data  # Возвращаем отправленные данные
+                    'data': serializer.validated_data
                 }, status=status.HTTP_401_UNAUTHORIZED)
         else:
-            # Если данные запроса некорректны, возвращаем сообщение об ошибке
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
@@ -99,17 +102,11 @@ class TestScoreAPIView(APIView):
         }
 
         return Response(result)
-class PermissionsList(APIView):
-    def get(self, request):
-        permissions = Permission.objects.all()
-        serializer = PermissionsSerializer(permissions, many=True)
-        return Response(serializer.data)
 
 
 @api_view(['GET'])
 def test_statistics(request):
-    show_last_attempt_only = request.GET.get('show_last_attempt_only', 'false').lower() == 'true'
-
+    # Получение всех попыток с аннотацией длительности и процента набранных баллов
     attempts_with_statistics = TestAttempt.objects.annotate(
         duration=ExpressionWrapper(
             F('end_time') - F('start_time'),
@@ -121,14 +118,12 @@ def test_statistics(request):
         )
     ).select_related('employee', 'test', 'test__theme')
 
-    if show_last_attempt_only:
-        # Оставляем только последнюю попытку для каждого теста и сотрудника
-        last_attempts = {}
-        for attempt in attempts_with_statistics:
-            key = (attempt.employee.id, attempt.test.id)
-            if key not in last_attempts or attempt.end_time > last_attempts[key].end_time:
-                last_attempts[key] = attempt
-        attempts_with_statistics = last_attempts.values()
+    # Определение последней попытки для каждого теста и сотрудника
+    last_attempts = {}
+    for attempt in attempts_with_statistics:
+        key = (attempt.employee.id, attempt.test.id)
+        if key not in last_attempts or attempt.end_time > last_attempts[key].end_time:
+            last_attempts[key] = attempt
 
     statistics = []
     all_tests = set()
@@ -164,6 +159,8 @@ def test_statistics(request):
         test_experience_points = attempt.test.experience_points
         test_id = attempt.test.id if attempt.test is not None else None
 
+        is_last_attempt = last_attempts.get((attempt.employee.id, attempt.test.id)) == attempt
+
         statistics.append({
             'employee_name': employee_name,
             'theme_name': theme_name,
@@ -177,7 +174,8 @@ def test_statistics(request):
             'moderator': moderator_name,
             'status': test_status,
             'test_acoin_reward': test_acoin_reward,
-            'test_experience_points': test_experience_points
+            'test_experience_points': test_experience_points,
+            'is_last_attempt': is_last_attempt
         })
 
         all_tests.add((test_id, test_name))
@@ -275,7 +273,18 @@ class MostIncorrectQuestionsAPIView(APIView):
 from django.db import transaction, IntegrityError
 
 
+class DynamicPermission(BasePermission):
+    def has_permission(self, request, view):
+        # Если у view есть атрибут required_permissions, используем его
+        required_permissions = getattr(view, 'required_permissions', {})
 
+        # Получаем требуемое право для текущего метода
+        required_permission = required_permissions.get(request.method.lower())
+
+        if required_permission:
+            return request.user.has_perm(required_permission)
+
+        return True
 
 class EmployeeDetails(APIView):
     def get(self, request, username):
@@ -285,32 +294,24 @@ class EmployeeDetails(APIView):
             return Response(serializer.data)
         except Employee.DoesNotExist:
             return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
-
-
-
-
-
-
-
 class RegisterAPIView(APIView):
+    permission_classes = [IsAuthenticated, DynamicPermission]
+    required_permissions = {
+        'post': 'main.add_user',
+    }
+
     @transaction.atomic
     def post(self, request):
         serializer = EmployeeRegSerializer(data=request.data)
         if serializer.is_valid():
-            # Создание сотрудника
             employee = serializer.save()
 
-            # Генерация пароля
             password = get_random_string(length=10)
-
-            # Сохранение сгенерированного пароля в сотруднике
             employee.set_password(password)
             employee.save()
 
-            # Сохранение сгенерированного пароля в сессии
             request.session['generated_password'] = password
 
-            # Возвращение успешного ответа
             return Response({
                 'message': 'Registration successful',
                 'generated_password': password
@@ -377,10 +378,12 @@ def get_user(request, user_id):
     except Employee.DoesNotExist:
         # Если сотрудник не найден, возвращаем сообщение об ошибке
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
     permission_classes = [IsAdminUser]
+
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -476,41 +479,57 @@ def get_test_with_theory(request, test_id):
 
 class UpdateTestAndContent(APIView):
     def put(self, request, test_id):
+        return self.update_test_and_content(request, test_id, partial=False)
+
+    def patch(self, request, test_id):
+        return self.update_test_and_content(request, test_id, partial=True)
+
+    def update_test_and_content(self, request, test_id, partial):
         try:
             test = Test.objects.get(id=test_id)
         except Test.DoesNotExist:
             return Response({"message": "Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        test_serializer = TestSerializer(test, data=request.data, partial=True)
+        test_data = request.data.get('test', {})
+        test_serializer = TestSerializer(test, data=test_data, partial=partial)
         if test_serializer.is_valid():
             test_serializer.save()
 
-            # Удаление старых вопросов, ответов и теории
-            test.questions.all().delete()
-            test.theory.delete()
-
-            # Создание новых вопросов
+            # Обработка вопросов
             if 'questions' in request.data:
+                # Удаление старых вопросов
+                test.questions.all().delete()
                 questions_data = request.data['questions']
                 for question_data in questions_data:
+                    question_data['test'] = test.id  # Привязываем вопрос к тесту
                     question_serializer = TestQuestionSerializer(data=question_data)
                     if question_serializer.is_valid():
-                        question_serializer.save(test=test)
+                        question_serializer.save()
+                    else:
+                        return Response(question_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            # Создание новых ответов
+            # Обработка ответов (если они включены в запрос)
             if 'answers' in request.data:
+                AnswerOption.objects.filter(question__test=test).delete()  # Удаляем старые ответы
                 answers_data = request.data['answers']
                 for answer_data in answers_data:
+                    answer_data['question'] = test.questions.first().id  # Привязываем ответ к первому вопросу как пример
                     answer_serializer = AnswerOptionSerializer(data=answer_data)
                     if answer_serializer.is_valid():
                         answer_serializer.save()
+                    else:
+                        return Response(answer_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            # Создание новой теории
+            # Обработка теории
             if 'theory' in request.data:
+                Theory.objects.filter(test=test).delete()  # Удаляем старую теорию
                 theory_data = request.data['theory']
+                theory_data['test'] = test.id  # Привязываем теорию к тесту
                 theory_serializer = TheorySerializer(data=theory_data)
                 if theory_serializer.is_valid():
-                    theory_serializer.save(test=test)
+                    theory_serializer.save()
+                else:
+                    return Response(theory_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
             return Response({"message": "Test and content updated successfully"}, status=status.HTTP_200_OK)
         else:

@@ -8,9 +8,7 @@ from . import views
 from .serializers import GroupViewSet, PermissionViewSet
 from .views import *
 
-# Создание экземпляра DefaultRouter
 router = DefaultRouter()
-# Регистрация viewsets с маршрутизатором
 router.register(r'groups', GroupViewSet)
 router.register(r'permissions', PermissionViewSet)
 
@@ -71,7 +69,6 @@ urlpatterns = [
     path('test-time-stat/', TestStatisticsAPIView.as_view(), name='test-time-stat'),
     path('full_statistics/', FullStatisticsAPIView.as_view(), name='full_statistics'),
     path('test_moderation_result/<int:test_attempt_id>/', test_moderation_result, name='test_moderation_result'),
-    path('permissions/', PermissionsList.as_view(), name='permissions'),
     path('themes/<int:theme_id>/delete', ThemeDeleteAPIView.as_view(), name='theme_delete'),
     path('themes/<int:theme_id>/update-name/', update_theme_name, name='update_theme_name'),
     path('test-attempts/<int:attempt_id>/delete/', delete_test_attempt, name='delete_test_attempt'),

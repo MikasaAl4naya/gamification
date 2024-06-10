@@ -43,17 +43,23 @@ class TestAttemptModerationSerializer(serializers.ModelSerializer):
     def get_employee_name(self, obj):
         return f"{obj.employee.first_name} {obj.employee.last_name}"
 
+from rest_framework import serializers
+from django.contrib.auth.models import Group, Permission
+
 class PermissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Permission
         fields = ['id', 'name', 'codename']
 
 class GroupSerializer(serializers.ModelSerializer):
-    permissions = serializers.PrimaryKeyRelatedField(queryset=Permission.objects.all(), many=True)
+    permissions = serializers.PrimaryKeyRelatedField(queryset=Permission.objects.all(), many=True, write_only=True)
+    permissions_info = PermissionSerializer(many=True, read_only=True, source='permissions')
 
     class Meta:
         model = Group
-        fields = ['id', 'name', 'permissions']
+        fields = ['id', 'name', 'permissions', 'permissions_info']
+
+
 
     def update(self, instance, validated_data):
         permissions = validated_data.pop('permissions', None)
