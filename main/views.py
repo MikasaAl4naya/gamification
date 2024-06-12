@@ -88,7 +88,7 @@ class LoginAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 class TestScoreAPIView(APIView):
     def get(self, request, test_id):
         # Получаем максимальное количество баллов и количество попыток для каждого сотрудника
@@ -112,7 +112,7 @@ class TestScoreAPIView(APIView):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 def test_statistics(request):
     # Получение всех попыток с аннотацией длительности и процента набранных баллов
     attempts_with_statistics = TestAttempt.objects.annotate(
@@ -203,7 +203,7 @@ def test_statistics(request):
     }
 
     return Response(result, status=status.HTTP_200_OK)
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 class MostIncorrectQuestionsAPIView(APIView):
     def get(self, request):
         # Получаем список вопросов, по которым сотрудники чаще всего ошибаются
@@ -269,7 +269,7 @@ class RegisterAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 @api_view(['POST'])
 def create_theme(request):
     if request.method == 'POST':
@@ -329,7 +329,7 @@ def get_user(request, user_id):
         # Если сотрудник не найден, возвращаем сообщение об ошибке
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
@@ -350,12 +350,12 @@ class GroupViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(serializer.data)
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 class PermissionViewSet(viewsets.ModelViewSet):
     queryset = Permission.objects.all()
     serializer_class = PermissionSerializer
     permission_classes = [IsAdminUser]
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 @api_view(['DELETE'])
 def delete_all_tests(request):
     if request.method == 'DELETE':
@@ -427,7 +427,7 @@ def get_test_with_theory(request, test_id):
     except Test.DoesNotExist:
         return Response({'error': 'Test not found'}, status=404)
 
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 class UpdateTestAndContent(APIView):
     def put(self, request, test_id):
         return self.update_test_and_content(request, test_id, partial=False)
@@ -580,7 +580,7 @@ def test_results(request, test_attempt_id):
         response_data["moderator"] = moderator_name
 
     return Response(response_data, status=status.HTTP_200_OK)
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 def get_statistics():
     statistics = TestAttempt.objects.annotate(
         total_score=F('score'),
@@ -754,7 +754,7 @@ def get_question(request, question_id):
     serializer = TestQuestionSerializer(question)
     return Response(serializer.data)
 @api_view(['POST'])
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 def create_request(request):
     if request.method == 'POST':
         serializer = RequestSerializer(data=request.data)
@@ -762,7 +762,7 @@ def create_request(request):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 class ThemeDeleteAPIView(APIView):
     def delete(self, request, theme_id):
         try:
@@ -772,7 +772,7 @@ class ThemeDeleteAPIView(APIView):
 
         theme.delete()
         return Response({"message": "Theme deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 @api_view(['PATCH'])
 def update_theme_name(request, theme_id):
     try:
@@ -791,7 +791,7 @@ def update_theme_name(request, theme_id):
     theme.save()
 
     return Response({"message": "Theme name updated successfully"}, status=status.HTTP_200_OK)
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 @api_view(['DELETE'])
 def delete_test_attempt(request, attempt_id):
     try:
@@ -804,7 +804,7 @@ def delete_test_attempt(request, attempt_id):
     test_attempt.delete()
 
     return Response({"message": "Test attempt deleted successfully"}, status=status.HTTP_200_OK)
-@permission_classes([IsAdmin])
+#@permission_classes([IsAdmin])
 @api_view(['POST'])
 def create_achievement(request):
     if request.method == 'POST':
