@@ -27,11 +27,21 @@ class LoginSerializer(serializers.Serializer):
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
+    acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
+    role = serializers.SerializerMethodField()
+
     class Meta:
         model = Employee
-        fields = ['id', 'username', 'email', 'position', 'level', 'experience']
-from rest_framework import serializers
+        fields = ['username', 'email', 'karma', 'acoin_amount', 'experience', 'position', 'date_joined', 'role']
+        read_only_fields = ['level', 'next_level_experience']
 
+    def get_role(self, obj):
+        roles = [group.name[:-1] if group.name.endswith('Ы') else group.name for group in obj.groups.all()]
+        return roles
+
+    def update(self, instance, validated_data):
+        # Дополнительная логика перед обновлением
+        return super().update(instance, validated_data)
 class TestAttemptModerationSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
     test_name = serializers.CharField(source='test.name', read_only=True)

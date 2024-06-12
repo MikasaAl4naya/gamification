@@ -1,12 +1,18 @@
 import ast
+import logging
 import math
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
 
+from django.db import transaction
+from rest_framework.exceptions import NotFound
+
+from .permissions import IsAdmin, IsModerator, IsUser, IsSelfOrAdmin
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.authentication import TokenAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import pytz
@@ -23,15 +29,15 @@ from django.utils.crypto import get_random_string
 from django.utils.timezone import localtime
 from rest_framework.fields import IntegerField
 from rest_framework.generics import RetrieveAPIView
-from rest_framework.permissions import IsAdminUser, BasePermission, IsAuthenticated
+from rest_framework.permissions import IsAdminUser, BasePermission, IsAuthenticated, AllowAny
 from rest_framework.utils import json
 
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
     Acoin, TestAttempt, Theme, Classifications
-from django.shortcuts import get_object_or_404, render, redirect
+from rest_framework.generics import get_object_or_404
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
-from rest_framework.decorators import api_view, parser_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
     ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer, \
@@ -44,8 +50,10 @@ from django.contrib.auth import authenticate
 from .models import Theory
 from .serializers import TheorySerializer
 
-
 class LoginAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    @csrf_exempt
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
@@ -80,7 +88,7 @@ class LoginAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-
+@permission_classes([IsAdmin])
 class TestScoreAPIView(APIView):
     def get(self, request, test_id):
         # Получаем максимальное количество баллов и количество попыток для каждого сотрудника
@@ -100,11 +108,11 @@ class TestScoreAPIView(APIView):
             'average_score': average_score,
             'individual_scores': scores
         }
-
         return Response(result)
 
 
 @api_view(['GET'])
+@permission_classes([IsAdmin])
 def test_statistics(request):
     # Получение всех попыток с аннотацией длительности и процента набранных баллов
     attempts_with_statistics = TestAttempt.objects.annotate(
@@ -195,67 +203,7 @@ def test_statistics(request):
     }
 
     return Response(result, status=status.HTTP_200_OK)
-
-
-
-
-
-# @api_view(['GET'])
-# def latest_test_attempts(request):
-#
-#     attempts_with_row_number = TestAttempt.objects.annotate(
-#         row_number=Window(
-#             expression=RowNumber(),
-#             partition_by=[F('employee_id'), F('test_id')],
-#             order_by=F('end_time').desc()
-#         )
-#     ).filter(row_number=1).select_related('employee', 'test', 'test__theme')
-#
-#     # Формируем словарь с результатами, сгруппированными по сотруднику и теме теста
-#     grouped_result = defaultdict(lambda: defaultdict(list))
-#     for attempt in attempts_with_row_number:
-#         test_results = {}
-#         # if attempt.test_results:  # Проверяем, существуют ли результаты теста
-#         #     try:
-#         #         test_results = json.loads(attempt.test_results)
-#         #     except (TypeError, json.JSONDecodeError):
-#         #         return Response({"message": "Invalid test results format"}, status=status.HTTP_400_BAD_REQUEST)
-#
-#         employee_name = attempt.employee.first_name + " " + attempt.employee.last_name  # предположим, что у модели Employee есть поле name
-#         theme_name = attempt.test.theme.name  # предположим, что у модели Test есть ForeignKey на Theme с полем name
-#         test_attempt = attempt.id
-#
-#         test_info = {
-#             'test_attempt': test_attempt,
-#             'test_name': attempt.test.name,  # предположим, что у модели Test есть поле name
-#             'score': attempt.score,
-#             'max_score': attempt.test.max_score,  # предположим, что у модели Test есть поле max_score
-#             'status': attempt.status,
-#             'end_time': attempt.end_time.strftime("%Y-%m-%dT%H:%M") if attempt.end_time else None  # Добавляем дату окончания теста
-#
-#         }
-#
-#         grouped_result[employee_name][theme_name].append(test_info)
-#
-#     # Формируем окончательный результат и сортируем по имени сотрудника
-#     sorted_result = [
-#         {
-#             'employee': employee,
-#             'themes': [
-#                 {
-#                     'theme_name': theme,
-#                     'tests': tests
-#                 }
-#                 for theme, tests in sorted(themes.items())
-#             ]
-#         }
-#         for employee, themes in sorted(grouped_result.items())
-#     ]
-#
-#     return Response(sorted_result, status=status.HTTP_200_OK)
-
-
-
+@permission_classes([IsAdmin])
 class MostIncorrectQuestionsAPIView(APIView):
     def get(self, request):
         # Получаем список вопросов, по которым сотрудники чаще всего ошибаются
@@ -269,23 +217,24 @@ class MostIncorrectQuestionsAPIView(APIView):
         return Response(result)
 
 
-
-from django.db import transaction, IntegrityError
-
-
+logger = logging.getLogger(__name__)
 class DynamicPermission(BasePermission):
     def has_permission(self, request, view):
-        # Если у view есть атрибут required_permissions, используем его
-        required_permissions = getattr(view, 'required_permissions', {})
-
-        # Получаем требуемое право для текущего метода
-        required_permission = required_permissions.get(request.method.lower())
-
+        required_permission = view.required_permissions.get(request.method.lower())
         if required_permission:
-            return request.user.has_perm(required_permission)
+            has_perm = request.user.has_perm(required_permission)
+            logger.debug(f"User {request.user} has_perm {required_permission}: {has_perm}")
+            return has_perm
+        logger.debug("No required permission for this method")
+        return False
+class EmployeeUpdateView(generics.UpdateAPIView):
+    queryset = Employee.objects.all()
+    serializer_class = EmployeeSerializer
+    permission_classes = [IsAuthenticated]
 
-        return True
-
+    def get_object(self):
+        # Здесь можно добавить логику получения объекта, например, по ID
+        return self.request.user
 class EmployeeDetails(APIView):
     def get(self, request, username):
         try:
@@ -296,10 +245,10 @@ class EmployeeDetails(APIView):
             return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 class RegisterAPIView(APIView):
     permission_classes = [IsAuthenticated, DynamicPermission]
+    authentication_classes = [TokenAuthentication]
     required_permissions = {
-        'post': 'main.add_user',
+        'post': 'auth.add_user',
     }
-
     @transaction.atomic
     def post(self, request):
         serializer = EmployeeRegSerializer(data=request.data)
@@ -320,6 +269,7 @@ class RegisterAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+@permission_classes([IsAdmin])
 @api_view(['POST'])
 def create_theme(request):
     if request.method == 'POST':
@@ -379,6 +329,7 @@ def get_user(request, user_id):
         # Если сотрудник не найден, возвращаем сообщение об ошибке
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
+@permission_classes([IsAdmin])
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
@@ -399,12 +350,12 @@ class GroupViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(serializer.data)
-
+@permission_classes([IsAdmin])
 class PermissionViewSet(viewsets.ModelViewSet):
     queryset = Permission.objects.all()
     serializer_class = PermissionSerializer
     permission_classes = [IsAdminUser]
-
+@permission_classes([IsAdmin])
 @api_view(['DELETE'])
 def delete_all_tests(request):
     if request.method == 'DELETE':
@@ -476,7 +427,7 @@ def get_test_with_theory(request, test_id):
     except Test.DoesNotExist:
         return Response({'error': 'Test not found'}, status=404)
 
-
+@permission_classes([IsAdmin])
 class UpdateTestAndContent(APIView):
     def put(self, request, test_id):
         return self.update_test_and_content(request, test_id, partial=False)
@@ -535,7 +486,7 @@ class UpdateTestAndContent(APIView):
         else:
             return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-
+@permission_classes([IsSelfOrAdmin])
 @api_view(['GET'])
 def test_moderation_result(request, test_attempt_id):
     try:
@@ -629,6 +580,7 @@ def test_results(request, test_attempt_id):
         response_data["moderator"] = moderator_name
 
     return Response(response_data, status=status.HTTP_200_OK)
+@permission_classes([IsAdmin])
 def get_statistics():
     statistics = TestAttempt.objects.annotate(
         total_score=F('score'),
@@ -664,6 +616,11 @@ def get_test_by_id(request, test_id):
 
     # Сериализуем данные теста
     test_serializer = TestSerializer(test)
+    test_data = test_serializer.data
+
+    # Удаляем поле image
+    if 'image' in test_data:
+        del test_data['image']
 
     # Получаем все вопросы и теорию для данного теста, отсортированные по позиции
     questions = TestQuestion.objects.filter(test=test).order_by('position')
@@ -707,7 +664,7 @@ def get_test_by_id(request, test_id):
 
     # Возвращаем данные о тесте и его блоках
     response_data = {
-        'test': test_serializer.data,
+        'test': test_data,
         'blocks': sorted_blocks
     }
     return Response(response_data)
@@ -797,6 +754,7 @@ def get_question(request, question_id):
     serializer = TestQuestionSerializer(question)
     return Response(serializer.data)
 @api_view(['POST'])
+@permission_classes([IsAdmin])
 def create_request(request):
     if request.method == 'POST':
         serializer = RequestSerializer(data=request.data)
@@ -804,6 +762,7 @@ def create_request(request):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+@permission_classes([IsAdmin])
 class ThemeDeleteAPIView(APIView):
     def delete(self, request, theme_id):
         try:
@@ -813,7 +772,7 @@ class ThemeDeleteAPIView(APIView):
 
         theme.delete()
         return Response({"message": "Theme deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-
+@permission_classes([IsAdmin])
 @api_view(['PATCH'])
 def update_theme_name(request, theme_id):
     try:
@@ -832,6 +791,7 @@ def update_theme_name(request, theme_id):
     theme.save()
 
     return Response({"message": "Theme name updated successfully"}, status=status.HTTP_200_OK)
+@permission_classes([IsAdmin])
 @api_view(['DELETE'])
 def delete_test_attempt(request, attempt_id):
     try:
@@ -844,6 +804,7 @@ def delete_test_attempt(request, attempt_id):
     test_attempt.delete()
 
     return Response({"message": "Test attempt deleted successfully"}, status=status.HTTP_200_OK)
+@permission_classes([IsAdmin])
 @api_view(['POST'])
 def create_achievement(request):
     if request.method == 'POST':
@@ -878,23 +839,19 @@ def create_achievement(request):
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class CreateClassificationAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+    authentication_classes = [TokenAuthentication]
 
-@api_view(['POST'])
-def create_classification(request):
-    if request.method == 'POST':
-        # Извлекаем название классификации из запроса
+    def post(self, request):
         name = request.data.get('name')
 
-        # Проверяем, не пустое ли название
         if name:
-            # Пытаемся найти классификацию по названию
             try:
                 existing_classification = Classifications.objects.get(name=name)
-                # Если классификация с таким названием уже существует, возвращаем ошибку
                 return Response({'error': 'Classification with this name already exists'},
                                 status=status.HTTP_400_BAD_REQUEST)
             except Classifications.DoesNotExist:
-                # Если классификация с таким названием не найдена, создаем новую
                 classification_data = {'name': name}
                 serializer = ClassificationSerializer(data=classification_data)
                 if serializer.is_valid():
@@ -902,7 +859,6 @@ def create_classification(request):
                     return Response(serializer.data, status=status.HTTP_201_CREATED)
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         else:
-            # Если название не было указано в запросе, возвращаем ошибку
             return Response({'error': 'Name field is required'}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
@@ -1157,10 +1113,11 @@ def moderate_test_attempt(request, test_attempt_id):
         question_to_moderate['question_score'] = moderation_score
         question_to_moderate['moderation_comment'] = moderation_comment
 
-        if 0 < moderation_score < max_question_score:
-            question_to_moderate['is_partially_true'] = True
+        # Обновляем поле is_correct в зависимости от модерационного балла
+        if moderation_score == max_question_score:
+            question_to_moderate['is_correct'] = True
         else:
-            question_to_moderate['is_partially_true'] = False
+            question_to_moderate['is_correct'] = False
 
     test_results['answers_info'] = answers_info
 
@@ -1191,6 +1148,7 @@ def moderate_test_attempt(request, test_attempt_id):
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 
 
 

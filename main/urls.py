@@ -49,7 +49,7 @@ urlpatterns = [
     path('themes/', theme_list, name='theme_list'),
     path('delete_all_tests/', delete_all_tests, name='delete_all_tests'),
     path('tests/<int:test_id>/questions_with_explanations/', get_questions_with_explanations, name='questions_with_explanations'),
-    path('classifications/create/', create_classification, name='create_classification'),
+    path('classifications/create/', CreateClassificationAPIView.as_view(), name='create_classification'),
     path('test_attempts/', list_test_attempts, name='list_test_attempts'),
     path('test_attempts/<int:attempt_id>/', get_test_attempt, name='get_test_attempt'),
     path('test_attempts/moderation/', test_attempt_moderation_list, name='test_attempt_moderation_list'),
@@ -75,6 +75,7 @@ urlpatterns = [
     path('question_errors_stat/', QuestionErrorsStatistics.as_view(), name='emp_test_stat'),
     path('question_correct_stat/', QuestionCorrectStatistics.as_view(), name='emp_test_stat'),
     path('test_statistics/', test_statistics, name='get_statistics'),
+    path('user/update/', EmployeeUpdateView.as_view(), name='employee-update'),
     # path('test/<int:test_id>/top_participants/', top_test_participants, name='top_test_participants'),
     path('top_participants/', top_participants, name='top_participants'),
 
