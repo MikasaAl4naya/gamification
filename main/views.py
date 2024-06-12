@@ -634,10 +634,12 @@ def get_test_by_id(request, test_id):
         question_data = TestQuestionSerializer(question).data
         del question_data['id']  # Удаляем поле "id"
         del question_data['test']  # Удаляем поле "test"
+        del question_data['image']
         answer_options = question_data.get('answer_options', [])
         for answer in answer_options:
             del answer['id']  # Удаляем поле "id" из каждого ответа
             del answer['question']
+            del answer['file']
         block_data = {
             'type': 'question',
             'content': question_data
