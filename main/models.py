@@ -29,11 +29,20 @@ class Employee(AbstractUser):
     experience = models.IntegerField(default=0)
     next_level_experience = models.IntegerField(default=100)
     karma = models.IntegerField(default=50)
+    birth_date = models.DateField(null=True, blank=True)  # Добавляем поле даты рождения
 
     def save(self, *args, **kwargs):
         if self.karma > 100:
             self.karma = 100
         super().save(*args, **kwargs)
+
+    def deactivate(self):
+        self.is_active = False
+        self.save()
+
+    def activate(self):
+        self.is_active = True
+        self.save()
 
     def increase_experience(self, amount):
         self.experience += amount
@@ -65,7 +74,6 @@ class Employee(AbstractUser):
 
     class Meta:
         app_label = 'main'
-        # Добавим опцию swappable, чтобы Django понимал, что это пользовательская модель
         swappable = 'AUTH_USER_MODEL'
 
     def add_achievement(self, achievement):
@@ -75,9 +83,6 @@ class Classifications(models.Model):
 
     def __str__(self):
         return self.name
-
-
-
 
 class Achievement(models.Model):
     TYPE_CHOICES = [
@@ -287,10 +292,10 @@ class TestQuestion(models.Model):
     test = models.ForeignKey(Test, on_delete=models.CASCADE)
     question_text = models.TextField()
     question_type = models.CharField(max_length=10, choices=QUESTION_TYPE_CHOICES)
-    points = models.PositiveIntegerField(default=1)  # Количество баллов за правильный ответ на вопрос
-    explanation = models.TextField(blank=True, null=True)  # Пояснение к вопросу
-    image = models.CharField(max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
-    duration_seconds = models.IntegerField(default=0)  # Ограничение по времени в секундах
+    points = models.PositiveIntegerField(default=1)
+    explanation = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to='questions/', blank=True, null=True)  # Изменено на ImageField
+    duration_seconds = models.IntegerField(default=0)
     position = models.PositiveIntegerField(default=0)
 
 class Theory(models.Model):
@@ -356,8 +361,6 @@ class TestAttempt(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=NOT_STARTED)
     test_results = models.JSONField(null=True, blank=True, default=dict)
     free_response = models.TextField(null=True, blank=True)
-    #moderator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderated_attempts')  # Добавляем поле модератора
-
     def __str__(self):
         return f'{self.test.name} - {self.employee.username}'
 

@@ -218,6 +218,18 @@ class MostIncorrectQuestionsAPIView(APIView):
 
 
 logger = logging.getLogger(__name__)
+@api_view(['GET'])
+def get_employee_info(request, employee_id):
+    try:
+        employee = Employee.objects.get(id=employee_id)
+        if not employee.is_active:
+            return Response({"message": "Account is deactivated"}, status=status.HTTP_403_FORBIDDEN)
+    except Employee.DoesNotExist:
+        return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = EmployeeSerializer(employee)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
 class DynamicPermission(BasePermission):
     def has_permission(self, request, view):
         required_permission = view.required_permissions.get(request.method.lower())

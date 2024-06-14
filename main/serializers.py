@@ -32,7 +32,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Employee
-        fields = ['username', 'email', 'karma', 'acoin_amount', 'experience', 'position', 'date_joined', 'role']
+        fields = ['id', 'username', 'email', 'position', 'level', 'experience', 'next_level_experience', 'karma', 'birth_date']  # Добавляем новое поле
         read_only_fields = ['level', 'next_level_experience']
 
     def get_role(self, obj):
