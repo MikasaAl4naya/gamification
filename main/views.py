@@ -580,6 +580,7 @@ def test_results(request, test_attempt_id):
         response_data["moderator"] = moderator_name
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 #@permission_classes([IsAdmin])
 def get_statistics():
     statistics = TestAttempt.objects.annotate(
@@ -1118,8 +1119,12 @@ def moderate_test_attempt(request, test_attempt_id):
         # Обновляем поле is_correct в зависимости от модерационного балла
         if moderation_score == max_question_score:
             question_to_moderate['is_correct'] = True
+        elif moderation_score > 0:
+            question_to_moderate['is_correct'] = False
+            question_to_moderate['is_partially_true'] = True
         else:
             question_to_moderate['is_correct'] = False
+            question_to_moderate['is_partially_true'] = False
 
     test_results['answers_info'] = answers_info
 
