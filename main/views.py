@@ -6,6 +6,7 @@ from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from rest_framework.exceptions import NotFound
 
@@ -70,6 +71,9 @@ class LoginAPIView(APIView):
                 karma = employee.karma
                 acoin = Acoin.objects.get(employee=employee).amount
 
+                # Получаем группы пользователя
+                groups = user.groups.values_list('name', flat=True)
+
                 # Возвращаем успешный ответ с данными сотрудника и токеном
                 return Response({
                     'message': 'Login successful',
@@ -77,6 +81,7 @@ class LoginAPIView(APIView):
                     'experience': experience,
                     'karma': karma,
                     'acoin': acoin,
+                    'groups': list(groups),
                     'token': token.key
                 }, status=status.HTTP_200_OK)
             else:
@@ -86,7 +91,6 @@ class LoginAPIView(APIView):
                 }, status=status.HTTP_401_UNAUTHORIZED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 #@permission_classes([IsAdmin])
 class TestScoreAPIView(APIView):
@@ -110,7 +114,36 @@ class TestScoreAPIView(APIView):
         }
         return Response(result)
 
-
+@api_view(['POST'])
+def deactivate_user(request, user_id):
+    try:
+        user = User.objects.get(id=user_id)
+        user.deactivate()
+        return Response({"message": "User deactivated successfully"}, status=status.HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+    except ValidationError as e:
+        return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['DELETE'])
+def delete_user(request, user_id):
+    try:
+        user = User.objects.get(id=user_id)
+        user.delete_employee()
+        return Response({"message": "User deleted successfully"}, status=status.HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+    except ValidationError as e:
+        return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['POST'])
+def activate_user(request, user_id):
+    try:
+        user = User.objects.get(id=user_id)
+        user.activate()
+        return Response({"message": "User activated successfully"}, status=status.HTTP_200_OK)
+    except User.DoesNotExist:
+        return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+    except ValidationError as e:
+        return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['GET'])
 #@permission_classes([IsAdmin])
 def test_statistics(request):
@@ -239,20 +272,48 @@ class DynamicPermission(BasePermission):
             return has_perm
         logger.debug("No required permission for this method")
         return False
+class AchievementListView(generics.ListAPIView):
+    queryset = Achievement.objects.all()
+    serializer_class = AchievementSerializer
 class EmployeeUpdateView(generics.UpdateAPIView):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
     permission_classes = [IsAuthenticated]
 
     def get_object(self):
-        # Здесь можно добавить логику получения объекта, например, по ID
         return self.request.user
+
+    def put(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+    def patch(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
 class EmployeeDetails(APIView):
     def get(self, request, username):
         try:
             employee = Employee.objects.get(username=username)
             serializer = EmployeeSerializer(employee)
             return Response(serializer.data)
+        except Employee.DoesNotExist:
+            return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def patch(self, request, username):
+        try:
+            employee = Employee.objects.get(username=username)
+            serializer = EmployeeSerializer(employee, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Employee.DoesNotExist:
             return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 class RegisterAPIView(APIView):

@@ -14,7 +14,7 @@ router.register(r'permissions', PermissionViewSet)
 
 urlpatterns = [
     path('api/login/', LoginAPIView.as_view(), name='api-login'),
-    path('employees/<str:username>/', EmployeeDetails.as_view(), name='employee_details'),
+    path('employee/<str:username>/', EmployeeDetails.as_view(), name='employee-details'),
     path('api/register/', RegisterAPIView.as_view(), name='register'),
     path('create_test/', create_test, name='create_test'),
     path('create_question/', CreateQuestion.as_view(), name='create_question'),
@@ -78,6 +78,8 @@ urlpatterns = [
     path('user/update/', EmployeeUpdateView.as_view(), name='employee-update'),
     # path('test/<int:test_id>/top_participants/', top_test_participants, name='top_test_participants'),
     path('top_participants/', top_participants, name='top_participants'),
+    path('delete_user/<int:user_id>/', delete_user, name='delete_user'),
+    path('achievements/', AchievementListView.as_view(), name='achievement-list'),
 
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
     path('', include(router.urls)),

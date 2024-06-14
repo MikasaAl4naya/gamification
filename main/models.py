@@ -29,27 +29,36 @@ class Employee(AbstractUser):
     experience = models.IntegerField(default=0)
     next_level_experience = models.IntegerField(default=100)
     karma = models.IntegerField(default=50)
-    birth_date = models.DateField(null=True, blank=True)  # Добавляем поле даты рождения
+    birth_date = models.DateField(null=True, blank=True)
+    about_me = models.TextField(null=True, blank=True)  # Новое поле для информации о себе
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)  # Новое поле для аватарки
+    status = models.CharField(max_length=100, null=True, blank=True)  # Новое поле для статуса
 
     def save(self, *args, **kwargs):
+        if not self.is_active and not kwargs.get('force_save', False):
+            raise ValidationError("Cannot modify a deactivated account.")
         if self.karma > 100:
             self.karma = 100
         super().save(*args, **kwargs)
 
     def deactivate(self):
         self.is_active = False
-        self.save()
+        self.save(force_save=True)
 
     def activate(self):
         self.is_active = True
-        self.save()
+        self.save(force_save=True)
 
     def increase_experience(self, amount):
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
         self.experience += amount
         if self.experience >= self.next_level_experience:
             self.level_up()
 
     def level_up(self):
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
         self.level += 1
         experience_multiplier = 2.0 - (self.level * 0.1)
         if experience_multiplier < 1.0:
@@ -64,20 +73,29 @@ class Employee(AbstractUser):
         self.save()
 
     def add_experience(self, experience):
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
         if experience is not None:
             self.experience += experience
             self.save()
 
     def add_acoins(self, acoins):
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
         if acoins is not None:
             AcoinTransaction.objects.create(employee=self, amount=acoins)
+
+    def add_achievement(self, achievement):
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
+        self.achievements.add(achievement)
+
+    def delete_employee(self):
+        self.delete()
 
     class Meta:
         app_label = 'main'
         swappable = 'AUTH_USER_MODEL'
-
-    def add_achievement(self, achievement):
-        self.achievements.add(achievement)
 class Classifications(models.Model):
     name = models.CharField(max_length=100, unique=True)
 
