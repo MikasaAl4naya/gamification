@@ -34,20 +34,25 @@ class Employee(AbstractUser):
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)  # Новое поле для аватарки
     status = models.CharField(max_length=100, null=True, blank=True)  # Новое поле для статуса
 
+    def deactivate(self):
+        self.is_active = False
+        self.force_save = True  # Установите свойство force_save перед вызовом save
+        self.save()
+
+    def delete_employee(self):
+        self.delete()
+
+    def activate(self):
+        self.is_active = True
+        self.force_save = True  # Установите свойство force_save перед вызовом save
+        self.save()
+
     def save(self, *args, **kwargs):
-        if not self.is_active and not kwargs.get('force_save', False):
+        if not self.is_active and not getattr(self, 'force_save', False):
             raise ValidationError("Cannot modify a deactivated account.")
         if self.karma > 100:
             self.karma = 100
         super().save(*args, **kwargs)
-
-    def deactivate(self):
-        self.is_active = False
-        self.save(force_save=True)
-
-    def activate(self):
-        self.is_active = True
-        self.save(force_save=True)
 
     def increase_experience(self, amount):
         if not self.is_active:
@@ -89,10 +94,6 @@ class Employee(AbstractUser):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
         self.achievements.add(achievement)
-
-    def delete_employee(self):
-        self.delete()
-
     class Meta:
         app_label = 'main'
         swappable = 'AUTH_USER_MODEL'
