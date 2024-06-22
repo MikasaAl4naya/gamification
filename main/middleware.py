@@ -1,6 +1,9 @@
-from django.contrib.auth import logout
-from django.http import JsonResponse
+import logging
 
+from django.contrib.auth import logout
+from rest_framework.authtoken.models import Token
+from django.http import JsonResponse
+from django.utils.deprecation import MiddlewareMixin
 
 class CheckActiveUserMiddleware:
     def __init__(self, get_response):
@@ -18,3 +21,16 @@ class CheckActiveUserMiddleware:
             return JsonResponse({"message": "Account is deactivated"}, status=403)
 
         return self.get_response(request)
+
+class EmployeeMiddleware(MiddlewareMixin):
+    def process_request(self, request):
+        token_key = request.META.get('HTTP_AUTHORIZATION')
+        if token_key and token_key.startswith('Token '):
+            try:
+                token_key = token_key.split(' ')[1]
+                token = Token.objects.get(key=token_key)
+                request.employee = token.user
+            except Token.DoesNotExist:
+                return JsonResponse({"message": "Invalid token"}, status=403)
+        else:
+            request.employee = None

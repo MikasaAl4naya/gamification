@@ -6,7 +6,9 @@ from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
 
+from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError
+from django.core.mail import EmailMessage
 from django.db import transaction
 from rest_framework.exceptions import NotFound
 
@@ -32,17 +34,17 @@ from rest_framework.fields import IntegerField
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import IsAdminUser, BasePermission, IsAuthenticated, AllowAny
 from rest_framework.utils import json
-
+from json.decoder import JSONDecodeError
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
     Acoin, TestAttempt, Theme, Classifications
 from rest_framework.generics import get_object_or_404
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
-from rest_framework.decorators import api_view, parser_classes, permission_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes, authentication_classes
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
     ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer, \
-    GroupSerializer, PermissionSerializer
+    GroupSerializer, PermissionSerializer, AdminEmployeeSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics, viewsets
@@ -50,6 +52,8 @@ from .serializers import LoginSerializer, EmployeeSerializer, EmployeeRegSeriali
 from django.contrib.auth import authenticate
 from .models import Theory
 from .serializers import TheorySerializer
+from .views_base import EmployeeAPIView
+
 
 class LoginAPIView(APIView):
     permission_classes = [AllowAny]
@@ -115,39 +119,47 @@ class TestScoreAPIView(APIView):
         return Response(result)
 
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAdminUser])
 def deactivate_user(request, user_id):
     try:
-        user = User.objects.get(id=user_id)
-        user.deactivate()
+        employee = Employee.objects.get(id=user_id)
+        employee.deactivate()
         return Response({"message": "User deactivated successfully"}, status=status.HTTP_200_OK)
-    except User.DoesNotExist:
+    except Employee.DoesNotExist:
         return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     except ValidationError as e:
         return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 @api_view(['DELETE'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAdminUser])
 def delete_user(request, user_id):
     try:
-        user = User.objects.get(id=user_id)
-        user.delete_employee()
+        employee = Employee.objects.get(id=user_id)
+        employee.delete_employee()
         return Response({"message": "User deleted successfully"}, status=status.HTTP_200_OK)
-    except User.DoesNotExist:
+    except Employee.DoesNotExist:
         return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     except ValidationError as e:
         return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 @api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAdminUser])
 def activate_user(request, user_id):
     try:
-        user = User.objects.get(id=user_id)
-        user.activate()
+        employee = Employee.objects.get(id=user_id)
+        employee.activate()
         return Response({"message": "User activated successfully"}, status=status.HTTP_200_OK)
-    except User.DoesNotExist:
+    except Employee.DoesNotExist:
         return Response({"message": "User not found"}, status=status.HTTP_404_NOT_FOUND)
     except ValidationError as e:
         return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['GET'])
-#@permission_classes([IsAdmin])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAdmin])
 def test_statistics(request):
-    # Получение всех попыток с аннотацией длительности и процента набранных баллов
     attempts_with_statistics = TestAttempt.objects.annotate(
         duration=ExpressionWrapper(
             F('end_time') - F('start_time'),
@@ -159,12 +171,12 @@ def test_statistics(request):
         )
     ).select_related('employee', 'test', 'test__theme')
 
-    # Определение последней попытки для каждого теста и сотрудника
     last_attempts = {}
     for attempt in attempts_with_statistics:
-        key = (attempt.employee.id, attempt.test.id)
-        if key not in last_attempts or attempt.end_time > last_attempts[key].end_time:
-            last_attempts[key] = attempt
+        if attempt.end_time is not None:
+            key = (attempt.employee.id, attempt.test.id)
+            if key not in last_attempts or attempt.end_time > last_attempts[key].end_time:
+                last_attempts[key] = attempt
 
     statistics = []
     all_tests = set()
@@ -184,7 +196,7 @@ def test_statistics(request):
             try:
                 test_results_data = json.loads(test_results)
                 moderator_name = test_results_data.get("moderator")
-            except (TypeError, json.JSONDecodeError):
+            except (TypeError, JSONDecodeError):
                 pass
 
         duration_seconds = round(attempt.duration.total_seconds(), 0) if attempt.end_time else None
@@ -235,8 +247,9 @@ def test_statistics(request):
         'employees': sorted_employees
     }
 
-    return Response(result, status=status.HTTP_200_OK)
-#@permission_classes([IsAdmin])
+    return Response(result)
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAdmin])
 class MostIncorrectQuestionsAPIView(APIView):
     def get(self, request):
         # Получаем список вопросов, по которым сотрудники чаще всего ошибаются
@@ -297,6 +310,22 @@ class EmployeeUpdateView(generics.UpdateAPIView):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(serializer.data)
+class AdminEmployeeUpdateView(generics.UpdateAPIView):
+    queryset = Employee.objects.all()
+    serializer_class = AdminEmployeeSerializer
+    permission_classes = [IsAdminUser]
+
+    def put(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+    def patch(self, request, *args, **kwargs):
+        kwargs['partial'] = True
+        return self.put(request, *args, **kwargs)
 class EmployeeDetails(APIView):
     def get(self, request, username):
         try:
@@ -316,12 +345,9 @@ class EmployeeDetails(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Employee.DoesNotExist:
             return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAdminUser])
 class RegisterAPIView(APIView):
-    permission_classes = [IsAuthenticated, DynamicPermission]
-    authentication_classes = [TokenAuthentication]
-    required_permissions = {
-        'post': 'auth.add_user',
-    }
     @transaction.atomic
     def post(self, request):
         serializer = EmployeeRegSerializer(data=request.data)
@@ -332,11 +358,15 @@ class RegisterAPIView(APIView):
             employee.set_password(password)
             employee.save()
 
-            request.session['generated_password'] = password
+            # Отправка электронной почты с паролем
+            subject = 'Ваш новый пароль'
+            message = f'Здравствуйте, {employee.first_name}!\n\nВаш новый пароль: {password}\n'
+            email = EmailMessage(subject, message, to=[employee.email])
+            email.send()
 
             return Response({
                 'message': 'Registration successful',
-                'generated_password': password
+                'generated_password': password  # Можете убрать эту строку, если не хотите возвращать пароль в ответе
             }, status=status.HTTP_201_CREATED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -611,7 +641,7 @@ def test_results(request, test_attempt_id):
 
     try:
         test_results = json.loads(test_attempt.test_results)
-    except (TypeError, json.JSONDecodeError):
+    except (TypeError, JSONDecodeError):
         return Response({"message": "Invalid test results format"}, status=status.HTTP_400_BAD_REQUEST)
 
     test_id = test_attempt.test_id
@@ -654,7 +684,7 @@ def test_results(request, test_attempt_id):
 
     return Response(response_data, status=status.HTTP_200_OK)
 
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 def get_statistics():
     statistics = TestAttempt.objects.annotate(
         total_score=F('score'),
@@ -746,89 +776,112 @@ def get_test_by_id(request, test_id):
     return Response(response_data)
 
 
-@api_view(['GET'])
-def get_themes_with_tests(request, employee_id):
-    try:
-        employee = Employee.objects.get(id=employee_id)
-    except Employee.DoesNotExist:
-        return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+class ThemesWithTestsView(EmployeeAPIView):
 
-    themes = Theme.objects.all().order_by('name')
-    themes_with_tests = []
+    def get(self, request, *args, **kwargs):
+        employee = request.employee
 
-    for theme in themes:
-        tests = Test.objects.filter(theme=theme)
-        tests_info = []
+        themes = Theme.objects.all().order_by('name')
+        themes_with_tests = []
 
-        for test in tests:
-            created_at = test.created_at.strftime("%Y-%m-%dT%H:%M")
-            test_attempt = TestAttempt.objects.filter(employee=employee, test=test).last()
+        for theme in themes:
+            tests = Test.objects.filter(theme=theme)
+            tests_info = []
 
-            if test_attempt:
-                if test_attempt.test_results:
-                    try:
-                        test_results = json.loads(test_attempt.test_results)
-                        total_score = test_results.get("Набранное количество баллов", 0)
-                        max_score = test.max_score
-                        answers_info = test_results.get("answers_info", [])
-                        test_status = {
-                            "status": test_attempt.status,
-                            "total_score": test_attempt.score,
-                            "max_score": max_score
-                        }
-                    except (json.JSONDecodeError, TypeError, KeyError):
-                        test_status = None
+            for test in tests:
+                created_at = test.created_at.strftime("%Y-%m-%dT%H:%M")
+                test_attempt = TestAttempt.objects.filter(employee=employee, test=test).last()
+
+                if test_attempt:
+                    if test_attempt.test_results:
+                        try:
+                            test_results = json.loads(test_attempt.test_results)
+                            total_score = test_results.get("Набранное количество баллов", 0)
+                            max_score = test.max_score
+                            answers_info = test_results.get("answers_info", [])
+                            test_status = {
+                                "status": test_attempt.status,
+                                "total_score": test_attempt.score,
+                                "max_score": max_score
+                            }
+                        except (json.JSONDecodeError, TypeError, KeyError):
+                            test_status = None
+                    else:
+                        test_status = {"status": "Не начато", "total_score": 0, "max_score": 0}
                 else:
                     test_status = {"status": "Не начато", "total_score": 0, "max_score": 0}
-            else:
-                test_status = {"status": "Не начато", "total_score": 0, "max_score": 0}
 
-            has_sufficient_karma = employee.karma >= test.required_karma
-            has_sufficient_experience = employee.experience >= test.min_experience
-            test_available = has_sufficient_karma and has_sufficient_experience
+                has_sufficient_karma = employee.karma >= test.required_karma
+                has_sufficient_experience = employee.experience >= test.min_experience
+                test_available = has_sufficient_karma and has_sufficient_experience
 
-            remaining_days = None
-            if test_attempt and test.retry_delay_days is not None:
-                end_time = test_attempt.end_time or timezone.now()
-                time_since_last_attempt = timezone.now() - end_time
-                remaining_time = timedelta(days=test.retry_delay_days) - time_since_last_attempt
-                if remaining_time.total_seconds() > 0:
-                    remaining_days = remaining_time.days
-                else:
-                    remaining_days = 0
+                remaining_days = None
+                if test_attempt and test.retry_delay_days is not None:
+                    end_time = test_attempt.end_time or timezone.now()
+                    time_since_last_attempt = timezone.now() - end_time
+                    remaining_time = timedelta(days=test.retry_delay_days) - time_since_last_attempt
+                    if remaining_time.total_seconds() > 0:
+                        remaining_days = remaining_time.days
+                    else:
+                        remaining_days = 0
 
-            test_info = {
-                'test': test.id,
-                'name': test.name,
-                'required_karma': test.required_karma,
-                'min_exp': test.min_experience,
-                'achievement': test.achievement.name if test.achievement else None,
-                'created_at': created_at,
-                'author': test.author.name if test.author else None,
-                'status': test_status,
-                'has_sufficient_karma': has_sufficient_karma,
-                'has_sufficient_experience': has_sufficient_experience,
-                'test_available': test_available,
-                'remaining_days': remaining_days
+                test_info = {
+                    'test': test.id,
+                    'name': test.name,
+                    'required_karma': test.required_karma,
+                    'min_exp': test.min_experience,
+                    'achievement': test.achievement.name if test.achievement else None,
+                    'created_at': created_at,
+                    'author': test.author.name if test.author else None,
+                    'status': test_status,
+                    'has_sufficient_karma': has_sufficient_karma,
+                    'has_sufficient_experience': has_sufficient_experience,
+                    'test_available': test_available,
+                    'remaining_days': remaining_days
+                }
+
+                tests_info.append(test_info)
+
+            theme_with_tests = {
+                'theme': theme.name,
+                'theme_id': theme.id,
+                'tests': tests_info
             }
+            themes_with_tests.append(theme_with_tests)
 
-            tests_info.append(test_info)
-
-        theme_with_tests = {
-            'theme': theme.name,
-            'theme_id': theme.id,
-            'tests': tests_info
-        }
-        themes_with_tests.append(theme_with_tests)
-
-    return Response(themes_with_tests)
-
-
+        return Response(themes_with_tests)
 @api_view(['GET'])
 def get_question(request, question_id):
     question = get_object_or_404(TestQuestion, id=question_id)
     serializer = TestQuestionSerializer(question)
     return Response(serializer.data)
+
+
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAdminUser])
+@api_view(['POST'])
+def change_password(request, user_id):
+    try:
+        employee = get_object_or_404(Employee, id=user_id)
+        new_password = get_random_string(length=10)
+
+        # Хешируем новый пароль
+        hashed_password = make_password(new_password)
+
+        # Устанавливаем хешированный пароль для пользователя и сохраняем его
+        employee.password = hashed_password
+        employee.save()
+
+        # Отправка электронной почты с новым паролем
+        subject = 'Ваш новый пароль'
+        message = f'Здравствуйте, {employee.first_name}!\n\nВаш новый пароль: {new_password}\n'
+        email = EmailMessage(subject, message, to=[employee.email])
+        email.send()
+
+        # Возвращаем сообщение об успешной смене пароля
+        return Response({"message": "Password changed successfully and sent to email."}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['POST'])
 #@permission_classes([IsAdmin])
 def create_request(request):
@@ -961,7 +1014,7 @@ def create_test(request):
     elif 'multipart/form-data' in request.content_type:
         try:
             blocks_data = json.loads(request.data.get('blocks', '[]'))
-        except json.JSONDecodeError:
+        except JSONDecodeError:
             return Response({'error': 'Invalid JSON format for blocks'}, status=status.HTTP_400_BAD_REQUEST)
     else:
         return Response({'error': 'Unsupported media type'}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
@@ -1270,32 +1323,22 @@ def required_tests_chain(request, employee_id, test_id):
     return Response(response_data, status=status.HTTP_200_OK)
 
 
-@api_view(['POST'])
-def start_test(request, employee_id, test_id):
-    if request.method == 'POST':
+class StartTestView(EmployeeAPIView):
+
+    def post(self, request, test_id, *args, **kwargs):
+        employee = request.employee
+
         try:
-            employee = Employee.objects.get(id=employee_id)
             test = Test.objects.get(id=test_id)
-        except (Employee.DoesNotExist, Test.DoesNotExist):
-            return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Test.DoesNotExist:
+            return Response({"message": "Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Проверка на достаточно опыта и кармы у сотрудника (раскомментируйте, если требуется)
-        # if employee.experience < test.experience_points:
-        #     return Response({"message": "Not enough experience to start this test"},
-        #                     status=status.HTTP_400_BAD_REQUEST)
-        #
-        # if employee.karma < test.required_karma:
-        #     return Response({"message": "Not enough karma to start this test"},
-        #                     status=status.HTTP_400_BAD_REQUEST)
-
-        # Проверка на наличие обязательного предыдущего теста
         required_test = test.required_test
         if required_test:
             if not TestAttempt.objects.filter(employee=employee, test=required_test, status=TestAttempt.PASSED).exists():
                 return Response({"message": f"You must pass test {required_test.id} before starting this test"},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-        # Проверка на наличие старых попыток в статусе "В процессе" или "Не начат"
         old_attempts = TestAttempt.objects.filter(
             employee=employee, test=test, status__in=[TestAttempt.IN_PROGRESS, TestAttempt.NOT_STARTED]
         )
@@ -1303,25 +1346,24 @@ def start_test(request, employee_id, test_id):
         if old_attempts.exists():
             old_attempts.delete()
 
-        # Создаем новую попытку прохождения теста с тем же ID, если старая попытка была удалена
         test_attempt = TestAttempt.objects.create(
             employee=employee,
             test=test,
-            status=TestAttempt.IN_PROGRESS  # Устанавливаем статус "в процессе"
+            status=TestAttempt.IN_PROGRESS
         )
 
-        # Возвращаем идентификатор только что созданного TestAttempt
         return Response({"test_attempt_id": test_attempt.id}, status=status.HTTP_201_CREATED)
 
 
-@api_view(['POST'])
-def complete_test(request, employee_id, test_id):
-    if request.method == 'POST':
+class CompleteTestView(EmployeeAPIView):
+
+    def post(self, request, test_id, *args, **kwargs):
+        employee = request.employee
+
         try:
-            employee = Employee.objects.get(id=employee_id)
             test = Test.objects.get(id=test_id)
-        except (Employee.DoesNotExist, Test.DoesNotExist):
-            return Response({"message": "Employee or Test not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Test.DoesNotExist:
+            return Response({"message": "Test not found"}, status=status.HTTP_404_NOT_FOUND)
 
         test_attempt = TestAttempt.objects.filter(employee=employee, test=test, status=TestAttempt.IN_PROGRESS).order_by('-start_time').last()
 
@@ -1345,10 +1387,8 @@ def complete_test(request, employee_id, test_id):
             if answer_key in request.data:
                 submitted_answer = request.data[answer_key]
 
-                # Инициализируем переменную is_correct
                 is_correct = False
 
-                # Вычисляем количество баллов за текущий вопрос
                 if question.question_type == 'single':
                     submitted_answer_number = int(submitted_answer)
                     submitted_answer_option = answer_options[submitted_answer_number - 1]
@@ -1359,27 +1399,22 @@ def complete_test(request, employee_id, test_id):
                     else:
                         question_score = Decimal('0.0')
                 elif question.question_type == 'text':
-                    # Для вопросов с типом "text" сохраняем текстовый ответ
                     submitted_text_answer = submitted_answer
                     question_score = Decimal('0.0')
                 elif question.question_type == 'multiple':
                     if isinstance(submitted_answer, int):
-                        submitted_answer = [submitted_answer]  # Если только один вариант был выбран, преобразуем его в список
+                        submitted_answer = [submitted_answer]
                     submitted_answer_numbers = [int(answer) for answer in submitted_answer]
                     correct_option_numbers = [index + 1 for index, option in enumerate(answer_options) if option['is_correct']]
 
-                    # Считаем количество выбранных правильных и неправильных ответов
                     selected_correct_answers = sum(1 for answer in submitted_answer_numbers if answer in correct_option_numbers)
                     selected_incorrect_answers = sum(1 for answer in submitted_answer_numbers if answer not in correct_option_numbers)
 
-                    # Рассчитываем баллы за каждый правильный и неправильный ответ
                     question_score_per_correct_answer = Decimal(str(question.points)) / Decimal(len(correct_option_numbers))
                     question_score_per_incorrect_answer = Decimal(str(question.points)) / Decimal(len(correct_option_numbers))
 
-                    # Вычисляем итоговый балл за вопрос
                     question_score = (selected_correct_answers * question_score_per_correct_answer) - (selected_incorrect_answers * question_score_per_incorrect_answer)
 
-                    # Не позволяем общему баллу за вопрос быть отрицательным
                     if question_score < 0:
                         question_score = Decimal('0.0')
 
@@ -1388,10 +1423,8 @@ def complete_test(request, employee_id, test_id):
 
                     total_score += question_score
 
-                # Округляем балл до десятых
                 question_score = question_score.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
 
-                # Обновляем данные в answers_info
                 answer_info = {
                     "question_text": question_text,
                     "type": question.question_type,
@@ -1401,7 +1434,6 @@ def complete_test(request, employee_id, test_id):
                     "explanation": question.explanation
                 }
                 if question.question_type == 'text':
-                    # Добавляем текстовый ответ в информацию о вопросе
                     answer_info['text_answer'] = submitted_text_answer
                     answer_info['max_question_score'] = float(question.points)
                 else:
@@ -1415,15 +1447,12 @@ def complete_test(request, employee_id, test_id):
                         answer_info["answer_options"].append(option_info)
                 answers_info.append(answer_info)
 
-        # Округляем общий балл до десятых
         total_score = total_score.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
 
-        # Обновляем данные в test_attempt
         test_attempt.score = float(total_score)
         test_attempt.end_time = timezone.now()
         test_attempt.save()
 
-        # Сохраняем ответы сотрудника и вопросы в test_attempt
         test_attempt.test_results = json.dumps({
             "Набранное количество баллов": float(total_score),
             "Максимальное количество баллов": float(max_score),
@@ -1431,10 +1460,8 @@ def complete_test(request, employee_id, test_id):
         }, ensure_ascii=False)
         test_attempt.save()
 
-        # Проверяем наличие вопросов типа 'text'
         has_text_questions = TestQuestion.objects.filter(test=test, question_type='text').exists()
 
-        # Проверяем, пройден ли тест
         if total_score >= Decimal(str(test.passing_score)):
             test_attempt.status = TestAttempt.PASSED
         elif has_text_questions:
@@ -1442,14 +1469,12 @@ def complete_test(request, employee_id, test_id):
         else:
             test_attempt.status = TestAttempt.FAILED
 
-        # Сохраняем изменения в объекте test_attempt
         test_attempt.save()
         response_data = {
             "status": test_attempt.status,
             "test_attempt_id": test_attempt.id
         }
         return Response(response_data, status=status.HTTP_200_OK)
-
 
 @api_view(['GET'])
 def top_participants(request):

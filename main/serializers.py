@@ -36,6 +36,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'next_level_experience', 'karma', 'birth_date', 'about_me',
             'avatar', 'status', 'acoin_amount'
         ]
+        # Удаляем read_only_fields для полей, которые могут быть обновлены
         read_only_fields = ['username', 'email', 'position', 'level', 'experience', 'next_level_experience', 'karma']
 
     def get_role(self, obj):
@@ -55,6 +56,35 @@ class EmployeeSerializer(serializers.ModelSerializer):
             instance.acoin.save()
 
         return super().update(instance, validated_data)
+class AdminEmployeeSerializer(serializers.ModelSerializer):
+    acoin_amount = serializers.IntegerField(source='acoin.amount', required=False)
+
+    class Meta:
+        model = Employee
+        fields = [
+            'username', 'first_name', 'last_name', 'email', 'position',
+            'level', 'experience', 'next_level_experience', 'karma', 'birth_date',
+            'about_me', 'avatar', 'status', 'is_active', 'acoin_amount', 'groups'
+        ]
+
+    def update(self, instance, validated_data):
+        acoin_data = validated_data.pop('acoin', None)
+        groups_data = validated_data.pop('groups', None)
+
+        # Update the Employee instance
+        instance = super().update(instance, validated_data)
+
+        # Update Acoin amount if present
+        if acoin_data:
+            acoin_instance, created = Acoin.objects.get_or_create(employee=instance)
+            acoin_instance.amount = acoin_data['amount']
+            acoin_instance.save()
+
+        # Update groups if present
+        if groups_data:
+            instance.groups.set(groups_data)
+
+        return instance
 class TestAttemptModerationSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
     test_name = serializers.CharField(source='test.name', read_only=True)
