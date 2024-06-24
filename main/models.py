@@ -94,9 +94,22 @@ class Employee(AbstractUser):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
         self.achievements.add(achievement)
+
     class Meta:
         app_label = 'main'
         swappable = 'AUTH_USER_MODEL'
+
+class FilePath(models.Model):
+    name = models.CharField(max_length=100)
+    path = models.CharField(max_length=255, default='')
+
+    def __str__(self):
+        return f"{self.name}: {self.path}"
+class LastProcessedDate(models.Model):
+    last_date = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return self.last_date.strftime('%Y-%m-%d %H:%M:%S') if self.last_date else 'Never'
 class Classifications(models.Model):
     name = models.CharField(max_length=100, unique=True)
 

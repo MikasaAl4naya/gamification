@@ -36,7 +36,7 @@ from rest_framework.permissions import IsAdminUser, BasePermission, IsAuthentica
 from rest_framework.utils import json
 from json.decoder import JSONDecodeError
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
-    Acoin, TestAttempt, Theme, Classifications
+    Acoin, TestAttempt, Theme, Classifications, LastProcessedDate, FilePath
 from rest_framework.generics import get_object_or_404
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
@@ -469,6 +469,32 @@ def delete_all_tests(request):
         tests.delete()
 
         return Response({"message": "All tests have been deleted"}, status=status.HTTP_204_NO_CONTENT)
+@api_view(['POST'])
+def set_file_path(request):
+    name = request.data.get('name', '')
+    path = request.data.get('path', '')
+    if name and path:
+        file_path, created = FilePath.objects.get_or_create(name=name)
+        file_path.path = path
+        file_path.save()
+        return Response({"message": f"File path for {name} updated successfully"}, status=status.HTTP_200_OK)
+    else:
+        return Response({"error": "Name and path not provided"}, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['DELETE'])
+def delete_all_last_processed_dates(request):
+    if request.method == 'DELETE':
+        LastProcessedDate.objects.all().delete()
+        return Response({"message": "All LastProcessedDate records have been deleted"}, status=status.HTTP_204_NO_CONTENT)
+@api_view(['DELETE'])
+def delete_employee_data(request, employee_id):
+    if request.method == 'DELETE':
+        try:
+            employee = Employee.objects.get(id=employee_id)
+            employee.delete()
+            return Response({"message": f"Employee with ID {employee_id} has been deleted"}, status=status.HTTP_204_NO_CONTENT)
+        except Employee.DoesNotExist:
+            return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+
 @api_view(['GET'])
 def get_user_balance(request, user_id):
     try:

@@ -28,16 +28,22 @@ class LoginSerializer(serializers.Serializer):
 
 class EmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
         fields = [
             'username', 'email', 'first_name', 'last_name', 'position', 'level', 'experience',
             'next_level_experience', 'karma', 'birth_date', 'about_me',
-            'avatar', 'status', 'acoin_amount'
+            'avatar_url', 'status', 'acoin_amount'
         ]
-        # Удаляем read_only_fields для полей, которые могут быть обновлены
         read_only_fields = ['username', 'email', 'position', 'level', 'experience', 'next_level_experience', 'karma']
+
+    def get_avatar_url(self, obj):
+        request = self.context.get('request')
+        if obj.avatar and hasattr(obj.avatar, 'url'):
+            return request.build_absolute_uri(obj.avatar.url)
+        return None
     def get_role(self, obj):
         roles = [group.name[:-1] if group.name.endswith('Ы') else group.name for group in obj.groups.all()]
         return roles
