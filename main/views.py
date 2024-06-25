@@ -856,14 +856,14 @@ class ThemesWithTestsView(APIView):
                         remaining_days = remaining_time.days
                         test_available = False  # Обновляем test_available, если нужно ждать
                         if remaining_days >= 1:
-                            remaining_time_msg = f"Reattempt available in {remaining_days} days"
+                            remaining_time_msg = f"{remaining_days} days"
                         else:
                             remaining_hours, remaining_minutes = divmod(remaining_time.seconds, 3600)
                             remaining_minutes //= 60
                             if remaining_hours >= 1:
-                                remaining_time_msg = f"Reattempt available in {remaining_hours} hours"
+                                remaining_time_msg = f"{remaining_hours} hours"
                             else:
-                                remaining_time_msg = f"Reattempt available in {remaining_minutes} minutes"
+                                remaining_time_msg = f"{remaining_minutes} minutes"
 
                 test_info = {
                     'test': test.id,
