@@ -1,18 +1,16 @@
-# scripts/run_watchers.py
 import os
 import sys
 import time
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import django
 
-# Добавляем корневую директорию проекта в sys.path
 project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(project_path)
 
-import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gamefication.settings')
 django.setup()
 
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 from main.models import FilePath
 from tasks import update_employee_karma, get_file_path
 
@@ -44,7 +42,7 @@ class Handler(FileSystemEventHandler):
     def on_created(self, event):
         if event.is_directory:
             return None
-        elif event.src_path.endswith(".xlsx"):  # Убедитесь, что это Excel файл
+        elif event.src_path.endswith(".xlsx"):
             print(f"Received created event - {event.src_path}")
             update_employee_karma(event.src_path)
 

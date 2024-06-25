@@ -1,10 +1,8 @@
-# main/tasks.py
 import pandas as pd
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from main.models import Employee, LastProcessedDate, FilePath
 from datetime import datetime
-
 
 def get_file_path(name):
     try:
@@ -13,14 +11,12 @@ def get_file_path(name):
     except FilePath.DoesNotExist:
         return None
 
-
 def process_work_schedule(file_path):
     df = pd.read_excel(file_path, skiprows=3)
     df = df.rename(columns={'Unnamed: 1': 'ФИО', 'Unnamed: 2': 'Город'})
     print(f"DataFrame columns: {df.columns}")
     print(df.head())
     return df
-
 
 def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
     scheduled_start = pd.to_datetime(scheduled_start)
@@ -31,7 +27,6 @@ def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
     if actual_start > scheduled_start or actual_end < scheduled_end:
         return False
     return True
-
 
 def update_employee_karma(file_path):
     df = process_work_schedule(file_path)
@@ -59,7 +54,7 @@ def update_employee_karma(file_path):
                 for day in range(last_processed_date + 1, current_date + 1):
                     shift_info = row.get(f'Unnamed: {day}', '').strip().lower()
                     if any(x in shift_info for x in ['выходной', 'о', 'бс', 'б']):
-                        continue  # Игнорируем выходные, отпуска, БС и больничные
+                        continue
 
                     if '\n' in shift_info:
                         parts = shift_info.split('\n')
@@ -71,10 +66,9 @@ def update_employee_karma(file_path):
                             actual_start, actual_end = actual_time.split('-')
 
                             if not check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
-                                employee.karma -= 5  # Понижаем карму за позднее начало или ранний уход
+                                employee.karma -= 5
                                 print(f"Karma decreased by 5 for {full_name} (late start/early end)")
 
-                        # Повышаем карму ежедневно на 2
                         employee.karma += 2
                         print(f"Karma increased by 2 for {full_name} (daily increment)")
 
@@ -88,9 +82,8 @@ def update_employee_karma(file_path):
     last_processed_date_obj.save()
     print(f"Last processed date updated to {last_processed_date_obj.last_date}")
 
-
 def run_update(name):
-    file_path = get_file_path(name)  # Получение пути к файлу по названию
+    file_path = get_file_path(name)
     if file_path:
         update_employee_karma(file_path)
     else:

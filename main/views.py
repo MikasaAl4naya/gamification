@@ -96,7 +96,7 @@ class LoginAPIView(APIView):
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 class TestScoreAPIView(APIView):
     def get(self, request, test_id):
         # Получаем максимальное количество баллов и количество попыток для каждого сотрудника
@@ -372,7 +372,7 @@ class RegisterAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 @api_view(['POST'])
 def create_theme(request):
     if request.method == 'POST':
@@ -453,12 +453,12 @@ class GroupViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(serializer.data)
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 class PermissionViewSet(viewsets.ModelViewSet):
     queryset = Permission.objects.all()
     serializer_class = PermissionSerializer
     permission_classes = [IsAdminUser]
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 @api_view(['DELETE'])
 def delete_all_tests(request):
     if request.method == 'DELETE':
@@ -556,7 +556,7 @@ def get_test_with_theory(request, test_id):
     except Test.DoesNotExist:
         return Response({'error': 'Test not found'}, status=404)
 
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 class UpdateTestAndContent(APIView):
     def put(self, request, test_id):
         return self.update_test_and_content(request, test_id, partial=False)
@@ -913,7 +913,7 @@ def change_password(request, user_id):
     except Exception as e:
         return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['POST'])
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 def create_request(request):
     if request.method == 'POST':
         serializer = RequestSerializer(data=request.data)
@@ -921,7 +921,7 @@ def create_request(request):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 class ThemeDeleteAPIView(APIView):
     def delete(self, request, theme_id):
         try:
@@ -931,7 +931,7 @@ class ThemeDeleteAPIView(APIView):
 
         theme.delete()
         return Response({"message": "Theme deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 @api_view(['PATCH'])
 def update_theme_name(request, theme_id):
     try:
@@ -950,7 +950,7 @@ def update_theme_name(request, theme_id):
     theme.save()
 
     return Response({"message": "Theme name updated successfully"}, status=status.HTTP_200_OK)
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 @api_view(['DELETE'])
 def delete_test_attempt(request, attempt_id):
     try:
@@ -963,7 +963,7 @@ def delete_test_attempt(request, attempt_id):
     test_attempt.delete()
 
     return Response({"message": "Test attempt deleted successfully"}, status=status.HTTP_200_OK)
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 @api_view(['POST'])
 def create_achievement(request):
     if request.method == 'POST':
@@ -1502,10 +1502,8 @@ def top_participants(request):
     test_id = request.query_params.get('test_id')
 
     if test_id:
-        # Фильтруем попытки по данному тесту
         attempts = TestAttempt.objects.filter(test_id=test_id)
     else:
-        # Выбираем все попытки
         attempts = TestAttempt.objects.all()
 
     top_statistics = attempts.values('employee_id', 'employee__first_name', 'employee__last_name').annotate(
@@ -1522,7 +1520,7 @@ def top_participants(request):
             'employee_name': f"{item['employee__first_name']} {item['employee__last_name']}",
             'total_score': item['total_score'],
             'total_attempts': item['total_attempts'],
-            'average_score': round(item['average_score'], 2)
+            'average_score': round(item['average_score'], 2) if item['average_score'] is not None else None
         }
         for item in top_statistics
     ]
@@ -1560,11 +1558,13 @@ class StatisticsAPIView(APIView):
 
         # Возвращаем информацию по каждому сотруднику
         return JsonResponse(employees_statistics, safe=False)
+
+@permission_classes([IsAdminUser])
 class QuestionErrorsStatistics(APIView):
     def get(self, request):
-        # Создаем словарь для хранения информации о частоте ошибок
+        # Создаем словари для хранения информации о частоте ошибок и общего числа ответов
         error_counter = Counter()
-        total_answers_counter = Counter()  # Для подсчета общего числа ответов на каждый вопрос
+        total_answers_counter = Counter()
 
         # Обходим все попытки прохождения тестов
         for attempt in TestAttempt.objects.all():
@@ -1595,7 +1595,7 @@ class QuestionErrorsStatistics(APIView):
                 "question_text": qid.split('_')[0],
                 "total_answers": total_answers_counter[qid],
                 "error_count": count,
-                "error_ratio": round(count / total_answers_counter[qid] * 100,1) if total_answers_counter[qid] != 0 else 0
+                "error_ratio": round(count / total_answers_counter[qid] * 100, 1) if total_answers_counter[qid] != 0 else 0
             }
             for qid, count in error_counter.items()
         ]
@@ -1608,11 +1608,12 @@ class QuestionErrorsStatistics(APIView):
         })
 
 
-
+@permission_classes([IsAdminUser])
 class QuestionCorrectStatistics(APIView):
     def get(self, request):
-        # Создаем словари для хранения информации о частоте ошибок и правильных ответов
+        # Создаем словари для хранения информации о частоте правильных ответов и общего количества ответов
         correct_counter = Counter()
+        total_answers_counter = Counter()
 
         # Обходим все попытки прохождения тестов
         for attempt in TestAttempt.objects.all():
@@ -1623,19 +1624,36 @@ class QuestionCorrectStatistics(APIView):
                 try:
                     results_dict = json.loads(test_results)
                     for answer_info in results_dict.get("answers_info", []):
-                        # Проверяем, является ли ответ неправильным или правильным
-                        if  answer_info["is_correct"]:
-                            correct_counter[(answer_info["question_text"], attempt.test_id)] += 1
+                        question_text = answer_info.get("question_text")
+                        test_id = attempt.test_id
+                        question_id = f"{question_text}_{test_id}"
+                        # Увеличиваем счетчик общего числа ответов только один раз для каждого вопроса
+                        total_answers_counter[question_id] += 1
+                        # Проверяем, является ли ответ правильным
+                        if answer_info["is_correct"]:
+                            correct_counter[question_id] += 1
                 except ValueError:
                     # Если не удалось преобразовать строку в JSON, пропускаем эту попытку
                     pass
 
-        # Получаем список вопросов, по которым чаще всего ошибаются
-        most_common_correct = correct_counter.most_common()
+        # Формируем список вопросов, по которым чаще всего отвечают правильно
+        most_common_correct = [
+            {
+                "question_id": qid.split('_')[0],
+                "test_id": qid.split('_')[1],
+                "question_text": qid.split('_')[0],
+                "total_answers": total_answers_counter[qid],
+                "correct_count": count,
+                "correct_ratio": round(count / total_answers_counter[qid] * 100, 1) if total_answers_counter[qid] != 0 else 0
+            }
+            for qid, count in correct_counter.items()
+        ]
 
+        # Сортируем список по соотношению правильных ответов к общему количеству ответов
+        most_common_correct = sorted(most_common_correct, key=lambda x: x["correct_ratio"], reverse=True)
 
         return Response({
-            "most_common_errors": most_common_correct
+            "most_common_correct": most_common_correct
         })
 class TestStatisticsAPIView(APIView):
     def get(self, request):
