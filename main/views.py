@@ -1625,7 +1625,7 @@ class QuestionErrorsStatistics(APIView):
         ]
 
         # Сортируем список по соотношению неверных ответов к общему количеству ответов
-        most_common_errors = sorted(most_common_errors, key=lambda x: x["error_ratio"], reverse=True)
+        most_common_errors = sorted(most_common_errors, key=lambda x: x["ratio"], reverse=True)
 
         return Response({
             "most_common": most_common_errors
@@ -1674,7 +1674,7 @@ class QuestionCorrectStatistics(APIView):
         ]
 
         # Сортируем список по соотношению правильных ответов к общему количеству ответов
-        most_common_correct = sorted(most_common_correct, key=lambda x: x["correct_ratio"], reverse=True)
+        most_common_correct = sorted(most_common_correct, key=lambda x: x["ratio"], reverse=True)
 
         return Response({
             "most_common": most_common_correct
