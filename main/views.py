@@ -12,7 +12,7 @@ from django.core.mail import EmailMessage
 from django.db import transaction
 from rest_framework.exceptions import NotFound
 
-from .permissions import IsAdmin, IsModerator, IsUser, IsSelfOrAdmin
+from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.authentication import TokenAuthentication
@@ -615,7 +615,7 @@ class UpdateTestAndContent(APIView):
         else:
             return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-@permission_classes([IsSelfOrAdmin])
+@permission_classes([IsModeratorOrAdmin])
 @api_view(['GET'])
 def test_moderation_result(request, test_attempt_id):
     try:
@@ -699,16 +699,18 @@ def test_results(request, test_attempt_id):
             test_attempt.end_time - test_attempt.start_time).total_seconds() if test_attempt.end_time else None
     }
 
+
     moderation_comment = test_results.get("moderation_comment", "")
     if moderation_comment:
         response_data["moderation_comment"] = moderation_comment
 
-    # Добавляем имя модератора, если оно доступно
+    # Добавим отладочное сообщение
     moderator_name = test_results.get("moderator")
     if moderator_name:
         response_data["moderator"] = moderator_name
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 
 @permission_classes([IsAdmin])
 def get_statistics():
@@ -905,7 +907,9 @@ def change_password(request, user_id):
         email.send()
 
         # Возвращаем сообщение об успешной смене пароля
-        return Response({"message": "Password changed successfully and sent to email."}, status=status.HTTP_200_OK)
+        return Response({"message": "Password changed successfully and sent to email.","password": new_password}, status=status.HTTP_200_OK)
+
+
     except Exception as e:
         return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['POST'])
@@ -1100,7 +1104,6 @@ def create_test(request):
                 created_answers.append(answer_serializer.data)
 
             correct_answers_count = len([answer for answer in answers_data if answer.get('is_correct')])
-            print(correct_answers_count)
 
         position += 1
 
@@ -1220,21 +1223,25 @@ def test_attempt_moderation_list(request):
 
 
 
+
 @api_view(['POST'])
+@permission_classes([IsAuthenticated, IsModeratorOrAdmin])  # Добавили новую проверку прав доступа
 def moderate_test_attempt(request, test_attempt_id):
     try:
         test_attempt = TestAttempt.objects.get(id=test_attempt_id)
     except TestAttempt.DoesNotExist:
         return Response({"message": "Test Attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
+    # Получаем текущего пользователя
+    moderator = request.user
+
+    if not (moderator.groups.filter(name='moderator').exists() or moderator.groups.filter(name='Администраторы').exists()):
+        return Response({"message": f"Permission denied for user {moderator.username} with roles {list(moderator.groups.values_list('name', flat=True))}"}, status=status.HTTP_403_FORBIDDEN)
+
     if 'moderated_questions' not in request.data:
         return Response({"message": "Moderated questions are required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    if 'moderator_id' not in request.data:
-        return Response({"message": "Moderator ID is required"}, status=status.HTTP_400_BAD_REQUEST)
-
     moderated_questions = request.data['moderated_questions']
-    moderator_id = request.data['moderator_id']
 
     # Преобразуем строку test_results в словарь
     test_results = json.loads(test_attempt.test_results)
@@ -1280,11 +1287,6 @@ def moderate_test_attempt(request, test_attempt_id):
 
     test_results['answers_info'] = answers_info
 
-    try:
-        moderator = Employee.objects.get(id=moderator_id)
-    except Employee.DoesNotExist:
-        return Response({"message": "Moderator not found"}, status=status.HTTP_404_NOT_FOUND)
-
     test_results['moderator'] = f"{moderator.first_name} {moderator.last_name}"
     test_attempt.test_results = json.dumps(test_results)
 
@@ -1307,12 +1309,6 @@ def moderate_test_attempt(request, test_attempt_id):
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
-
-
-
-
-
-
 @api_view(['GET'])
 def required_tests_chain(request, employee_id, test_id):
     try:
@@ -1475,15 +1471,12 @@ class CompleteTestView(EmployeeAPIView):
 
         total_score = total_score.quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
 
-        test_attempt.score = float(total_score)
-        test_attempt.end_time = timezone.now()
-        test_attempt.save()
-
         test_attempt.test_results = json.dumps({
             "Набранное количество баллов": float(total_score),
             "Максимальное количество баллов": float(max_score),
             "answers_info": answers_info
         }, ensure_ascii=False)
+        test_attempt.end_time = timezone.now()
         test_attempt.save()
 
         has_text_questions = TestQuestion.objects.filter(test=test, question_type='text').exists()
@@ -1496,11 +1489,13 @@ class CompleteTestView(EmployeeAPIView):
             test_attempt.status = TestAttempt.FAILED
 
         test_attempt.save()
+
         response_data = {
             "status": test_attempt.status,
             "test_attempt_id": test_attempt.id
         }
         return Response(response_data, status=status.HTTP_200_OK)
+
 
 @api_view(['GET'])
 def top_participants(request):
@@ -1888,10 +1883,10 @@ class UpdateTestAndContent(APIView):
                                     answer = answer_serializer.save()
                                     created_answers.append(answer_serializer.data)
                                 else:
-                                    print("Answer serialization errors:", answer_serializer.errors)
+
                                     return Response({"message": "Invalid answer data", "errors": answer_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
                         else:
-                            print("Question serialization errors:", question_serializer.errors)
+
                             return Response({"message": "Invalid question data", "errors": question_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
                     elif block_type == 'theory':
                         # Убираем id если он есть в данных
@@ -1902,7 +1897,7 @@ class UpdateTestAndContent(APIView):
                             created_theories.append(theory_serializer.data)
                             position += 1
                         else:
-                            print("Theory serialization errors:", theory_serializer.errors)
+
                             return Response({"message": "Invalid theory data", "errors": theory_serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
                     else:
                         return Response({"message": "Invalid block type"}, status=status.HTTP_400_BAD_REQUEST)

@@ -25,9 +25,9 @@ SECRET_KEY = 'django-insecure-n_q8-wxb&xdvy)%nxa2ezif5l!jtoe!un^%dttcb6(az^sprbb
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['oputintsev.pythonanywhere.com','127.0.0.1']
-
+ALLOWED_HOSTS = ['solevoi.pythonanywhere.com','127.0.0.1']
 CORS_ALLOW_ALL_ORIGINS = True
+
 # Application definition
 
 INSTALLED_APPS = [
@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'main.apps.MainConfig',
     'rest_framework',
     'corsheaders',
+    'rest_framework.authtoken',
 ]
 
 MIDDLEWARE = [
@@ -51,6 +52,9 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'main.middleware.CheckActiveUserMiddleware',
+    'main.middleware.EmployeeMiddleware',
 ]
 
 ROOT_URLCONF = 'gamefication.urls'
@@ -72,7 +76,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'gamefication.wsgi.application'
+WSGI_APPLICATION = 'Solevoi.wsgi.application'
 
 
 # Database
@@ -81,13 +85,33 @@ WSGI_APPLICATION = 'gamefication.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'oputintsev$gamificationBASE',
-        'USER': 'oputintsev',
+        'NAME': 'Solevoi$gamificationBASE',
+        'USER': 'Solevoi',
         'PASSWORD': 'Oleg.iori1',
-        'HOST': 'oputintsev.mysql.pythonanywhere-services.com',
+        'HOST': 'Solevoi.mysql.pythonanywhere-services.com',
         'PORT': '3306',
     }
 }
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
+# gamification/settings.py
+
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
@@ -114,21 +138,30 @@ AUTH_USER_MODEL = 'main.Employee'
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Irkutsk'
 
 USE_I18N = True
 
+
 USE_TZ = True
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'oleg.pytin@gmail.com'
+EMAIL_HOST_PASSWORD = 'cemi zewp jzeu phun'
+DEFAULT_FROM_EMAIL = 'oleg.pytin@gmail.com'
 
 
 # Static files (CSS, JavaScript, Images)z
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = '/home/oputintsev/static'
+STATIC_ROOT = '/home/solevoi/static'
 # Media files (images, videos, etc.)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = '/home/oputintsev/media'
+MEDIA_ROOT = '/home/solevoi/media'
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 

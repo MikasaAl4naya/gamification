@@ -8,9 +8,6 @@ project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(project_path)
 
 import django
-from django.conf import settings
-
-# Настройка Django окружения
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gamefication.settings')
 django.setup()
 
