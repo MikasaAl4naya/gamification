@@ -804,7 +804,8 @@ def get_test_by_id(request, test_id):
     return Response(response_data)
 
 
-class ThemesWithTestsView(EmployeeAPIView):
+@permission_classes([IsAdminUser])
+class ThemesWithTestsView(APIView):
 
     def get(self, request, *args, **kwargs):
         employee = request.employee
@@ -841,16 +842,18 @@ class ThemesWithTestsView(EmployeeAPIView):
 
                 has_sufficient_karma = employee.karma >= test.required_karma
                 has_sufficient_experience = employee.experience >= test.min_experience
-                test_available = has_sufficient_karma and has_sufficient_experience
 
                 remaining_days = None
                 remaining_time_msg = "Reattempt available now"
+                test_available = has_sufficient_karma and has_sufficient_experience
+
                 if test_attempt and test.retry_delay_days is not None:
                     end_time = test_attempt.end_time or timezone.now()
                     time_since_last_attempt = timezone.now() - end_time
                     remaining_time = timedelta(days=test.retry_delay_days) - time_since_last_attempt
                     if remaining_time.total_seconds() > 0:
                         remaining_days = remaining_time.days
+                        test_available = False  # Обновляем test_available, если нужно ждать
                         if remaining_days >= 1:
                             remaining_time_msg = f"Reattempt available in {remaining_days} days"
                         else:
