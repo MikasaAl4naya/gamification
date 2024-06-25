@@ -804,6 +804,7 @@ def get_test_by_id(request, test_id):
     return Response(response_data)
 
 
+
 @permission_classes([IsAdminUser])
 class ThemesWithTestsView(APIView):
 
@@ -862,7 +863,7 @@ class ThemesWithTestsView(APIView):
                             if remaining_hours >= 1:
                                 remaining_time_msg = f"Reattempt available in {remaining_hours} hours"
                             else:
-                                remaining_time_msg = "Reattempt available in less than an hour"
+                                remaining_time_msg = f"Reattempt available in {remaining_minutes} minutes"
 
                 test_info = {
                     'test': test.id,
