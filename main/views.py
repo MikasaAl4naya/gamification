@@ -1517,19 +1517,28 @@ def top_participants(request):
     test_id = request.query_params.get('test_id')
 
     if test_id:
-        # Если test_id указан, находим лучшие попытки для каждого сотрудника по этому тесту
-        best_attempts = TestAttempt.objects.filter(test_id=test_id).values(
+        # Если test_id указан, находим все попытки для каждого сотрудника по этому тесту
+        test_attempts = TestAttempt.objects.filter(test_id=test_id).values(
             'employee_id', 'employee__first_name', 'employee__last_name'
         ).annotate(
+            total_score=Sum('score'),
+            total_attempts=Count('id'),
+            average_score=ExpressionWrapper(
+                Sum('score') / Count('id'),
+                output_field=FloatField()
+            ),
             best_score=Max('score')
         ).order_by('-best_score')
 
         top_participants = [
             {
                 'employee_name': f"{item['employee__first_name']} {item['employee__last_name']}",
+                'total_score': item['total_score'],
+                'total_attempts': item['total_attempts'],
+                'average_score': round(item['average_score'], 2) if item['average_score'] is not None else None,
                 'best_score': item['best_score']
             }
-            for item in best_attempts
+            for item in test_attempts
         ]
     else:
         # Если test_id не указан, находим средний score для каждого сотрудника по всем тестам
@@ -1555,7 +1564,6 @@ def top_participants(request):
         ]
 
     return Response(top_participants, status=status.HTTP_200_OK)
-
 class StatisticsAPIView(APIView):
     def get(self, request):
         # Получаем всех сотрудников
