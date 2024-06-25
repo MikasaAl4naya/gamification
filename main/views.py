@@ -844,14 +844,22 @@ class ThemesWithTestsView(EmployeeAPIView):
                 test_available = has_sufficient_karma and has_sufficient_experience
 
                 remaining_days = None
+                remaining_time_msg = "Reattempt available now"
                 if test_attempt and test.retry_delay_days is not None:
                     end_time = test_attempt.end_time or timezone.now()
                     time_since_last_attempt = timezone.now() - end_time
                     remaining_time = timedelta(days=test.retry_delay_days) - time_since_last_attempt
                     if remaining_time.total_seconds() > 0:
                         remaining_days = remaining_time.days
-                    else:
-                        remaining_days = 0
+                        if remaining_days >= 1:
+                            remaining_time_msg = f"Reattempt available in {remaining_days} days"
+                        else:
+                            remaining_hours, remaining_minutes = divmod(remaining_time.seconds, 3600)
+                            remaining_minutes //= 60
+                            if remaining_hours >= 1:
+                                remaining_time_msg = f"Reattempt available in {remaining_hours} hours"
+                            else:
+                                remaining_time_msg = "Reattempt available in less than an hour"
 
                 test_info = {
                     'test': test.id,
@@ -865,7 +873,8 @@ class ThemesWithTestsView(EmployeeAPIView):
                     'has_sufficient_karma': has_sufficient_karma,
                     'has_sufficient_experience': has_sufficient_experience,
                     'test_available': test_available,
-                    'remaining_days': remaining_days
+                    'remaining_days': remaining_days,
+                    'remaining_time_msg': remaining_time_msg
                 }
 
                 tests_info.append(test_info)
@@ -878,6 +887,7 @@ class ThemesWithTestsView(EmployeeAPIView):
             themes_with_tests.append(theme_with_tests)
 
         return Response(themes_with_tests)
+
 @api_view(['GET'])
 def get_question(request, question_id):
     question = get_object_or_404(TestQuestion, id=question_id)
@@ -1608,8 +1618,8 @@ class QuestionErrorsStatistics(APIView):
                 "test_id": qid.split('_')[1],
                 "question_text": qid.split('_')[0],
                 "total_answers": total_answers_counter[qid],
-                "error_count": count,
-                "error_ratio": round(count / total_answers_counter[qid] * 100, 1) if total_answers_counter[qid] != 0 else 0
+                "count": count,
+                "ratio": round(count / total_answers_counter[qid] * 100, 1) if total_answers_counter[qid] != 0 else 0
             }
             for qid, count in error_counter.items()
         ]
@@ -1618,7 +1628,7 @@ class QuestionErrorsStatistics(APIView):
         most_common_errors = sorted(most_common_errors, key=lambda x: x["error_ratio"], reverse=True)
 
         return Response({
-            "most_common_errors": most_common_errors
+            "most_common": most_common_errors
         })
 
 
@@ -1657,8 +1667,8 @@ class QuestionCorrectStatistics(APIView):
                 "test_id": qid.split('_')[1],
                 "question_text": qid.split('_')[0],
                 "total_answers": total_answers_counter[qid],
-                "correct_count": count,
-                "correct_ratio": round(count / total_answers_counter[qid] * 100, 1) if total_answers_counter[qid] != 0 else 0
+                "count": count,
+                "ratio": round(count / total_answers_counter[qid] * 100, 1) if total_answers_counter[qid] != 0 else 0
             }
             for qid, count in correct_counter.items()
         ]
@@ -1667,7 +1677,7 @@ class QuestionCorrectStatistics(APIView):
         most_common_correct = sorted(most_common_correct, key=lambda x: x["correct_ratio"], reverse=True)
 
         return Response({
-            "most_common_correct": most_common_correct
+            "most_common": most_common_correct
         })
 class TestStatisticsAPIView(APIView):
     def get(self, request):
