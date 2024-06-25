@@ -5,6 +5,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import django
 
+# Настройка Django
 project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(project_path)
 
@@ -25,6 +26,7 @@ class Watcher:
     def run(self):
         event_handler = Handler(self.name)
         self.observer.schedule(event_handler, self.directory_to_watch, recursive=True)
+        print(f"Starting observer for {self.directory_to_watch}")
         self.observer.start()
         try:
             while True:
@@ -55,4 +57,5 @@ def run_all_watchers():
         watcher.run()
 
 if __name__ == '__main__':
+    print("Running all watchers...")
     run_all_watchers()
