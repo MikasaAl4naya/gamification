@@ -1497,36 +1497,50 @@ class CompleteTestView(EmployeeAPIView):
         return Response(response_data, status=status.HTTP_200_OK)
 
 
+
 @api_view(['GET'])
 def top_participants(request):
     test_id = request.query_params.get('test_id')
 
     if test_id:
-        attempts = TestAttempt.objects.filter(test_id=test_id)
+        # Если test_id указан, находим лучшие попытки для каждого сотрудника по этому тесту
+        best_attempts = TestAttempt.objects.filter(test_id=test_id).values(
+            'employee_id', 'employee__first_name', 'employee__last_name'
+        ).annotate(
+            best_score=Max('score')
+        ).order_by('-best_score')
+
+        top_participants = [
+            {
+                'employee_name': f"{item['employee__first_name']} {item['employee__last_name']}",
+                'best_score': item['best_score']
+            }
+            for item in best_attempts
+        ]
     else:
-        attempts = TestAttempt.objects.all()
+        # Если test_id не указан, находим средний score для каждого сотрудника по всем тестам
+        avg_scores = TestAttempt.objects.values(
+            'employee_id', 'employee__first_name', 'employee__last_name'
+        ).annotate(
+            total_score=Sum('score'),
+            total_attempts=Count('id'),
+            average_score=ExpressionWrapper(
+                Sum('score') / Count('id'),
+                output_field=FloatField()
+            )
+        ).order_by('-average_score')
 
-    top_statistics = attempts.values('employee_id', 'employee__first_name', 'employee__last_name').annotate(
-        total_score=Sum('score'),
-        total_attempts=Count('id'),
-        average_score=ExpressionWrapper(
-            Sum('score') / Count('id'),
-            output_field=FloatField()
-        )
-    ).order_by('-total_score')
-
-    top_participants = [
-        {
-            'employee_name': f"{item['employee__first_name']} {item['employee__last_name']}",
-            'total_score': item['total_score'],
-            'total_attempts': item['total_attempts'],
-            'average_score': round(item['average_score'], 2) if item['average_score'] is not None else None
-        }
-        for item in top_statistics
-    ]
+        top_participants = [
+            {
+                'employee_name': f"{item['employee__first_name']} {item['employee__last_name']}",
+                'total_score': item['total_score'],
+                'total_attempts': item['total_attempts'],
+                'average_score': round(item['average_score'], 2) if item['average_score'] is not None else None
+            }
+            for item in avg_scores
+        ]
 
     return Response(top_participants, status=status.HTTP_200_OK)
-
 
 class StatisticsAPIView(APIView):
     def get(self, request):
