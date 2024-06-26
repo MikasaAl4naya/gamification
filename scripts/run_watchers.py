@@ -21,6 +21,8 @@ class Watcher:
         self.directory_to_watch = os.path.abspath(path)
         if not self.directory_to_watch:
             raise ValueError(f"Directory path for {name} not set.")
+        if not os.path.exists(self.directory_to_watch):
+            raise ValueError(f"Directory {self.directory_to_watch} does not exist.")
         self.observer = Observer()
 
     def run(self):
@@ -31,6 +33,9 @@ class Watcher:
         try:
             while True:
                 time.sleep(5)
+        except KeyboardInterrupt:
+            self.observer.stop()
+            print("Observer Stopped by Keyboard Interrupt")
         except Exception as e:
             self.observer.stop()
             print(f"Observer Stopped: {e}")
@@ -47,7 +52,21 @@ class Handler(FileSystemEventHandler):
             return None
         elif event.src_path.endswith(".xlsx"):
             print(f"Received created event - {event.src_path}")
-            update_employee_karma(event.src_path)
+            try:
+                update_employee_karma(event.src_path)
+            except Exception as e:
+                print(f"Error handling created event: {e}")
+
+    def on_modified(self, event):
+        print(f"Event type: {event.event_type} - Path: {event.src_path}")
+        if event.is_directory:
+            return None
+        elif event.src_path.endswith(".xlsx"):
+            print(f"Received modified event - {event.src_path}")
+            try:
+                update_employee_karma(event.src_path)
+            except Exception as e:
+                print(f"Error handling modified event: {e}")
 
 def run_all_watchers():
     file_paths = FilePath.objects.all()
