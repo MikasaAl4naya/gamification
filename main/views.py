@@ -847,7 +847,12 @@ def get_test_by_id(request, test_id):
 class ThemesWithTestsView(APIView):
 
     def get(self, request, *args, **kwargs):
-        employee = request.employee
+        # Замените request.employee на request.user, если request.employee отсутствует или вызывает ошибку.
+        employee = getattr(request, 'employee', request.user)
+
+        # Если у employee нет атрибутов karma или experience, задайте их значения по умолчанию.
+        employee_karma = getattr(employee, 'karma', 0)
+        employee_experience = getattr(employee, 'experience', 0)
 
         themes = Theme.objects.all().order_by('name')
         themes_with_tests = []
@@ -879,11 +884,12 @@ class ThemesWithTestsView(APIView):
                 else:
                     test_status = {"status": "Не начато", "total_score": 0, "max_score": 0}
 
-                has_sufficient_karma = employee.karma >= test.required_karma
-                has_sufficient_experience = employee.experience >= test.min_experience
+                has_sufficient_karma = employee_karma >= test.required_karma
+                has_sufficient_experience = employee_experience >= test.min_experience
 
                 remaining_days = None
-                remaining_time_msg = "Reattempt available now"
+                remaining_hours = None
+                remaining_minutes = None
                 test_available = has_sufficient_karma and has_sufficient_experience
 
                 if test_attempt and test.retry_delay_days is not None:
@@ -894,14 +900,10 @@ class ThemesWithTestsView(APIView):
                         remaining_days = remaining_time.days
                         test_available = False  # Обновляем test_available, если нужно ждать
                         if remaining_days >= 1:
-                            remaining_time_msg = f"{remaining_days} days"
+                            remaining_hours = remaining_time.seconds // 3600
                         else:
-                            remaining_hours, remaining_minutes = divmod(remaining_time.seconds, 3600)
-                            remaining_minutes //= 60
-                            if remaining_hours >= 1:
-                                remaining_time_msg = f"{remaining_hours} hours"
-                            else:
-                                remaining_time_msg = f"{remaining_minutes} minutes"
+                            remaining_hours, remaining_seconds = divmod(remaining_time.seconds, 3600)
+                            remaining_minutes = remaining_seconds // 60
 
                 test_info = {
                     'test': test.id,
@@ -915,8 +917,7 @@ class ThemesWithTestsView(APIView):
                     'has_sufficient_karma': has_sufficient_karma,
                     'has_sufficient_experience': has_sufficient_experience,
                     'test_available': test_available,
-                    'remaining_days': remaining_days,
-                    'remaining_time_msg': remaining_time_msg
+                    'remaining_time': f"{remaining_days} {remaining_hours}"
                 }
 
                 tests_info.append(test_info)
@@ -929,6 +930,8 @@ class ThemesWithTestsView(APIView):
             themes_with_tests.append(theme_with_tests)
 
         return Response(themes_with_tests)
+
+
 
 @api_view(['GET'])
 def get_question(request, question_id):
