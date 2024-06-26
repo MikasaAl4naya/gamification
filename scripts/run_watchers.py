@@ -18,7 +18,7 @@ from tasks import update_employee_karma
 class Watcher:
     def __init__(self, name, path):
         self.name = name
-        self.directory_to_watch = path
+        self.directory_to_watch = os.path.abspath(path)
         if not self.directory_to_watch:
             raise ValueError(f"Directory path for {name} not set.")
         self.observer = Observer()
@@ -42,6 +42,7 @@ class Handler(FileSystemEventHandler):
         self.name = name
 
     def on_created(self, event):
+        print(f"Event type: {event.event_type} - Path: {event.src_path}")
         if event.is_directory:
             return None
         elif event.src_path.endswith(".xlsx"):
@@ -52,6 +53,7 @@ def run_all_watchers():
     file_paths = FilePath.objects.all()
     watchers = []
     for file_path in file_paths:
+        print(f"Setting up watcher for: {file_path.path}")
         watcher = Watcher(file_path.name, file_path.path)
         watchers.append(watcher)
         watcher.run()
