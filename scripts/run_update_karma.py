@@ -10,6 +10,6 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gamefication.settings')
 print("DJANGO_SETTINGS_MODULE:", os.environ.get('DJANGO_SETTINGS_MODULE'))
 django.setup()
 
-from scripts.tasks import run_update
+from tasks import run_update
 
 run_update('work_schedule')

@@ -13,7 +13,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gamefication.settings')
 django.setup()
 
 from main.models import FilePath
-from tasks import update_employee_karma, get_file_path
+from tasks import update_employee_karma
 
 class Watcher:
     def __init__(self, name, path):
