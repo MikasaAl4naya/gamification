@@ -1,6 +1,8 @@
 import ast
+import base64
 import logging
 import math
+import re
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -8,10 +10,10 @@ from multiprocessing import Value
 
 from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError
+from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.db import transaction
 from rest_framework.exceptions import NotFound
-
 from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -95,6 +97,11 @@ class LoginAPIView(APIView):
                 }, status=status.HTTP_401_UNAUTHORIZED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+def save_base64_image(base64_image, filename):
+    format, imgstr = re.match(r'data:image/(?P<format>\w+);base64,(?P<imgstr>.*)', base64_image).groups()
+    ext = format.lower()
+    img_data = ContentFile(base64.b64decode(imgstr), name=f"{filename}.{ext}")
+    return img_data
 
 @permission_classes([IsAdmin])
 class TestScoreAPIView(APIView):
@@ -1120,6 +1127,11 @@ def create_test(request):
         block_data['content']['test'] = test.id
 
         if block_data['type'] == 'question':
+            if 'image' in block_data['content']:
+                base64_image = block_data['content'].pop('image')
+                filename = f"question_{position}"
+                block_data['content']['image'] = save_base64_image(base64_image, filename)
+
             serializer_class = TestQuestionSerializer
             created_list = created_questions
         elif block_data['type'] == 'theory':
