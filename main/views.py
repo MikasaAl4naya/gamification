@@ -275,7 +275,38 @@ def get_employee_info(request, employee_id):
 
     serializer = EmployeeSerializer(employee)
     return Response(serializer.data, status=status.HTTP_200_OK)
+class EmployeeAchievementsView(generics.ListAPIView):
+    serializer_class = AchievementSerializer
+    permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        employee_id = self.kwargs['employee_id']
+        employee_achievements = EmployeeAchievement.objects.filter(employee_id=employee_id)
+        achievement_ids = employee_achievements.values_list('achievement_id', flat=True)
+        return Achievement.objects.filter(id__in=achievement_ids)
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        employee_achievements = EmployeeAchievement.objects.filter(employee_id=self.kwargs['employee_id'])
+        achievement_data = []
+
+        for achievement in queryset:
+            employee_achievement = employee_achievements.get(achievement=achievement)
+            achievement_data.append({
+                'id': achievement.id,
+                'name': achievement.name,
+                'description': achievement.description,
+                'type': achievement.type,
+                'required_count': achievement.required_count,
+                'reward_experience': achievement.reward_experience,
+                'reward_currency': achievement.reward_currency,
+                'image': achievement.image.url,
+                'max_level': achievement.max_level,
+                'progress': employee_achievement.progress,
+                'level': employee_achievement.level
+            })
+
+        return Response(achievement_data)
 class DynamicPermission(BasePermission):
     def has_permission(self, request, view):
         required_permission = view.required_permissions.get(request.method.lower())

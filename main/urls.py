@@ -89,6 +89,7 @@ urlpatterns = [
          name='delete_all_last_processed_dates'),
     path('api/set_file_path/', set_file_path, name='set_file_path'),
     path('api/delete_employee_data/<int:employee_id>/', delete_employee_data, name='delete_employee_data'),
+    path('employee/<int:employee_id>/achievements/', EmployeeAchievementsView.as_view(), name='employee-achievements'),
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
     path('', include(router.urls)),
 ]
