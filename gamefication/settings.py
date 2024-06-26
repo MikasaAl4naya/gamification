@@ -158,10 +158,10 @@ DEFAULT_FROM_EMAIL = 'oleg.pytin@gmail.com'
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
-STATIC_ROOT = '/home/solevoi/static'
+STATIC_ROOT = '/home/Solevoi/static'
 # Media files (images, videos, etc.)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = '/home/solevoi/media'
+MEDIA_ROOT = '/home/Solevoi/media'
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
