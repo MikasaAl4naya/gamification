@@ -1,7 +1,7 @@
 import pandas as pd
 from django.core.exceptions import ValidationError
 from django.utils import timezone
-from main.models import Employee, LastProcessedDate, FilePath
+from main.models import Employee, FilePath, KarmaHistory
 from datetime import datetime
 
 def get_file_path(name):
@@ -30,10 +30,8 @@ def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
 
 def update_employee_karma(file_path):
     df = process_work_schedule(file_path)
-    last_processed_date_obj, created = LastProcessedDate.objects.get_or_create(id=1)
-    last_processed_date = last_processed_date_obj.last_date.day if last_processed_date_obj.last_date else 0
-
     current_date = datetime.now().day
+
     for index, row in df.iterrows():
         try:
             full_name = row['ФИО']
@@ -51,7 +49,9 @@ def update_employee_karma(file_path):
                 continue
 
             for employee in employees:
-                for day in range(last_processed_date + 1, current_date + 1):
+                last_karma_update = employee.last_karma_update.day if employee.last_karma_update else 0
+
+                for day in range(last_karma_update + 1, current_date + 1):
                     shift_info = row.get(f'Unnamed: {day}', '').strip().lower()
                     if any(x in shift_info for x in ['выходной', 'о', 'бс', 'б']):
                         continue
@@ -67,20 +67,21 @@ def update_employee_karma(file_path):
 
                             if not check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
                                 employee.karma -= 5
+                                KarmaHistory.objects.create(employee=employee, karma_change=-5, reason='Late start/early end')
                                 print(f"Karma decreased by 5 for {full_name} (late start/early end)")
 
                         employee.karma += 2
+                        KarmaHistory.objects.create(employee=employee, karma_change=2, reason='Daily increment')
                         print(f"Karma increased by 2 for {full_name} (daily increment)")
 
                         employee.save()
+
+                employee.last_karma_update = timezone.now()
+                employee.save()
         except Employee.DoesNotExist:
             print(f"Employee with name {full_name} does not exist.")
         except Exception as e:
             print(f"Error processing {full_name}: {e}")
-
-    last_processed_date_obj.last_date = timezone.now()
-    last_processed_date_obj.save()
-    print(f"Last processed date updated to {last_processed_date_obj.last_date}")
 
 def run_update(name):
     file_path = get_file_path(name)

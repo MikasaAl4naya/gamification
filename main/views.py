@@ -13,6 +13,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.db import transaction
+from django.views.decorators.http import require_POST
 from rest_framework.exceptions import NotFound
 from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin
 from django.utils.decorators import method_decorator
@@ -38,7 +39,7 @@ from rest_framework.permissions import IsAdminUser, BasePermission, IsAuthentica
 from rest_framework.utils import json
 from json.decoder import JSONDecodeError
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
-    Acoin, TestAttempt, Theme, Classifications, LastProcessedDate, FilePath
+    Acoin, TestAttempt, Theme, Classifications, FilePath, KarmaHistory
 from rest_framework.generics import get_object_or_404
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
@@ -438,6 +439,51 @@ def theme_list(request):
         return Response(serializer.data)
 
 
+def get_karma_history(request, employee_id):
+    try:
+        employee = Employee.objects.get(id=employee_id)
+        karma_history = KarmaHistory.objects.filter(employee=employee).order_by('-change_date')
+
+        history_data = []
+        for record in karma_history:
+            history_data.append({
+                'change_date': record.change_date.strftime('%Y-%m-%d %H:%M:%S'),
+                'karma_change': record.karma_change,
+                'reason': record.reason
+            })
+
+        return JsonResponse({'employee': employee.username, 'karma_history': history_data})
+    except Employee.DoesNotExist:
+        return JsonResponse({'error': 'Employee does not exist.'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+@require_POST
+def reset_karma_update(request, employee_id):
+    try:
+        employee = Employee.objects.get(id=employee_id)
+        if not employee.last_karma_update:
+            return JsonResponse({'error': 'No karma update to reset.'}, status=400)
+
+        # Найдем все изменения кармы после последнего обновления
+        karma_changes = KarmaHistory.objects.filter(employee=employee, change_date__gte=employee.last_karma_update)
+
+        # Откатим карму
+        for change in karma_changes:
+            employee.karma -= change.karma_change
+            change.delete()
+
+        # Сбросим дату последнего обновления кармы
+        employee.last_karma_update = None
+        employee.save()
+
+        return JsonResponse({'success': 'Karma update reset and changes reverted.'})
+
+    except Employee.DoesNotExist:
+        return JsonResponse({'error': 'Employee does not exist.'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 @api_view(['GET'])
 def get_user(request, user_id):
     try:
@@ -518,11 +564,6 @@ def set_file_path(request):
         return Response({"message": f"File path for {name} updated successfully"}, status=status.HTTP_200_OK)
     else:
         return Response({"error": "Name and path not provided"}, status=status.HTTP_400_BAD_REQUEST)
-@api_view(['DELETE'])
-def delete_all_last_processed_dates(request):
-    if request.method == 'DELETE':
-        LastProcessedDate.objects.all().delete()
-        return Response({"message": "All LastProcessedDate records have been deleted"}, status=status.HTTP_204_NO_CONTENT)
 @api_view(['DELETE'])
 def delete_employee_data(request, employee_id):
     if request.method == 'DELETE':
@@ -843,7 +884,7 @@ def get_test_by_id(request, test_id):
 
 
 
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 class ThemesWithTestsView(APIView):
 
     def get(self, request, *args, **kwargs):

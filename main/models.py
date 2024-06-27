@@ -30,13 +30,14 @@ class Employee(AbstractUser):
     next_level_experience = models.IntegerField(default=100)
     karma = models.IntegerField(default=50)
     birth_date = models.DateField(null=True, blank=True)
-    about_me = models.TextField(null=True, blank=True)  # Новое поле для информации о себе
-    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)  # Новое поле для аватарки
-    status = models.CharField(max_length=100, null=True, blank=True)  # Новое поле для статуса
+    about_me = models.TextField(null=True, blank=True)
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    status = models.CharField(max_length=100, null=True, blank=True)
+    last_karma_update = models.DateTimeField(null=True, blank=True)
 
     def deactivate(self):
         self.is_active = False
-        self.force_save = True  # Установите свойство force_save перед вызовом save
+        self.force_save = True
         self.save()
 
     def delete_employee(self):
@@ -44,7 +45,7 @@ class Employee(AbstractUser):
 
     def activate(self):
         self.is_active = True
-        self.force_save = True  # Установите свойство force_save перед вызовом save
+        self.force_save = True
         self.save()
 
     def save(self, *args, **kwargs):
@@ -99,17 +100,22 @@ class Employee(AbstractUser):
         app_label = 'main'
         swappable = 'AUTH_USER_MODEL'
 
+class KarmaHistory(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='karma_history')
+    change_date = models.DateTimeField(auto_now_add=True)
+    karma_change = models.IntegerField()
+    reason = models.CharField(max_length=255, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.employee.username} - {self.karma_change} on {self.change_date}"
+
 class FilePath(models.Model):
     name = models.CharField(max_length=100)
     path = models.CharField(max_length=255, default='')
 
     def __str__(self):
         return f"{self.name}: {self.path}"
-class LastProcessedDate(models.Model):
-    last_date = models.DateTimeField(null=True, blank=True)
 
-    def __str__(self):
-        return self.last_date.strftime('%Y-%m-%d %H:%M:%S') if self.last_date else 'Never'
 class Classifications(models.Model):
     name = models.CharField(max_length=100, unique=True)
 

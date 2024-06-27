@@ -85,13 +85,14 @@ urlpatterns = [
     path('users/<int:user_id>/delete/', delete_user, name='delete_user'),
     path('users/<int:user_id>/activate/', activate_user, name='activate_user'),
     path('change-password/<int:user_id>/', change_password, name='change-password'),
-    path('api/delete_all_last_processed_dates/', delete_all_last_processed_dates,
-         name='delete_all_last_processed_dates'),
     path('api/set_file_path/', set_file_path, name='set_file_path'),
     path('api/delete_employee_data/<int:employee_id>/', delete_employee_data, name='delete_employee_data'),
     path('employee/<int:employee_id>/achievements/', EmployeeAchievementsView.as_view(), name='employee-achievements'),
+    path('reset_karma_update/<int:employee_id>/', reset_karma_update, name='reset_karma_update'),
+    path('get_karma_history/<int:employee_id>/', get_karma_history, name='get_karma_history'),
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
     path('', include(router.urls)),
+
 ]
 
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
