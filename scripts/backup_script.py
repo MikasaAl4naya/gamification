@@ -34,8 +34,9 @@ EMAIL_RECIPIENT = 'oleg.pytin@gmail.com'
 SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 
-# Директория для бэкапов
-backup_dir = '/home/Solevoi/db_backups'
+# Получение пути для резервных копий из модели FilePath
+backup_path_obj = FilePath.objects.get(name='db_backups')
+backup_dir = backup_path_obj.path
 
 # Получение текущей даты для имени файла
 current_date = datetime.now().strftime('%Y-%m-%d')
@@ -164,11 +165,19 @@ def update_employee_karma(file_path):
             print(f"Error processing {full_name}: {e}")
 
 def run_update(name):
-    file_path = get_file_path(name)
-    if file_path:
-        update_employee_karma(file_path)
+    directory_path = get_file_path(name)
+    if directory_path and os.path.isdir(directory_path):
+        # Получить список всех файлов в директории
+        files = [f for f in os.listdir(directory_path) if os.path.isfile(os.path.join(directory_path, f))]
+        if files:
+            # Отсортировать файлы по дате создания и взять самый новый
+            files.sort(key=lambda x: os.path.getctime(os.path.join(directory_path, x)), reverse=True)
+            newest_file = os.path.join(directory_path, files[0])
+            update_employee_karma(newest_file)
+        else:
+            print(f"No files found in directory {directory_path}")
     else:
-        print(f"File path for {name} not set")
+        print(f"Directory path for {name} not set or is not a directory")
 
 # Run karma update after backup
 run_update("work_schedule")
