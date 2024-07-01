@@ -1,4 +1,5 @@
 import os
+import sys
 import subprocess
 from datetime import datetime, timedelta
 import smtplib
@@ -7,6 +8,18 @@ from email.mime.multipart import MIMEMultipart
 import pandas as pd
 import django
 from django.utils import timezone
+
+# Add the project path into the sys.path
+project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(project_path)
+
+# Set the Django settings module environment variable
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gamefication.settings')
+
+# Initialize Django
+django.setup()
+
+from main.models import Employee, FilePath, KarmaHistory
 
 # Конфигурация базы данных для бэкапа
 DB_HOST = 'solevoi.mysql.pythonanywhere-services.com'
@@ -70,13 +83,6 @@ for filename in os.listdir(backup_dir):
         if file_creation_time < datetime.now() - timedelta(days=7):
             os.remove(file_path)
             print(f"Deleted old backup: {file_path}")
-
-# Django settings for karma update
-project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gamification.settings')
-django.setup()
-
-from main.models import Employee, FilePath, KarmaHistory
 
 def get_file_path(name):
     try:
@@ -165,4 +171,4 @@ def run_update(name):
         print(f"File path for {name} not set")
 
 # Run karma update after backup
-run_update("name_of_your_file_path_object")
+run_update("work_schedule")
