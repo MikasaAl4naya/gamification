@@ -35,7 +35,7 @@ from django.utils.crypto import get_random_string
 from django.utils.timezone import localtime
 from rest_framework.fields import IntegerField
 from rest_framework.generics import RetrieveAPIView
-from rest_framework.permissions import IsAdminUser, BasePermission, IsAuthenticated, AllowAny
+from rest_framework.permissions import  BasePermission, IsAuthenticated, AllowAny
 from rest_framework.utils import json
 from json.decoder import JSONDecodeError
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
@@ -128,7 +128,7 @@ class TestScoreAPIView(APIView):
 
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAdmin])
 def deactivate_user(request, user_id):
     try:
         employee = Employee.objects.get(id=user_id)
@@ -141,7 +141,7 @@ def deactivate_user(request, user_id):
 
 @api_view(['DELETE'])
 @authentication_classes([TokenAuthentication])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAdmin])
 def delete_user(request, user_id):
     try:
         employee = Employee.objects.get(id=user_id)
@@ -154,7 +154,7 @@ def delete_user(request, user_id):
 
 @api_view(['POST'])
 @authentication_classes([TokenAuthentication])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAdmin])
 def activate_user(request, user_id):
     try:
         employee = Employee.objects.get(id=user_id)
@@ -352,7 +352,7 @@ class EmployeeUpdateView(generics.UpdateAPIView):
 class AdminEmployeeUpdateView(generics.UpdateAPIView):
     queryset = Employee.objects.all()
     serializer_class = AdminEmployeeSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdmin]
 
     def put(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -385,7 +385,7 @@ class EmployeeDetails(APIView):
         except Employee.DoesNotExist:
             return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 @authentication_classes([TokenAuthentication])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAdmin])
 class RegisterAPIView(APIView):
     @transaction.atomic
     def post(self, request):
@@ -520,7 +520,7 @@ def get_user(request, user_id):
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdmin]
 
 
     def create(self, request, *args, **kwargs):
@@ -541,7 +541,6 @@ class GroupViewSet(viewsets.ModelViewSet):
 class PermissionViewSet(viewsets.ModelViewSet):
     queryset = Permission.objects.all()
     serializer_class = PermissionSerializer
-    permission_classes = [IsAdminUser]
 @permission_classes([IsAdmin])
 @api_view(['DELETE'])
 def delete_all_tests(request):
@@ -981,8 +980,7 @@ def get_question(request, question_id):
     return Response(serializer.data)
 
 
-@authentication_classes([TokenAuthentication])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAdmin])
 @api_view(['POST'])
 def change_password(request, user_id):
     try:
@@ -1682,7 +1680,7 @@ class StatisticsAPIView(APIView):
         # Возвращаем информацию по каждому сотруднику
         return JsonResponse(employees_statistics, safe=False)
 
-@permission_classes([IsAdminUser])
+@permission_classes([IsAdmin])
 class QuestionErrorsStatistics(APIView):
     def get(self, request):
         # Создаем словари для хранения информации о частоте ошибок и общего числа ответов
@@ -1731,7 +1729,7 @@ class QuestionErrorsStatistics(APIView):
         })
 
 
-@permission_classes([IsAdminUser])
+@permission_classes([IsAdmin])
 class QuestionCorrectStatistics(APIView):
     def get(self, request):
         # Создаем словари для хранения информации о частоте правильных ответов и общего количества ответов
