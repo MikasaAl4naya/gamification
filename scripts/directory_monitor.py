@@ -1,6 +1,5 @@
 import os
 import sys
-import time
 import django
 import pandas as pd
 from datetime import datetime
@@ -14,30 +13,23 @@ sys.path.append(project_path)
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'gamefication.settings')
 django.setup()
 
-from main.models import Employee, LastProcessedDate, FilePath
+from main.models import Employee, FilePath
 from tasks import update_employee_karma, process_work_schedule
 
 def get_existing_files(directory):
     return {f for f in os.listdir(directory) if os.path.isfile(os.path.join(directory, f)) and f.endswith('.xlsx')}
 
-def monitor_directory(directory):
-    processed_files = get_existing_files(directory)
-    print(f"Initially processed files: {processed_files}")
+def monitor_directory_once(directory):
+    current_files = get_existing_files(directory)
+    print(f"Files in directory: {current_files}")
 
-    while True:
-        current_files = get_existing_files(directory)
-        new_files = current_files - processed_files
-
-        for new_file in new_files:
-            file_path = os.path.join(directory, new_file)
-            print(f"New file detected: {file_path}")
-            try:
-                update_employee_karma(file_path)
-                processed_files.add(new_file)
-            except Exception as e:
-                print(f"Error processing file {file_path}: {e}")
-
-        time.sleep(10)  # Задержка перед следующей проверкой
+    for new_file in current_files:
+        file_path = os.path.join(directory, new_file)
+        print(f"Processing file: {file_path}")
+        try:
+            update_employee_karma(file_path)
+        except Exception as e:
+            print(f"Error processing file {file_path}: {e}")
 
 def main():
     file_paths = FilePath.objects.all()
@@ -48,8 +40,8 @@ def main():
     for file_path in file_paths:
         directory = file_path.path
         if os.path.exists(directory):
-            print(f"Monitoring directory: {directory}")
-            monitor_directory(directory)
+            print(f"Checking directory: {directory}")
+            monitor_directory_once(directory)
         else:
             print(f"Directory does not exist: {directory}")
 
