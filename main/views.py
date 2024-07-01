@@ -1576,6 +1576,7 @@ class CompleteTestView(EmployeeAPIView):
             "answers_info": answers_info
         }, ensure_ascii=False)
         test_attempt.end_time = timezone.now()
+        test_attempt.score = total_score  # Обновляем поле score
         test_attempt.save()
 
         has_text_questions = TestQuestion.objects.filter(test=test, question_type='text').exists()
@@ -1594,6 +1595,7 @@ class CompleteTestView(EmployeeAPIView):
             "test_attempt_id": test_attempt.id
         }
         return Response(response_data, status=status.HTTP_200_OK)
+
 
 
 
