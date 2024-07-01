@@ -167,11 +167,9 @@ def update_employee_karma(file_path):
 def run_update(name):
     directory_path = get_file_path(name)
     if directory_path and os.path.isdir(directory_path):
-        # Получить список всех файлов в директории
         files = [f for f in os.listdir(directory_path) if os.path.isfile(os.path.join(directory_path, f))]
         if files:
-            # Отсортировать файлы по дате создания и взять самый новый
-            files.sort(key=lambda x: os.path.getctime(os.path.join(directory_path, x)), reverse=True)
+            files.sort(key=lambda x: os.path.getmtime(os.path.join(directory_path, x)), reverse=True)
             newest_file = os.path.join(directory_path, files[0])
             update_employee_karma(newest_file)
         else:
