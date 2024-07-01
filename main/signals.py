@@ -51,22 +51,13 @@ def reorder_ids(sender, instance, **kwargs):
 def assign_group(sender, instance, created, **kwargs):
     if created:
         if instance.position == "Специалист технической поддержки":
-            group = Group.objects.get(name="Модераторы")
+            group_name = "Модераторы"
         elif instance.position == "Координатор технической поддержки":
-            group = Group.objects.get(name="Администраторы")
+            group_name = "Администраторы"
         else:
-            group = Group.objects.get(name="Операторы")
-        instance.groups.add(group)
+            group_name = "Операторы"
 
-@receiver(post_save, sender=Employee)
-def assign_group(sender, instance, created, **kwargs):
-    if created:
-        if instance.position == "Специалист технической поддержки":
-            group = Group.objects.get(name="Модераторы")
-        elif instance.position == "Координатор технической поддержки":
-            group = Group.objects.get(name="Администраторы")
-        else:
-            group = Group.objects.get(name="Операторы")
+        group = Group.objects.get(name=group_name)
         instance.groups.add(group)
 @receiver(post_save, sender=Request)
 def update_achievement_progress(sender, instance, **kwargs):

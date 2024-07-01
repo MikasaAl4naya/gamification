@@ -23,8 +23,14 @@ class Medal(models.Model):
     description = models.TextField()
 
 class Employee(AbstractUser):
+    POSITION_CHOICES = [
+        ('Оператор технической поддержки', 'Оператор технической поддержки'),
+        ('Специалист технической поддержки', 'Специалист технической поддержки'),
+        ('Консультант технической поддержки', 'Консультант технической поддержки'),
+        ('Координатор технической поддержки', 'Координатор технической поддержки'),
+    ]
     email = models.EmailField(validators=[EmailValidator(), validate_custom_email])
-    position = models.CharField(max_length=100)
+    position = models.CharField(max_length=50, choices=POSITION_CHOICES)
     level = models.IntegerField(default=1)
     experience = models.IntegerField(default=0)
     next_level_experience = models.IntegerField(default=100)

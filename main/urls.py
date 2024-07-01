@@ -90,6 +90,7 @@ urlpatterns = [
     path('employee/<int:employee_id>/achievements/', EmployeeAchievementsView.as_view(), name='employee-achievements'),
     path('reset_karma_update/<int:employee_id>/', reset_karma_update, name='reset_karma_update'),
     path('get_karma_history/<int:employee_id>/', get_karma_history, name='get_karma_history'),
+    path('positions/', PositionListView.as_view(), name='position-list'),
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
     path('', include(router.urls)),
 

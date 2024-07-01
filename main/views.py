@@ -1727,7 +1727,12 @@ class QuestionErrorsStatistics(APIView):
         return Response({
             "most_common": most_common_errors
         })
+class PositionListView(APIView):
+    permission_classes = [IsAdmin]  # Укажите необходимые разрешения
 
+    def get(self, request, *args, **kwargs):
+        positions = [position[0] for position in Employee.POSITION_CHOICES]
+        return Response({'positions': positions}, status=200)
 
 @permission_classes([IsAdmin])
 class QuestionCorrectStatistics(APIView):
