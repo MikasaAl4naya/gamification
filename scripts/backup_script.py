@@ -3,7 +3,7 @@ import sys
 import django
 from datetime import datetime, timedelta
 import subprocess
-from scripts.email_utlis import send_email
+from email_utlis import send_email
 
 # Настройка Django
 project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
