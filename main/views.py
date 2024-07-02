@@ -1869,13 +1869,11 @@ def review_test_attempts(request):
 
 
 @csrf_exempt
-def reset_karma(request):
+@permission_classes([IsAdmin])
+def reset_karma(request, employee_id=None):
     if request.method == 'POST':
         try:
             with transaction.atomic():
-                # Получаем идентификатор сотрудника из запроса, если он есть
-                employee_id = request.POST.get('employee_id')
-
                 if employee_id:
                     try:
                         employee = Employee.objects.get(pk=employee_id)

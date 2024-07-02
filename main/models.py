@@ -138,8 +138,8 @@ class Achievement(models.Model):
     description = models.TextField()
     type = models.CharField(max_length=100, choices=TYPE_CHOICES, default='Test')
     request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, default=1, blank=True)
-    required_count = models.IntegerField(null=True, blank=True,default=0)
-    reward_experience = models.IntegerField(null=True, blank=True,default=0)
+    required_count = models.IntegerField(null=True, blank=True, default=0)
+    reward_experience = models.IntegerField(null=True, blank=True, default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
     image = models.ImageField(upload_to='achievements/', default='default.jpg')
     max_level = models.IntegerField(default=3)
@@ -149,16 +149,12 @@ class Achievement(models.Model):
             if not self.request_type:
                 raise ValidationError('Field request_type is required for achievements based on number of requests.')
             if self.required_count == 0:
-                raise ValidationError(
-                    'Field required_count must be specified for achievements based on number of requests.')
+                raise ValidationError('Field required_count must be specified for achievements based on number of requests.')
             if self.reward_experience == 0:
-                raise ValidationError(
-                    'Field reward_experience must be specified for achievements based on number of requests.')
+                raise ValidationError('Field reward_experience must be specified for achievements based on number of requests.')
             if self.reward_currency == 0:
-                raise ValidationError(
-                    'Field reward_currency must be specified for achievements based on number of requests.')
+                raise ValidationError('Field reward_currency must be specified for achievements based on number of requests.')
         elif self.type == 'Test':
-            # Устанавливаем дефолтные значения только для полей, которые имеют значение None
             if self.request_type_id is None:
                 self.request_type_id = 0
             if self.required_count is None:
@@ -168,7 +164,6 @@ class Achievement(models.Model):
             if self.reward_currency is None:
                 self.reward_currency = 0
         else:
-            # Дополнительная логика для других типов ачивок
             pass
 
     def __str__(self):
@@ -241,38 +236,25 @@ class EmployeeAchievement(models.Model):
             self.level_up()
 
     def level_up(self):
-        # Повышаем уровень ачивки
         if self.level >= self.achievement.max_level:
             return
         else:
             self.level += 1
-            # Проверяем, что required_count и reward_experience не являются None
             if self.achievement.required_count is not None:
                 self.achievement.required_count = int(self.achievement.required_count * 1.5)
             if self.achievement.reward_experience is not None:
                 self.achievement.reward_experience = int(self.achievement.reward_experience * 1.5)
-            # Сохраняем изменения в модели ачивки
             self.achievement.save()
-            # Начисляем награды сотруднику
             self.reward_employee()
 
     def reward_employee(self):
-        # Получаем сотрудника
         employee = self.employee
-        # Получаем награды за текущий уровень ачивки
         reward_currency = self.achievement.reward_currency
         reward_experience = self.achievement.reward_experience
-        # Начисляем награды сотруднику
-        # Например, добавляем опыт и акоины
         employee.add_experience(reward_experience)
         employee.add_acoins(reward_currency)
-
-        # Сбрасываем прогресс
         self.progress = 0
         self.save()
-
-
-
 
 class EmployeeMedal(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
