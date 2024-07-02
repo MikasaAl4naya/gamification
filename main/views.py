@@ -1867,6 +1867,20 @@ def review_test_attempts(request):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+
+@csrf_exempt
+def reset_karma(request):
+    if request.method == 'POST':
+        # Обнуление last_karma_update для всех сотрудников
+        Employee.objects.update(last_karma_update=None)
+
+        # Удаление всех записей KarmaHistory
+        KarmaHistory.objects.all().delete()
+
+        return JsonResponse({'status': 'success', 'message': 'Karma history reset successfully'})
+
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=400)
+
 @api_view(['DELETE'])
 def delete_all_test_attempts(request):
     TestAttempt.objects.all().delete()
