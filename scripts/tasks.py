@@ -1,91 +1,198 @@
+import os
 import pandas as pd
-from django.core.exceptions import ValidationError
 from django.utils import timezone
 from main.models import Employee, FilePath, KarmaHistory
-from datetime import datetime
+from datetime import datetime, timedelta
+import re
+
 
 def get_file_path(name):
     try:
         file_path_obj = FilePath.objects.get(name=name)
         return file_path_obj.path
     except FilePath.DoesNotExist:
+        print(f"Путь к файлу с именем {name} не найден.")
         return None
 
+
 def process_work_schedule(file_path):
+    # Read the Excel file and process it
     df = pd.read_excel(file_path, skiprows=3)
     df = df.rename(columns={'Unnamed: 1': 'ФИО', 'Unnamed: 2': 'Город'})
-    print(f"DataFrame columns: {df.columns}")
-    print(df.head())
     return df
 
-def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
-    scheduled_start = pd.to_datetime(scheduled_start)
-    scheduled_end = pd.to_datetime(scheduled_end)
-    actual_start = pd.to_datetime(actual_start)
-    actual_end = pd.to_datetime(actual_end)
 
-    if actual_start > scheduled_start or actual_end < scheduled_end:
-        return False
-    return True
+def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
+    # Convert times to datetime objects
+    fmt = '%H:%M'
+    scheduled_start_dt = datetime.strptime(scheduled_start, fmt)
+    scheduled_end_dt = datetime.strptime(scheduled_end, fmt)
+    actual_start_dt = datetime.strptime(actual_start, fmt)
+    actual_end_dt = datetime.strptime(actual_end, fmt)
+
+    # Calculate differences
+    start_diff = (actual_start_dt - scheduled_start_dt).total_seconds() / 60.0
+    end_diff = (actual_end_dt - scheduled_end_dt).total_seconds() / 60.0
+
+    # Allowable grace period in minutes
+    grace_period = 10
+
+    # Employee is not late if they start on time or earlier, and end on time or later
+    if start_diff <= grace_period and end_diff >= -grace_period:
+        return True
+
+    return False
+
+
+def extract_date_from_filename(filename):
+    match = re.search(r'(\d{2}).(\d{2}).(\d{4})', filename)
+    if match:
+        day, month, year = map(int, match.groups())
+        return datetime(year, month, day)
+    return None
+
 
 def update_employee_karma(file_path):
+    # Извлечение даты из названия файла
+    filename = os.path.basename(file_path)
+    file_date = extract_date_from_filename(filename)
+    if not file_date:
+        print(f"Не удалось извлечь дату из названия файла: {filename}")
+        return
+
     df = process_work_schedule(file_path)
-    current_date = datetime.now().day
+    current_date = datetime.now()
 
     for index, row in df.iterrows():
         try:
             full_name = row['ФИО']
             name_parts = full_name.split()
             if len(name_parts) < 3:
-                print(f"Invalid name format for {full_name}")
+                print(f"Неправильный формат имени: {full_name}")
                 continue
             last_name, first_name, middle_name = name_parts[0], name_parts[1], name_parts[2]
-            print(f"Processing {full_name} ({first_name} {last_name})")
+            print(f"Обработка {full_name} ({first_name} {last_name})")
 
             employees = Employee.objects.filter(first_name=first_name, last_name=last_name)
 
             if not employees.exists():
-                print(f"Employee with name {full_name} does not exist.")
+                print(f"Сотрудник с именем {full_name} не существует.")
                 continue
 
             for employee in employees:
-                last_karma_update = employee.last_karma_update.day if employee.last_karma_update else 0
+                print(
+                    f"Сотрудник: {employee.id}, Имя: {employee.first_name} {employee.last_name}, Last karma update: {employee.last_karma_update}")
 
-                for day in range(last_karma_update + 1, current_date + 1):
-                    shift_info = row.get(f'Unnamed: {day}', '').strip().lower()
+                last_karma_update = employee.last_karma_update
+
+                if last_karma_update:
+                    last_update_date = last_karma_update.date()
+                else:
+                    # Устанавливаем last_update_date в начало месяца file_date
+                    last_update_date = file_date.replace(day=1)
+
+                print(f"Последнее обновление кармы: {last_update_date}")
+                print(f"Дата из файла: {file_date}")
+
+                update_day = last_update_date.day + 1
+                update_month = last_update_date.month
+                update_year = last_update_date.year
+
+                # Обработка всех дней до текущей даты
+                while (update_year, update_month, update_day) <= (
+                current_date.year, current_date.month, current_date.day):
+                    shift_info = row.get(f'Unnamed: {update_day}', '').strip().lower()
+                    print(f"Смена для {update_year}-{update_month:02}-{update_day:02}: {shift_info}")
+
                     if any(x in shift_info for x in ['выходной', 'о', 'бс', 'б']):
+                        print(
+                            f"Пропуск смены для {full_name} в {update_year}-{update_month:02}-{update_day:02} (выходной)")
+                        update_day += 1
+                        if update_day > 31:
+                            update_day = 1
+                            update_month += 1
+                            if update_month > 12:
+                                update_month = 1
+                                update_year += 1
                         continue
 
+                    # Определение разделителя
                     if '\n' in shift_info:
                         parts = shift_info.split('\n')
-                        scheduled_time = parts[1] if len(parts) > 1 else ''
-                        actual_time = parts[3] if len(parts) > 3 else ''
+                    elif ';' in shift_info:
+                        parts = shift_info.split(';')
+                    else:
+                        parts = [shift_info]
 
-                        if scheduled_time and actual_time:
+                    print(f"Разделенные части: {parts}")
+                    if len(parts) < 4:
+                        print(f"Неполные данные для {update_year}-{update_month:02}-{update_day:02}: {parts}")
+                        update_day += 1
+                        if update_day > 31:
+                            update_day = 1
+                            update_month += 1
+                            if update_month > 12:
+                                update_month = 1
+                                update_year += 1
+                        continue
+
+                    scheduled_time = parts[1]
+                    actual_time = parts[3]
+                    print(f"Запланированное время: {scheduled_time}, Фактическое время: {actual_time}")
+
+                    daily_karma_change = 0
+
+                    if scheduled_time and actual_time:
+                        try:
                             scheduled_start, scheduled_end = scheduled_time.split('-')
                             actual_start, actual_end = actual_time.split('-')
 
                             if not check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
-                                employee.karma -= 5
-                                KarmaHistory.objects.create(employee=employee, karma_change=-5, reason='Late start/early end')
-                                print(f"Karma decreased by 5 for {full_name} (late start/early end)")
+                                daily_karma_change -= 5
+                                KarmaHistory.objects.create(employee=employee, karma_change=-5,
+                                                            reason=f'Позднее начало/раннее завершение ({update_year}-{update_month:02}-{update_day:02})')
+                                print(f"Карма уменьшена на 5 для {full_name} (позднее начало/раннее завершение)")
+                        except Exception as e:
+                            print(f"Ошибка при разбиении времени: {e}")
 
-                        employee.karma += 2
-                        KarmaHistory.objects.create(employee=employee, karma_change=2, reason='Daily increment')
-                        print(f"Karma increased by 2 for {full_name} (daily increment)")
+                    daily_karma_change += 2
+                    KarmaHistory.objects.create(employee=employee, karma_change=2,
+                                                reason=f'Ежедневное повышение ({update_year}-{update_month:02}-{update_day:02})')
+                    print(f"Карма увеличена на 2 для {full_name} (ежедневное повышение)")
 
-                        employee.save()
+                    employee.karma += daily_karma_change
+                    employee.save()
+                    print(f"Карма сохранена для {full_name}: {employee.karma}")
 
-                employee.last_karma_update = timezone.now()
+                    last_update_date = datetime(update_year, update_month, update_day)
+                    update_day += 1
+                    if update_day > 31:
+                        update_day = 1
+                        update_month += 1
+                        if update_month > 12:
+                            update_month = 1
+                            update_year += 1
+
+                employee.last_karma_update = last_update_date
                 employee.save()
-        except Employee.DoesNotExist:
-            print(f"Employee with name {full_name} does not exist.")
-        except Exception as e:
-            print(f"Error processing {full_name}: {e}")
+                print(f"Дата последнего обновления кармы обновлена для {full_name}: {employee.last_karma_update}")
 
-def run_update(name):
-    file_path = get_file_path(name)
-    if file_path:
-        update_employee_karma(file_path)
+        except Employee.DoesNotExist:
+            print(f"Сотрудник с именем {full_name} не существует.")
+        except Exception as e:
+            print(f"Ошибка при обработке {full_name}: {e}")
+
+
+def run_update_karma(name):
+    directory_path = get_file_path(name)
+    if directory_path and os.path.isdir(directory_path):
+        files = [f for f in os.listdir(directory_path) if os.path.isfile(os.path.join(directory_path, f))]
+        if files:
+            files.sort(key=lambda x: os.path.getmtime(os.path.join(directory_path, x)), reverse=True)
+            newest_file = os.path.join(directory_path, files[0])
+            print(f"Обновление кармы из файла: {newest_file}")
+            update_employee_karma(newest_file)
+        else:
+            print(f"Файлы не найдены в директории {directory_path}")
     else:
-        print(f"File path for {name} not set")
+        print(f"Путь к директории для {name} не установлен или не является директорией")
