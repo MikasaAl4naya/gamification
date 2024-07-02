@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
 
 from django.contrib.auth.hashers import make_password
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.db import transaction
@@ -1871,16 +1871,44 @@ def review_test_attempts(request):
 @csrf_exempt
 def reset_karma(request):
     if request.method == 'POST':
-        # Обнуление last_karma_update для всех сотрудников
-        Employee.objects.update(last_karma_update=None)
+        try:
+            with transaction.atomic():
+                # Получаем идентификатор сотрудника из запроса, если он есть
+                employee_id = request.POST.get('employee_id')
 
-        # Удаление всех записей KarmaHistory
-        KarmaHistory.objects.all().delete()
+                if employee_id:
+                    try:
+                        employee = Employee.objects.get(pk=employee_id)
+                    except ObjectDoesNotExist:
+                        return JsonResponse({'status': 'error', 'message': 'Employee not found'}, status=404)
 
-        return JsonResponse({'status': 'success', 'message': 'Karma history reset successfully'})
+                    # Откатываем изменения кармы для конкретного сотрудника
+                    karma_changes = KarmaHistory.objects.filter(employee=employee).aggregate(total_change=Sum('karma_change'))['total_change'] or 0
+                    employee.karma -= karma_changes
+                    employee.last_karma_update = None
+                    employee.save()
+
+                    # Удаляем историю кармы для конкретного сотрудника
+                    KarmaHistory.objects.filter(employee=employee).delete()
+
+                    return JsonResponse({'status': 'success', 'message': f'Karma history reset for employee {employee_id} successfully'})
+                else:
+                    # Откатываем изменения кармы для всех сотрудников
+                    for employee in Employee.objects.all():
+                        karma_changes = KarmaHistory.objects.filter(employee=employee).aggregate(total_change=Sum('karma_change'))['total_change'] or 0
+                        employee.karma -= karma_changes
+                        employee.last_karma_update = None
+                        employee.save()
+
+                    # Удаляем всю историю кармы
+                    KarmaHistory.objects.all().delete()
+
+                    return JsonResponse({'status': 'success', 'message': 'Karma history reset for all employees successfully'})
+
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
     return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=400)
-
 @api_view(['DELETE'])
 def delete_all_test_attempts(request):
     TestAttempt.objects.all().delete()

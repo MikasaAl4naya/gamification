@@ -88,10 +88,10 @@ urlpatterns = [
     path('api/set_file_path/', set_file_path, name='set_file_path'),
     path('api/delete_employee_data/<int:employee_id>/', delete_employee_data, name='delete_employee_data'),
     path('employee/<int:employee_id>/achievements/', EmployeeAchievementsView.as_view(), name='employee-achievements'),
-    path('reset_karma_update/<int:employee_id>/', reset_karma_update, name='reset_karma_update'),
     path('get_karma_history/<int:employee_id>/', get_karma_history, name='get_karma_history'),
     path('positions/', PositionListView.as_view(), name='position-list'),
     path('reset_karma/', reset_karma, name='reset_karma'),
+    path('reset_karma/<int:employee_id>/', reset_karma, name='reset_karma_employee'),
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
     path('', include(router.urls)),
 
