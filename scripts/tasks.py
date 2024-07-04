@@ -1,10 +1,9 @@
 import os
+from datetime import datetime, timedelta, time
 import pandas as pd
+import re
 from django.utils import timezone
 from main.models import Employee, FilePath, KarmaHistory
-from datetime import datetime, timedelta
-import re
-
 
 def get_file_path(name):
     try:
@@ -14,12 +13,10 @@ def get_file_path(name):
         print(f"Путь к файлу с именем {name} не найден.")
         return None
 
-
 def process_work_schedule(file_path):
     df = pd.read_excel(file_path, skiprows=3)
     df = df.rename(columns={'Unnamed: 1': 'ФИО', 'Unnamed: 2': 'Город'})
     return df
-
 
 def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
     fmt = '%H:%M'
@@ -38,14 +35,12 @@ def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
 
     return False
 
-
 def extract_date_from_filename(filename):
     match = re.search(r'(\d{2}).(\d{2}).(\d{4})', filename)
     if match:
         day, month, year = map(int, match.groups())
         return datetime(year, month, day)
     return None
-
 
 def update_employee_karma(file_path):
     filename = os.path.basename(file_path)
@@ -85,6 +80,9 @@ def update_employee_karma(file_path):
 
                 print(f"Последнее обновление кармы: {last_update_date}")
                 print(f"Дата из файла: {file_date}")
+
+                # Преобразование last_update_date в datetime для использования timezone.make_aware
+                last_update_datetime = datetime.combine(last_update_date, time.min)
 
                 update_day = last_update_date.day + 1
                 update_month = last_update_date.month
@@ -165,7 +163,8 @@ def update_employee_karma(file_path):
                             update_month = 1
                             update_year += 1
 
-                employee.last_karma_update = timezone.make_aware(last_processed_date + timedelta(days=1))
+                # Использование last_update_datetime для timezone.make_aware
+                employee.last_karma_update = timezone.make_aware(datetime.combine(last_processed_date + timedelta(days=1), time.min))
                 employee.save()
                 print(f"Дата последнего обновления кармы обновлена для {full_name}: {employee.last_karma_update}")
 
@@ -173,7 +172,6 @@ def update_employee_karma(file_path):
             print(f"Сотрудник с именем {full_name} не существует.")
         except Exception as e:
             print(f"Ошибка при обработке {full_name}: {e}")
-
 
 def run_update_karma(name):
     directory_path = get_file_path(name)
