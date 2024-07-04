@@ -24,10 +24,10 @@ class Medal(models.Model):
 
 class Employee(AbstractUser):
     POSITION_CHOICES = [
-        ('Оператор технической поддержки', 'Оператор технической поддержки'),
-        ('Специалист технической поддержки', 'Специалист технической поддержки'),
-        ('Консультант технической поддержки', 'Консультант технической поддержки'),
-        ('Координатор технической поддержки', 'Координатор технической поддержки'),
+        ('Оператор ТП', 'Оператор ТП'),
+        ('Специалист ТП', 'Специалист ТП'),
+        ('Консультант ТП', 'Консультант ТП'),
+        ('Координатор ТП', 'Координатор ТП'),
     ]
     email = models.EmailField(validators=[EmailValidator(), validate_custom_email])
     position = models.CharField(max_length=50, choices=POSITION_CHOICES)
@@ -123,7 +123,11 @@ class FilePath(models.Model):
         return f"{self.name}: {self.path}"
 
 class Classifications(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100)
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subclassifications')
+
+    class Meta:
+        unique_together = ('name', 'parent')
 
     def __str__(self):
         return self.name

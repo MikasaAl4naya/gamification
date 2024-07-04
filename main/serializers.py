@@ -35,7 +35,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         fields = [
             'id','username', 'email', 'first_name', 'last_name', 'position', 'level', 'experience',
             'next_level_experience', 'karma', 'birth_date', 'about_me',
-            'avatar_url', 'status', 'acoin_amount'
+            'avatar_url', 'status', 'acoin_amount', 'is_active', 'groups'
         ]
         read_only_fields = ['username', 'email', 'position', 'level', 'experience', 'next_level_experience', 'karma']
 

@@ -219,7 +219,6 @@ def test_statistics(request):
         test_acoin_reward = attempt.test.acoin_reward
         test_experience_points = attempt.test.experience_points
         test_id = attempt.test.id if attempt.test is not None else None
-
         is_last_attempt = last_attempts.get((attempt.employee.id, attempt.test.id)) == attempt
 
         statistics.append({
@@ -237,6 +236,7 @@ def test_statistics(request):
             'test_acoin_reward': test_acoin_reward,
             'test_experience_points': test_experience_points,
             'is_last_attempt': is_last_attempt
+
         })
 
         all_tests.add((test_id, test_name))
@@ -563,15 +563,6 @@ def set_file_path(request):
         return Response({"message": f"File path for {name} updated successfully"}, status=status.HTTP_200_OK)
     else:
         return Response({"error": "Name and path not provided"}, status=status.HTTP_400_BAD_REQUEST)
-@api_view(['DELETE'])
-def delete_employee_data(request, employee_id):
-    if request.method == 'DELETE':
-        try:
-            employee = Employee.objects.get(id=employee_id)
-            employee.delete()
-            return Response({"message": f"Employee with ID {employee_id} has been deleted"}, status=status.HTTP_204_NO_CONTENT)
-        except Employee.DoesNotExist:
-            return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
 def get_user_balance(request, user_id):
@@ -874,12 +865,23 @@ def get_test_by_id(request, test_id):
     for block in sorted_blocks:
         block['content']['position'] = block['content'].get('position', 0)
 
+    # Определение доступности теста
+    employee = getattr(request, 'employee', request.user)
+    test_available = True
+
+    if not test.can_attempt_twice:
+        last_test_attempt = TestAttempt.objects.filter(employee=employee, test=test, status=TestAttempt.PASSED).exists()
+        if last_test_attempt:
+            test_available = False
+
     # Возвращаем данные о тесте и его блоках
     response_data = {
         'test': test_data,
-        'blocks': sorted_blocks
+        'blocks': sorted_blocks,
+        'test_available': test_available  # Добавляем статус доступности теста
     }
     return Response(response_data)
+
 
 
 
@@ -887,10 +889,7 @@ def get_test_by_id(request, test_id):
 class ThemesWithTestsView(APIView):
 
     def get(self, request, *args, **kwargs):
-        # Замените request.employee на request.user, если request.employee отсутствует или вызывает ошибку.
         employee = getattr(request, 'employee', request.user)
-
-        # Если у employee нет атрибутов karma или experience, задайте их значения по умолчанию.
         employee_karma = getattr(employee, 'karma', 0)
         employee_experience = getattr(employee, 'experience', 0)
 
@@ -945,6 +944,10 @@ class ThemesWithTestsView(APIView):
                             remaining_hours, remaining_seconds = divmod(remaining_time.seconds, 3600)
                             remaining_minutes = remaining_seconds // 60
 
+                # Если тест одноразовый и уже был пройден
+                if not test.can_attempt_twice and TestAttempt.objects.filter(employee=employee, test=test, status=TestAttempt.PASSED).exists():
+                    test_available = False
+
                 test_info = {
                     'test': test.id,
                     'name': test.name,
@@ -970,6 +973,7 @@ class ThemesWithTestsView(APIView):
             themes_with_tests.append(theme_with_tests)
 
         return Response(themes_with_tests)
+
 
 
 
@@ -1333,9 +1337,6 @@ def moderate_test_attempt(request, test_attempt_id):
 
     # Получаем текущего пользователя
     moderator = request.user
-
-    if not (moderator.groups.filter(name='moderator').exists() or moderator.groups.filter(name='Администраторы').exists()):
-        return Response({"message": f"Permission denied for user {moderator.username} with roles {list(moderator.groups.values_list('name', flat=True))}"}, status=status.HTTP_403_FORBIDDEN)
 
     if 'moderated_questions' not in request.data:
         return Response({"message": "Moderated questions are required"}, status=status.HTTP_400_BAD_REQUEST)

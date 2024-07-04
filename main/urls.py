@@ -86,7 +86,6 @@ urlpatterns = [
     path('users/<int:user_id>/activate/', activate_user, name='activate_user'),
     path('change-password/<int:user_id>/', change_password, name='change-password'),
     path('api/set_file_path/', set_file_path, name='set_file_path'),
-    path('api/delete_employee_data/<int:employee_id>/', delete_employee_data, name='delete_employee_data'),
     path('employee/<int:employee_id>/achievements/', EmployeeAchievementsView.as_view(), name='employee-achievements'),
     path('get_karma_history/<int:employee_id>/', get_karma_history, name='get_karma_history'),
     path('positions/', PositionListView.as_view(), name='position-list'),

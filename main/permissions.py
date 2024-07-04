@@ -28,7 +28,7 @@ class IsUser(BasePermission):
 class IsModeratorOrAdmin(BasePermission):
     def has_permission(self, request, view):
         is_authenticated = request.user.is_authenticated
-        is_moderator = request.user.groups.filter(name='moderator').exists()
+        is_moderator = request.user.groups.filter(name='Модераторы').exists()
         is_admin = request.user.groups.filter(name='Администраторы').exists()  # Изменено на русское название группы
         has_permission = is_authenticated and (is_moderator or is_admin)
 
