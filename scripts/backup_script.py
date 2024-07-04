@@ -3,7 +3,8 @@ import sys
 import django
 from datetime import datetime, timedelta
 import subprocess
-from email_utlis import send_email
+
+from scripts.email_utlis import send_email
 
 # Настройка Django
 project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -55,11 +56,11 @@ def cleanup_old_backups():
                 print(f"Удален старый бэкап: {file_path}")
 
 def main():
-    # backup_file, error = perform_backup()
-    # if backup_file:
-    #     send_email("Резервное копирование успешно", f"Резервное копирование завершено успешно: {backup_file}")
-    # else:
-    #     send_email("Резервное копирование не удалось", f"Резервное копирование не удалось. Ошибка: {error}")
+    backup_file, error = perform_backup()
+    if backup_file:
+        send_email("Резервное копирование успешно", f"Резервное копирование завершено успешно: {backup_file}")
+    else:
+        send_email("Резервное копирование не удалось", f"Резервное копирование не удалось. Ошибка: {error}")
 
     cleanup_old_backups()
     run_update_karma("work_schedule")
