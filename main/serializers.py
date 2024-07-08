@@ -218,18 +218,18 @@ class ThemeSerializer(serializers.ModelSerializer):
         model = Theme
         fields = ['id', 'name']
 class TestQuestionSerializer(serializers.ModelSerializer):
-    answer_options = AnswerOptionSerializer(many=True, partial=True,required=False)
-    image = serializers.ImageField(required=False)
-
-    def get_image(self, obj):
-        if obj.image:
-            url = self.context['request'].build_absolute_uri(obj.image)
-            return url
-        return None
+    answer_options = AnswerOptionSerializer(many=True, partial=True, required=False)
+    image = serializers.SerializerMethodField()
 
     class Meta:
         model = TestQuestion
-        fields = ['id', 'test', 'question_text', 'duration_seconds', 'question_type', 'points', 'explanation', 'image','position' , 'answer_options']
+        fields = ['id', 'test', 'question_text', 'duration_seconds', 'question_type', 'points', 'explanation', 'image', 'position', 'answer_options']
+
+    def get_image(self, obj):
+        request = self.context.get('request')
+        if obj.image and request:
+            return request.build_absolute_uri(obj.image.url)
+        return None
 
     def get_image_url(self, obj):
         request = self.context.get('request')
@@ -269,11 +269,17 @@ class TestQuestionSerializer(serializers.ModelSerializer):
 
 
 class TestSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField(required=False)
+    image = serializers.SerializerMethodField()
+
     class Meta:
         model = Test
-        fields = ['id', 'name', 'author', 'description', 'duration_seconds', 'max_score', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma','experience_points', 'acoin_reward', 'min_experience', 'achievement', 'total_questions', 'can_attempt_twice','retry_delay_days', 'send_results_to_email', 'required_test', 'image']
+        fields = ['id', 'name', 'author', 'description', 'duration_seconds', 'max_score', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma', 'experience_points', 'acoin_reward', 'min_experience', 'achievement', 'total_questions', 'can_attempt_twice', 'retry_delay_days', 'send_results_to_email', 'required_test', 'image']
 
+    def get_image(self, obj):
+        request = self.context.get('request')
+        if obj.image and request:
+            return request.build_absolute_uri(obj.image.url)
+        return None
 
 class RequestSerializer(serializers.ModelSerializer):
     class Meta:

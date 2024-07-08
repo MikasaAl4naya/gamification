@@ -826,12 +826,8 @@ def get_test_by_id(request, test_id):
     test = get_object_or_404(Test, id=test_id)
 
     # Сериализуем данные теста
-    test_serializer = TestSerializer(test)
+    test_serializer = TestSerializer(test, context={'request': request})
     test_data = test_serializer.data
-
-    # Удаляем поле image
-    if 'image' in test_data:
-        del test_data['image']
 
     # Получаем все вопросы и теорию для данного теста, отсортированные по позиции
     questions = TestQuestion.objects.filter(test=test).order_by('position')
@@ -842,10 +838,9 @@ def get_test_by_id(request, test_id):
 
     # Добавляем данные о вопросах в список блоков
     for question in questions:
-        question_data = TestQuestionSerializer(question).data
+        question_data = TestQuestionSerializer(question, context={'request': request}).data
         del question_data['id']  # Удаляем поле "id"
         del question_data['test']  # Удаляем поле "test"
-        del question_data['image']
         answer_options = question_data.get('answer_options', [])
         for answer in answer_options:
             del answer['id']  # Удаляем поле "id" из каждого ответа
@@ -859,7 +854,7 @@ def get_test_by_id(request, test_id):
 
     # Добавляем данные о теории в список блоков
     for theory in theories:
-        theory_data = TheorySerializer(theory).data
+        theory_data = TheorySerializer(theory, context={'request': request}).data
         del theory_data['id']  # Удаляем поле "id"
         del theory_data['test']  # Удаляем поле "test"
         block_data = {
