@@ -50,7 +50,7 @@ from rest_framework.decorators import api_view, parser_classes, permission_class
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
     ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer, \
-    GroupSerializer, PermissionSerializer, AdminEmployeeSerializer
+    GroupSerializer, PermissionSerializer, AdminEmployeeSerializer, StatusUpdateSerializer, ProfileUpdateSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics, viewsets
@@ -349,6 +349,25 @@ class DynamicPermission(BasePermission):
 class AchievementListView(generics.ListAPIView):
     queryset = Achievement.objects.all()
     serializer_class = AchievementSerializer
+class UpdateStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, *args, **kwargs):
+        serializer = StatusUpdateSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class UpdateProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, *args, **kwargs):
+        serializer = ProfileUpdateSerializer(request.user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 class EmployeeUpdateView(generics.UpdateAPIView):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
@@ -506,40 +525,18 @@ def reset_karma_update(request, employee_id):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+
 @api_view(['GET'])
 def get_user(request, user_id):
     try:
         # Получаем сотрудника по его ID
         employee = Employee.objects.get(id=user_id)
 
-        # Получаем опыт и карму сотрудника
-        experience = employee.experience
-        karma = employee.karma
-
-        # Получаем количество акоинов сотрудника
-        acoin = Acoin.objects.get(employee=employee).amount
-
-        # Получаем группы прав сотрудника
-        groups = employee.groups.values_list('name', flat=True)
-
-        # Создаем словарь с данными сотрудника
-        user_data = {
-            'id': employee.id,
-            'username': employee.username,
-            'first_name': employee.first_name,
-            'last_name': employee.last_name,
-            'email': employee.email,
-            'position': employee.position,
-            'level': employee.level,
-            'experience': experience,
-            'karma': karma,
-            'acoin': acoin,
-            'next_lvl_experience': employee.next_level_experience,
-            'groups': list(groups)
-        }
+        # Сериализуем данные сотрудника
+        serializer = EmployeeSerializer(employee)
 
         # Возвращаем успешный ответ с данными сотрудника
-        return Response(user_data)
+        return Response(serializer.data)
     except Employee.DoesNotExist:
         # Если сотрудник не найден, возвращаем сообщение об ошибке
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -1087,7 +1084,6 @@ def delete_test_attempt(request, attempt_id):
     return Response({"message": "Test attempt deleted successfully"}, status=status.HTTP_200_OK)
 @permission_classes([IsAdmin])
 @api_view(['POST'])
-@api_view(['POST'])
 def create_achievement(request):
     if request.method == 'POST':
         achievement_data = request.data
@@ -1158,7 +1154,8 @@ def get_answer(request, answer_id):
 
 
 @api_view(['POST'])
-@parser_classes([MultiPartParser, FormParser])
+@permission_classes([IsAdmin])
+@parser_classes([MultiPartParser, FormParser, JSONParser])
 def create_test(request):
     print(f"Incoming request data: {request.data}")
 
@@ -1182,6 +1179,8 @@ def create_test(request):
     mutable_data = request.data.copy()
     if 'image' in request.FILES:
         mutable_data['image'] = request.FILES['image']
+    else:
+        mutable_data.pop('image', None)
 
     test_serializer = TestSerializer(data=mutable_data)
     if not test_serializer.is_valid():
@@ -1204,12 +1203,16 @@ def create_test(request):
         if block_data['type'] == 'question':
             if f'image_question_{position}' in request.FILES:
                 block_data['content']['image'] = request.FILES[f'image_question_{position}']
+            else:
+                block_data['content'].pop('image', None)
 
             serializer_class = TestQuestionSerializer
             created_list = created_questions
         elif block_data['type'] == 'theory':
             if f'image_theory_{position}' in request.FILES:
                 block_data['content']['image'] = request.FILES[f'image_theory_{position}']
+            else:
+                block_data['content'].pop('image', None)
 
             serializer_class = TheorySerializer
             created_list = created_theories

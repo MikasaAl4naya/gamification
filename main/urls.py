@@ -92,6 +92,8 @@ urlpatterns = [
     path('reset_karma/', reset_karma, name='reset_karma'),
     path('reset_karma/<int:employee_id>/', reset_karma, name='reset_karma_employee'),
     path('delete-all-classifications/', DeleteAllClassificationsView.as_view(), name='delete-all-classifications'),
+    path('update_status/', UpdateStatusView.as_view(), name='update_status'),
+    path('update_profile/', UpdateProfileView.as_view(), name='update_profile'),
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
     path('', include(router.urls)),
 

@@ -93,6 +93,18 @@ class AdminEmployeeSerializer(serializers.ModelSerializer):
             instance.groups.set(groups_data)
 
         return instance
+
+class StatusUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ['status']
+class ProfileUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ['first_name', 'last_name', 'birth_date', 'about_me', 'avatar']
+
+
+
 class TestAttemptModerationSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
     test_name = serializers.CharField(source='test.name', read_only=True)
