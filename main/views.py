@@ -1,5 +1,6 @@
 import ast
 import base64
+import io
 import logging
 import math
 import re
@@ -9,6 +10,7 @@ from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
 
+from PIL import Image
 from django.contrib.auth.hashers import make_password
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.files.base import ContentFile
@@ -107,25 +109,17 @@ class LoginAPIView(APIView):
 
 def save_base64_image(base64_image, filename_prefix):
     try:
-        # Логирование перед началом декодирования
-        print(f"Base64 image: {base64_image[:30]}...")
-
-        # Декодируем изображение из base64
         format, imgstr = base64_image.split(';base64,')
-        ext = format.split('/')[-1]
+        ext = format.split('/')[-1].lower()
         if ext not in ['jpeg', 'jpg', 'png']:
             raise ValueError('Unsupported image format')
 
         img_data = base64.b64decode(imgstr)
         unique_filename = f"{filename_prefix}_{uuid.uuid4()}.{ext}"
 
-        # Логирование перед возвратом
-        print(f"Saving image as: {unique_filename}")
-
         return ContentFile(img_data, name=unique_filename)
     except Exception as e:
         raise ValueError(f'Error saving image: {str(e)}')
-
 
 class DeleteAllClassificationsView(APIView):
     def delete(self, request, *args, **kwargs):
@@ -525,17 +519,23 @@ def get_user(request, user_id):
         # Получаем количество акоинов сотрудника
         acoin = Acoin.objects.get(employee=employee).amount
 
+        # Получаем группы прав сотрудника
+        groups = employee.groups.values_list('name', flat=True)
+
         # Создаем словарь с данными сотрудника
         user_data = {
             'id': employee.id,
             'username': employee.username,
+            'first_name': employee.first_name,
+            'last_name': employee.last_name,
             'email': employee.email,
             'position': employee.position,
             'level': employee.level,
             'experience': experience,
             'karma': karma,
             'acoin': acoin,
-            'next_lvl_experience': employee.next_level_experience
+            'next_lvl_experience': employee.next_level_experience,
+            'groups': list(groups)
         }
 
         # Возвращаем успешный ответ с данными сотрудника
@@ -544,6 +544,21 @@ def get_user(request, user_id):
         # Если сотрудник не найден, возвращаем сообщение об ошибке
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
+
+def compress_image(base64_image, max_size=(800, 800), quality=85):
+    try:
+        # Извлекаем данные изображения из строки base64
+        header, encoded = base64_image.split(',', 1)
+        img_data = base64.b64decode(encoded)
+
+        # Открываем изображение с помощью Pillow
+        with Image.open(io.BytesIO(img_data)) as img:
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=quality)
+            return header + ',' + base64.b64encode(buffer.getvalue()).decode('utf-8')
+    except Exception as e:
+        raise ValueError(f"Error compressing image: {str(e)}")
 #@permission_classes([IsAdmin])
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
@@ -1156,11 +1171,9 @@ def get_answer(request, answer_id):
     return Response(serializer.data)
 
 
-
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 def create_test(request):
-    # Логирование входящего запроса
     print(f"Incoming request data: {request.data}")
 
     if request.content_type == 'application/json':
@@ -1184,13 +1197,13 @@ def create_test(request):
         base64_image = request.data.pop('image')
         if base64_image:
             try:
+                compressed_image = compress_image(base64_image)
                 filename = f"test_{request.data.get('name', 'unknown')}"
-                request.data['image'] = save_base64_image(base64_image, filename)
+                request.data['image'] = save_base64_image(compressed_image, filename)
             except ValueError as e:
                 return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     test_serializer = TestSerializer(data=request.data)
-
     if not test_serializer.is_valid():
         return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1213,8 +1226,9 @@ def create_test(request):
                 base64_image = block_data['content'].pop('image')
                 if base64_image:
                     try:
+                        compressed_image = compress_image(base64_image)
                         filename = f"question_{position}"
-                        block_data['content']['image'] = save_base64_image(base64_image, filename)
+                        block_data['content']['image'] = save_base64_image(compressed_image, filename)
                     except ValueError as e:
                         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1225,8 +1239,9 @@ def create_test(request):
                 base64_image = block_data['content'].pop('image')
                 if base64_image:
                     try:
+                        compressed_image = compress_image(base64_image)
                         filename = f"theory_{position}"
-                        block_data['content']['image'] = save_base64_image(base64_image, filename)
+                        block_data['content']['image'] = save_base64_image(compressed_image, filename)
                     except ValueError as e:
                         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1265,9 +1280,6 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
-
-
-
 
 
 
