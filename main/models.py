@@ -294,7 +294,7 @@ class Test(models.Model):
     # Новое поле для обозначения максимального количества баллов
     max_score = models.PositiveIntegerField(default=0)
     required_test = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
-    image = models.ImageField(upload_to='test/', default='default.jpg')
+    image = models.ImageField(upload_to='test/', null=True, blank=True )
 
     def clean(self):
         # Убеждаемся, что тип ачивки всегда "Test"

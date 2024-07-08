@@ -107,19 +107,7 @@ class LoginAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-def save_base64_image(base64_image, filename_prefix):
-    try:
-        format, imgstr = base64_image.split(';base64,')
-        ext = format.split('/')[-1].lower()
-        if ext not in ['jpeg', 'jpg', 'png']:
-            raise ValueError('Unsupported image format')
 
-        img_data = base64.b64decode(imgstr)
-        unique_filename = f"{filename_prefix}_{uuid.uuid4()}.{ext}"
-
-        return ContentFile(img_data, name=unique_filename)
-    except Exception as e:
-        raise ValueError(f'Error saving image: {str(e)}')
 
 class DeleteAllClassificationsView(APIView):
     def delete(self, request, *args, **kwargs):
@@ -878,6 +866,7 @@ def get_test_by_id(request, test_id):
             del answer['id']  # Удаляем поле "id" из каждого ответа
             del answer['question']
             del answer['file']
+            del answer['is_correct']
         block_data = {
             'type': 'question',
             'content': question_data
@@ -1167,10 +1156,7 @@ def get_answer(request, answer_id):
     serializer = AnswerOptionSerializer(answer)
     return Response(serializer.data)
 
-
-
 @api_view(['POST'])
-@permission_classes([IsAdmin])
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 def create_test(request):
     print(f"Incoming request data: {request.data}")
@@ -1193,8 +1179,14 @@ def create_test(request):
 
     # Обработка изображения для теста
     mutable_data = request.data.copy()
-    if 'image' in request.FILES:
-        mutable_data['image'] = request.FILES['image']
+    if 'image' in request.data:
+        base64_image = request.data['image']
+        if base64_image:
+            try:
+                filename = f"test_{request.data.get('name', 'unknown')}"
+                mutable_data['image'] = save_base64_image(base64_image, filename)
+            except ValueError as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     else:
         mutable_data.pop('image', None)
 
@@ -1217,16 +1209,28 @@ def create_test(request):
         block_data['content']['test'] = test.id
 
         if block_data['type'] == 'question':
-            if f'image_question_{position}' in request.FILES:
-                block_data['content']['image'] = request.FILES[f'image_question_{position}']
+            if 'image' in block_data['content']:
+                base64_image = block_data['content']['image']
+                if base64_image:
+                    try:
+                        filename = f"question_{position}"
+                        block_data['content']['image'] = save_base64_image(base64_image, filename)
+                    except ValueError as e:
+                        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
             else:
                 block_data['content'].pop('image', None)
 
             serializer_class = TestQuestionSerializer
             created_list = created_questions
         elif block_data['type'] == 'theory':
-            if f'image_theory_{position}' in request.FILES:
-                block_data['content']['image'] = request.FILES[f'image_theory_{position}']
+            if 'image' in block_data['content']:
+                base64_image = block_data['content']['image']
+                if base64_image:
+                    try:
+                        filename = f"theory_{position}"
+                        block_data['content']['image'] = save_base64_image(base64_image, filename)
+                    except ValueError as e:
+                        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
             else:
                 block_data['content'].pop('image', None)
 
@@ -1265,6 +1269,20 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
+
+def save_base64_image(base64_image, filename_prefix):
+    try:
+        format, imgstr = base64_image.split(';base64,')
+        ext = format.split('/')[-1].lower()
+        if ext not in ['jpeg', 'jpg', 'png']:
+            raise ValueError('Unsupported image format')
+
+        img_data = base64.b64decode(imgstr)
+        unique_filename = f"{filename_prefix}_{uuid.uuid4()}.{ext}"
+
+        return ContentFile(img_data, name=unique_filename)
+    except Exception as e:
+        raise ValueError(f'Error saving image: {str(e)}')
 
 
 def get_questions_with_explanations(request, test_id):
