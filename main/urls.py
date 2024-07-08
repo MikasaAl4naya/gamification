@@ -31,7 +31,6 @@ urlpatterns = [
     path('api/tests/', views.get_all_tests, name='get_all_tests'),
     path('api/create_acoin_transaction/', views.create_acoin_transaction, name='create_acoin_transaction'),
     path('users/', get_all_users, name='get_all_users'),
-    path('user/<int:user_id>/', get_user, name='get_user'),
     path('user/<int:user_id>/balance/', get_user_balance, name='get_user_balance'),
     path('user/<int:user_id>/transactions/', get_user_transactions, name='get_user_transactions'),
     path('answer_options/<int:pk>/', AnswerOptionDetailView.as_view(), name='answer_option_detail'),
@@ -94,6 +93,7 @@ urlpatterns = [
     path('delete-all-classifications/', DeleteAllClassificationsView.as_view(), name='delete-all-classifications'),
     path('update_status/', UpdateStatusView.as_view(), name='update_status'),
     path('update_profile/', UpdateProfileView.as_view(), name='update_profile'),
+    path('get_user/', get_user, name='get_user'),
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
     path('', include(router.urls)),
 

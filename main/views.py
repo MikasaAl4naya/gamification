@@ -527,16 +527,32 @@ def reset_karma_update(request, employee_id):
 
 
 @api_view(['GET'])
-def get_user(request, user_id):
+@permission_classes([IsAuthenticated])
+def get_user(request):
     try:
-        # Получаем сотрудника по его ID
-        employee = Employee.objects.get(id=user_id)
+        # Получаем текущего аутентифицированного сотрудника
+        employee = request.user
 
         # Сериализуем данные сотрудника
-        serializer = EmployeeSerializer(employee)
+        serializer = EmployeeSerializer(employee, context={'request': request})
 
-        # Возвращаем успешный ответ с данными сотрудника
-        return Response(serializer.data)
+        # Дополнительная статистика
+        registration_date = employee.date_joined.strftime('%Y-%m-%d')
+        last_login = employee.last_login.strftime('%Y-%m-%d %H:%M:%S') if employee.last_login else 'Never'
+        # Получаем количество завершенных тестов
+        completed_tests_count = TestAttempt.objects.filter(employee=employee, status=TestAttempt.PASSED).count()
+
+        statistics = {
+            'registration_date': registration_date,
+            'last_login': last_login,
+            'completed_tests': completed_tests_count
+        }
+
+        # Возвращаем успешный ответ с данными сотрудника и статистикой
+        return Response({
+            'profile': serializer.data,
+            'statistics': statistics
+        })
     except Employee.DoesNotExist:
         # Если сотрудник не найден, возвращаем сообщение об ошибке
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
