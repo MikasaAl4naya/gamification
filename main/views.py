@@ -77,6 +77,8 @@ class LoginAPIView(APIView):
                 experience = employee.experience
                 karma = employee.karma
                 acoin = Acoin.objects.get(employee=employee).amount
+                first_name = employee.first_name
+                last_name = employee.last_name
 
                 # Получаем группы пользователя
                 groups = user.groups.values_list('name', flat=True)
@@ -89,7 +91,9 @@ class LoginAPIView(APIView):
                     'karma': karma,
                     'acoin': acoin,
                     'groups': list(groups),
-                    'token': token.key
+                    'token': token.key,
+                    'first_name': first_name,
+                    'last_name': last_name
                 }, status=status.HTTP_200_OK)
             else:
                 return Response({
