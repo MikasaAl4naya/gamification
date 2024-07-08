@@ -545,20 +545,6 @@ def get_user(request, user_id):
         return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
 
 
-def compress_image(base64_image, max_size=(800, 800), quality=85):
-    try:
-        # Извлекаем данные изображения из строки base64
-        header, encoded = base64_image.split(',', 1)
-        img_data = base64.b64decode(encoded)
-
-        # Открываем изображение с помощью Pillow
-        with Image.open(io.BytesIO(img_data)) as img:
-            img.thumbnail(max_size, Image.Resampling.LANCZOS)
-            buffer = io.BytesIO()
-            img.save(buffer, format="JPEG", quality=quality)
-            return header + ',' + base64.b64encode(buffer.getvalue()).decode('utf-8')
-    except Exception as e:
-        raise ValueError(f"Error compressing image: {str(e)}")
 #@permission_classes([IsAdmin])
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
@@ -1101,37 +1087,36 @@ def delete_test_attempt(request, attempt_id):
     return Response({"message": "Test attempt deleted successfully"}, status=status.HTTP_200_OK)
 @permission_classes([IsAdmin])
 @api_view(['POST'])
+@api_view(['POST'])
 def create_achievement(request):
     if request.method == 'POST':
         achievement_data = request.data
         serializer = AchievementSerializer(data=achievement_data)
 
         if serializer.is_valid():
-            # Проверяем, является ли тип ачивки "Requests"
-            if achievement_data['type'] == 'Requests':
-                # Проверяем, что все необходимые поля заполнены
-                if (achievement_data['required_count'] is None or
-                        achievement_data['reward_experience'] is None or
-                        achievement_data['reward_currency'] is None or
-                        achievement_data['request_type'] is None):
-                    return Response(
-                        {"error": "All fields must be specified for achievements based on number of requests."},
-                        status=status.HTTP_400_BAD_REQUEST)
-            # Проверяем, является ли тип ачивки "Test"
-            if achievement_data['type'] == 'Test':
-                # Находим классификацию с названием "Test"
+            achievement_type = achievement_data.get('type')
+
+            if achievement_type == 'Requests':
+                required_fields = ['required_count', 'reward_experience', 'reward_currency', 'request_type']
+                for field in required_fields:
+                    if field not in achievement_data:
+                        return Response(
+                            {"error": f"Field '{field}' is required for achievements based on number of requests."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+            elif achievement_type == 'Test':
                 try:
                     test_classification = Classifications.objects.get(name="Test")
+                    serializer.validated_data['request_type'] = test_classification
+                    serializer.validated_data['required_count'] = 0
                 except Classifications.DoesNotExist:
                     return Response(
                         {"error": "No classification with name 'Test' found."},
                         status=status.HTTP_400_BAD_REQUEST)
-                # Устанавливаем значение request_type в найденную классификацию
-                serializer.validated_data['request_type'] = test_classification
-                # Проверяем, что required_count равен 0
-                serializer.validated_data['required_count'] = 0
+
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class CreateClassificationAPIView(APIView):
@@ -1171,8 +1156,9 @@ def get_answer(request, answer_id):
     return Response(serializer.data)
 
 
+
 @api_view(['POST'])
-@parser_classes([MultiPartParser, FormParser, JSONParser])
+@parser_classes([MultiPartParser, FormParser])
 def create_test(request):
     print(f"Incoming request data: {request.data}")
 
@@ -1193,17 +1179,11 @@ def create_test(request):
         return Response({'error': 'Test should contain at least one question'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Обработка изображения для теста
-    if 'image' in request.data:
-        base64_image = request.data.pop('image')
-        if base64_image:
-            try:
-                compressed_image = compress_image(base64_image)
-                filename = f"test_{request.data.get('name', 'unknown')}"
-                request.data['image'] = save_base64_image(compressed_image, filename)
-            except ValueError as e:
-                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    mutable_data = request.data.copy()
+    if 'image' in request.FILES:
+        mutable_data['image'] = request.FILES['image']
 
-    test_serializer = TestSerializer(data=request.data)
+    test_serializer = TestSerializer(data=mutable_data)
     if not test_serializer.is_valid():
         return Response(test_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1222,28 +1202,14 @@ def create_test(request):
         block_data['content']['test'] = test.id
 
         if block_data['type'] == 'question':
-            if 'image' in block_data['content']:
-                base64_image = block_data['content'].pop('image')
-                if base64_image:
-                    try:
-                        compressed_image = compress_image(base64_image)
-                        filename = f"question_{position}"
-                        block_data['content']['image'] = save_base64_image(compressed_image, filename)
-                    except ValueError as e:
-                        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            if f'image_question_{position}' in request.FILES:
+                block_data['content']['image'] = request.FILES[f'image_question_{position}']
 
             serializer_class = TestQuestionSerializer
             created_list = created_questions
         elif block_data['type'] == 'theory':
-            if 'image' in block_data['content']:
-                base64_image = block_data['content'].pop('image')
-                if base64_image:
-                    try:
-                        compressed_image = compress_image(base64_image)
-                        filename = f"theory_{position}"
-                        block_data['content']['image'] = save_base64_image(compressed_image, filename)
-                    except ValueError as e:
-                        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            if f'image_theory_{position}' in request.FILES:
+                block_data['content']['image'] = request.FILES[f'image_theory_{position}']
 
             serializer_class = TheorySerializer
             created_list = created_theories
@@ -1280,7 +1246,6 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
-
 
 
 def get_questions_with_explanations(request, test_id):
