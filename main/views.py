@@ -103,7 +103,7 @@ class LoginAPIView(APIView):
 def save_base64_image(base64_image, filename):
     match = re.match(r'data:(?P<format>\w+/[\w-]+);base64,(?P<imgstr>.*)', base64_image)
     if not match:
-        raise ValueError("Invalid base64 image format")
+        raise ValueError("Неправильный формат base64 изображения")
 
     format = match.group('format').split('/')[-1]
     imgstr = match.group('imgstr')
@@ -1153,15 +1153,25 @@ def create_test(request):
         try:
             blocks_data = json.loads(request.data.get('blocks', '[]'))
         except json.JSONDecodeError:
-            return Response({'error': 'Invalid JSON format for blocks'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Неверный формат JSON для блоков'}, status=status.HTTP_400_BAD_REQUEST)
     else:
-        return Response({'error': 'Unsupported media type'}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+        return Response({'error': 'Неподдерживаемый тип медиа'}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
     if not isinstance(blocks_data, list):
-        return Response({'error': 'Blocks should be a list'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Блоки должны быть списком'}, status=status.HTTP_400_BAD_REQUEST)
 
     if not any(isinstance(block, dict) and block.get('type') == 'question' for block in blocks_data):
-        return Response({'error': 'Test must contain at least one question'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Тест должен содержать хотя бы один вопрос'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Обработка изображения для теста
+    if 'image' in request.data:
+        base64_image = request.data.pop('image')
+        if base64_image:
+            try:
+                filename = f"test_{request.data.get('name', 'unknown')}"
+                request.data['image'] = save_base64_image(base64_image, filename)
+            except ValueError as e:
+                return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     test_serializer = TestSerializer(data=request.data)
 
@@ -1178,7 +1188,7 @@ def create_test(request):
 
     for block_data in blocks_data:
         if not isinstance(block_data, dict) or 'type' not in block_data or 'content' not in block_data:
-            return Response({'error': 'Invalid block format'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Неправильный формат блока'}, status=status.HTTP_400_BAD_REQUEST)
 
         block_data['content']['test'] = test.id
 
@@ -1195,10 +1205,19 @@ def create_test(request):
             serializer_class = TestQuestionSerializer
             created_list = created_questions
         elif block_data['type'] == 'theory':
+            if 'image' in block_data['content']:
+                base64_image = block_data['content'].pop('image')
+                if base64_image:
+                    try:
+                        filename = f"theory_{position}"
+                        block_data['content']['image'] = save_base64_image(base64_image, filename)
+                    except ValueError as e:
+                        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
             serializer_class = TheorySerializer
             created_list = created_theories
         else:
-            return Response({'error': 'Invalid block type'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Неправильный тип блока'}, status=status.HTTP_400_BAD_REQUEST)
 
         block_serializer = serializer_class(data=block_data['content'])
         if not block_serializer.is_valid():
@@ -1230,6 +1249,7 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
+
 
 
 def get_questions_with_explanations(request, test_id):
