@@ -331,7 +331,7 @@ class TestQuestion(models.Model):
 class Theory(models.Model):
     title = models.CharField(max_length=255)  # Добавленный заголовок
     text = models.TextField()
-    image = models.CharField(max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
+    image = models.ImageField(max_length=255, blank=True, null=True)  # Поле для хранения пути к изображению
     test = models.ForeignKey(Test, on_delete=models.CASCADE)
     position = models.PositiveIntegerField(default=0)
 

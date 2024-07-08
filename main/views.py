@@ -1160,21 +1160,24 @@ def get_answer(request, answer_id):
 @api_view(['POST'])
 @parser_classes([MultiPartParser, FormParser, JSONParser])
 def create_test(request):
+    # Логирование входящего запроса
+    print(f"Incoming request data: {request.data}")
+
     if request.content_type == 'application/json':
         blocks_data = request.data.get('blocks', [])
     elif 'multipart/form-data' in request.content_type:
         try:
             blocks_data = json.loads(request.data.get('blocks', '[]'))
         except json.JSONDecodeError:
-            return Response({'error': 'Неверный формат JSON для блоков'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Invalid JSON format for blocks'}, status=status.HTTP_400_BAD_REQUEST)
     else:
-        return Response({'error': 'Неподдерживаемый тип медиа'}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+        return Response({'error': 'Unsupported media type'}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
 
     if not isinstance(blocks_data, list):
-        return Response({'error': 'Блоки должны быть списком'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Blocks should be a list'}, status=status.HTTP_400_BAD_REQUEST)
 
     if not any(isinstance(block, dict) and block.get('type') == 'question' for block in blocks_data):
-        return Response({'error': 'Тест должен содержать хотя бы один вопрос'}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({'error': 'Test should contain at least one question'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Обработка изображения для теста
     if 'image' in request.data:
@@ -1201,7 +1204,7 @@ def create_test(request):
 
     for block_data in blocks_data:
         if not isinstance(block_data, dict) or 'type' not in block_data or 'content' not in block_data:
-            return Response({'error': 'Неправильный формат блока'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Invalid block format'}, status=status.HTTP_400_BAD_REQUEST)
 
         block_data['content']['test'] = test.id
 
@@ -1230,7 +1233,7 @@ def create_test(request):
             serializer_class = TheorySerializer
             created_list = created_theories
         else:
-            return Response({'error': 'Неправильный тип блока'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'Invalid block type'}, status=status.HTTP_400_BAD_REQUEST)
 
         block_serializer = serializer_class(data=block_data['content'])
         if not block_serializer.is_valid():
@@ -1262,6 +1265,7 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
+
 
 
 
