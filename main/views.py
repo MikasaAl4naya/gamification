@@ -3,6 +3,7 @@ import base64
 import logging
 import math
 import re
+import uuid
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -104,15 +105,28 @@ class LoginAPIView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-def save_base64_image(base64_image, filename):
-    match = re.match(r'data:(?P<format>\w+/[\w-]+);base64,(?P<imgstr>.*)', base64_image)
-    if not match:
-        raise ValueError("Неправильный формат base64 изображения")
+def save_base64_image(base64_image, filename_prefix):
+    try:
+        # Логирование перед началом декодирования
+        print(f"Base64 image: {base64_image[:30]}...")
 
-    format = match.group('format').split('/')[-1]
-    imgstr = match.group('imgstr')
-    img_data = ContentFile(base64.b64decode(imgstr), name=f"{filename}.{format}")
-    return img_data
+        # Декодируем изображение из base64
+        format, imgstr = base64_image.split(';base64,')
+        ext = format.split('/')[-1]
+        if ext not in ['jpeg', 'jpg', 'png']:
+            raise ValueError('Unsupported image format')
+
+        img_data = base64.b64decode(imgstr)
+        unique_filename = f"{filename_prefix}_{uuid.uuid4()}.{ext}"
+
+        # Логирование перед возвратом
+        print(f"Saving image as: {unique_filename}")
+
+        return ContentFile(img_data, name=unique_filename)
+    except Exception as e:
+        raise ValueError(f'Error saving image: {str(e)}')
+
+
 class DeleteAllClassificationsView(APIView):
     def delete(self, request, *args, **kwargs):
         Classifications.objects.all().delete()
@@ -1248,6 +1262,8 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
+
+
 
 
 
