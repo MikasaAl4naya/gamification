@@ -98,11 +98,21 @@ class LoginAPIView(APIView):
                 }, status=status.HTTP_401_UNAUTHORIZED)
         else:
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
 def save_base64_image(base64_image, filename):
-    format, imgstr = re.match(r'data:image/(?P<format>\w+);base64,(?P<imgstr>.*)', base64_image).groups()
-    ext = format.lower()
-    img_data = ContentFile(base64.b64decode(imgstr), name=f"{filename}.{ext}")
+    match = re.match(r'data:(?P<format>\w+/[\w-]+);base64,(?P<imgstr>.*)', base64_image)
+    if not match:
+        raise ValueError("Invalid base64 image format")
+
+    format = match.group('format').split('/')[-1]
+    imgstr = match.group('imgstr')
+    img_data = ContentFile(base64.b64decode(imgstr), name=f"{filename}.{format}")
     return img_data
+class DeleteAllClassificationsView(APIView):
+    def delete(self, request, *args, **kwargs):
+        Classifications.objects.all().delete()
+        return Response({"message": "All classifications have been deleted."}, status=status.HTTP_204_NO_CONTENT)
 
 @permission_classes([IsAdmin])
 class TestScoreAPIView(APIView):
@@ -1142,7 +1152,7 @@ def create_test(request):
     elif 'multipart/form-data' in request.content_type:
         try:
             blocks_data = json.loads(request.data.get('blocks', '[]'))
-        except JSONDecodeError:
+        except json.JSONDecodeError:
             return Response({'error': 'Invalid JSON format for blocks'}, status=status.HTTP_400_BAD_REQUEST)
     else:
         return Response({'error': 'Unsupported media type'}, status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
@@ -1175,8 +1185,12 @@ def create_test(request):
         if block_data['type'] == 'question':
             if 'image' in block_data['content']:
                 base64_image = block_data['content'].pop('image')
-                filename = f"question_{position}"
-                block_data['content']['image'] = save_base64_image(base64_image, filename)
+                if base64_image:
+                    try:
+                        filename = f"question_{position}"
+                        block_data['content']['image'] = save_base64_image(base64_image, filename)
+                    except ValueError as e:
+                        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
             serializer_class = TestQuestionSerializer
             created_list = created_questions
@@ -1206,8 +1220,6 @@ def create_test(request):
                 answer = answer_serializer.save()
                 created_answers.append(answer_serializer.data)
 
-            correct_answers_count = len([answer for answer in answers_data if answer.get('is_correct')])
-
         position += 1
 
     response_data = {
@@ -1218,6 +1230,7 @@ def create_test(request):
     }
 
     return Response(response_data, status=status.HTTP_201_CREATED)
+
 
 def get_questions_with_explanations(request, test_id):
     # Получаем объект теста по его идентификатору

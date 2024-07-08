@@ -25,7 +25,10 @@ class LoginSerializer(serializers.Serializer):
         # Вернуть данные, если они валидны
         return data
 
-
+class ClassificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Classifications
+        fields = '__all__'
 class EmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
     avatar_url = serializers.SerializerMethodField()
