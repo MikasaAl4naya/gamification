@@ -37,7 +37,7 @@ class Employee(AbstractUser):
     karma = models.IntegerField(default=50)
     birth_date = models.DateField(null=True, blank=True)
     about_me = models.TextField(null=True, blank=True)
-    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    avatar = models.ImageField(upload_to='avatars/', default='default.jpg', blank=True, null=True)
     status = models.CharField(max_length=100, null=True, blank=True)
     last_karma_update = models.DateTimeField(null=True, blank=True)
 

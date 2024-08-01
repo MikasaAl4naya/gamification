@@ -3,6 +3,7 @@ from django.utils.crypto import get_random_string
 from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAdminUser
 
+from gamefication import settings
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
     Request, Theme, Classifications, TestAttempt, Feedback
 
@@ -43,8 +44,11 @@ class PlayersSerializer(serializers.ModelSerializer):
         read_only_fields = ['first_name', 'last_name', 'level', 'experience', 'next_level_experience']
 
     def get_avatar_url(self, obj):
-        # Возвращаем URL дефолтного изображения
-        return "https://example.com/default_avatar.png"
+        if obj.avatar:
+            return f"http://solevoi.pythonanywhere.com{obj.avatar.url}"
+        return "http://solevoi.pythonanywhere.com/media/default.jpg"
+
+
 class EmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
     avatar_url = serializers.SerializerMethodField()
@@ -128,18 +132,15 @@ class FeedbackSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        if instance.status == 'pending':
-            representation.pop('level', None)
-            representation.pop('karma_change', None)
-            representation.pop('moderator', None)
-            representation.pop('moderator_comment', None)
-        else:
-            # Добавить детализированное представление сотрудника и типа отзыва
-            representation['target_employee'] = {
-                "id": instance.target_employee.id,
-                "full_name": f"{instance.target_employee.first_name} {instance.target_employee.last_name}"
-            }
-            representation['type'] = instance.get_type_display()
+        representation.pop('level', None)
+        representation.pop('karma_change', None)
+        representation.pop('moderator', None)
+        representation.pop('moderator_comment', None)
+        representation['target_employee'] = {
+            "id": instance.target_employee.id,
+            "full_name": f"{instance.target_employee.first_name} {instance.target_employee.last_name}"
+        }
+        representation['type'] = instance.get_type_display()
         return representation
 
 
