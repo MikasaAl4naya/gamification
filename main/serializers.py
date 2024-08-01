@@ -29,6 +29,22 @@ class ClassificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classifications
         fields = '__all__'
+
+class PlayersSerializer(serializers.ModelSerializer):
+    acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
+    avatar_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Employee
+        fields = [
+            'id', 'first_name', 'last_name', 'level', 'experience',
+            'next_level_experience', 'avatar_url', 'acoin_amount'
+        ]
+        read_only_fields = ['first_name', 'last_name', 'level', 'experience', 'next_level_experience']
+
+    def get_avatar_url(self, obj):
+        # Возвращаем URL дефолтного изображения
+        return "https://example.com/default_avatar.png"
 class EmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
     avatar_url = serializers.SerializerMethodField()
@@ -104,21 +120,11 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         fields = ['first_name', 'last_name', 'birth_date', 'about_me', 'avatar']
 
 class FeedbackSerializer(serializers.ModelSerializer):
-    target_employee = serializers.SerializerMethodField()
-    type = serializers.SerializerMethodField()
+    target_employee = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all())
 
     class Meta:
         model = Feedback
         fields = '__all__'
-
-    def get_target_employee(self, obj):
-        return {
-            "id": obj.target_employee.id,
-            "full_name": f"{obj.target_employee.first_name} {obj.target_employee.last_name}"
-        }
-
-    def get_type(self, obj):
-        return obj.get_type_display()
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -126,8 +132,16 @@ class FeedbackSerializer(serializers.ModelSerializer):
             representation.pop('level', None)
             representation.pop('karma_change', None)
             representation.pop('moderator', None)
-            representation.pop('moderator_comment')
+            representation.pop('moderator_comment', None)
+        else:
+            # Добавить детализированное представление сотрудника и типа отзыва
+            representation['target_employee'] = {
+                "id": instance.target_employee.id,
+                "full_name": f"{instance.target_employee.first_name} {instance.target_employee.last_name}"
+            }
+            representation['type'] = instance.get_type_display()
         return representation
+
 
 class TestAttemptModerationSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()

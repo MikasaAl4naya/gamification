@@ -11,6 +11,7 @@ from .views import *
 router = DefaultRouter()
 router.register(r'groups', GroupViewSet)
 router.register(r'permissions', PermissionViewSet)
+router.register(r'players', PlayersViewSet)
 
 urlpatterns = [
     path('api/login/', LoginAPIView.as_view(), name='api-login'),

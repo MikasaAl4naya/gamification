@@ -51,7 +51,7 @@ from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSer
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
     ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer, \
     GroupSerializer, PermissionSerializer, AdminEmployeeSerializer, StatusUpdateSerializer, ProfileUpdateSerializer, \
-    FeedbackSerializer
+    FeedbackSerializer, PlayersSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics, viewsets
@@ -514,6 +514,11 @@ def reset_karma_update(request, employee_id):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
+class PlayersViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Employee.objects.all()
+    serializer_class = PlayersSerializer
+    permission_classes = [IsAuthenticated]
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -525,10 +530,10 @@ def create_feedback(request, type, employee_id):
         target_employee = Employee.objects.get(pk=employee_id)
     except Employee.DoesNotExist:
         return Response({'error': 'Target employee not found'}, status=status.HTTP_404_NOT_FOUND)
-
+    print("target_employee:"+str(target_employee), employee_id)
     data = request.data.copy()
     data['type'] = type
-    data['target_employee'] = target_employee.id
+    data['target_employee'] = employee_id  # Используем employee_id вместо target_employee.id
     data['status'] = 'pending'  # Устанавливаем статус "На модерации"
 
     serializer = FeedbackSerializer(data=data)
@@ -536,6 +541,7 @@ def create_feedback(request, type, employee_id):
         serializer.save()
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
