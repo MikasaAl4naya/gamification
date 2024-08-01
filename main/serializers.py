@@ -4,7 +4,7 @@ from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAdminUser
 
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
-    Request, Theme, Classifications, TestAttempt
+    Request, Theme, Classifications, TestAttempt, Feedback
 
 
 class LoginSerializer(serializers.Serializer):
@@ -103,7 +103,31 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         model = Employee
         fields = ['first_name', 'last_name', 'birth_date', 'about_me', 'avatar']
 
+class FeedbackSerializer(serializers.ModelSerializer):
+    target_employee = serializers.SerializerMethodField()
+    type = serializers.SerializerMethodField()
 
+    class Meta:
+        model = Feedback
+        fields = '__all__'
+
+    def get_target_employee(self, obj):
+        return {
+            "id": obj.target_employee.id,
+            "full_name": f"{obj.target_employee.first_name} {obj.target_employee.last_name}"
+        }
+
+    def get_type(self, obj):
+        return obj.get_type_display()
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        if instance.status == 'pending':
+            representation.pop('level', None)
+            representation.pop('karma_change', None)
+            representation.pop('moderator', None)
+            representation.pop('moderator_comment')
+        return representation
 
 class TestAttemptModerationSerializer(serializers.ModelSerializer):
     employee_name = serializers.SerializerMethodField()
@@ -221,6 +245,8 @@ class AnswerOptionSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 class TheorySerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(required=False, allow_null=True)
+
     class Meta:
         model = Theory
         fields = '__all__'
@@ -230,19 +256,18 @@ class ThemeSerializer(serializers.ModelSerializer):
         model = Theme
         fields = ['id', 'name']
 class TestQuestionSerializer(serializers.ModelSerializer):
-    answer_options = AnswerOptionSerializer(many=True, partial=True,required=False)
-    image = serializers.ImageField(required=False)
+    answer_options = AnswerOptionSerializer(many=True, partial=True, required=False)
+    image = serializers.ImageField(required=False, allow_null=True)
 
     def get_image(self, obj):
         if obj.image:
-            url = self.context['request'].build_absolute_uri(obj.image)
+            url = self.context['request'].build_absolute_uri(obj.image.url)
             return url
         return None
 
     class Meta:
         model = TestQuestion
-        fields = ['id', 'test', 'question_text', 'duration_seconds', 'question_type', 'points', 'explanation', 'image','position' , 'answer_options']
-
+        fields = ['id', 'test', 'question_text', 'duration_seconds', 'question_type', 'points', 'explanation', 'image', 'position', 'answer_options']
     def get_image_url(self, obj):
         request = self.context.get('request')
         if obj.image:
@@ -281,11 +306,12 @@ class TestQuestionSerializer(serializers.ModelSerializer):
 
 
 class TestSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField(required=False)
     class Meta:
         model = Test
-        fields = ['id', 'name', 'author', 'description', 'duration_seconds', 'max_score', 'passing_score', 'unlimited_time', 'show_correct_answers', 'theme', 'required_karma','experience_points', 'acoin_reward', 'min_experience', 'achievement', 'total_questions', 'can_attempt_twice','retry_delay_days', 'send_results_to_email', 'required_test', 'image']
-
+        fields = '__all__'
+        extra_kwargs = {
+            'image': {'allow_null': True, 'required': False}
+        }
 
 class RequestSerializer(serializers.ModelSerializer):
     class Meta:

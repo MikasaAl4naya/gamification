@@ -94,6 +94,9 @@ urlpatterns = [
     path('update_status/', UpdateStatusView.as_view(), name='update_status'),
     path('update_profile/', UpdateProfileView.as_view(), name='update_profile'),
     path('get_user/', get_user, name='get_user'),
+    path('create_feedback/<str:type>/<int:employee_id>/', views.create_feedback, name='create_feedback'),
+    path('moderate_feedback/<int:feedback_id>/', views.moderate_feedback, name='moderate_feedback'),
+    path('feedbacks/pending/', feedbacks_pending_moderation, name='feedbacks_pending_moderation'),
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
     path('', include(router.urls)),
 

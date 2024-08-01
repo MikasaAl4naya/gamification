@@ -203,8 +203,18 @@ class Request(models.Model):
     ]
 
     classification = models.ForeignKey(Classifications, on_delete=models.CASCADE)
-    responsible = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    responsible = models.CharField(max_length=255)  # Изменено на текстовое поле
+    support_operator = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='registered_requests', null=True)  # Новый FK
+    initiator = models.CharField(max_length=255)  # Изменено на текстовое поле
     status = models.CharField(max_length=100, choices=STATUS_CHOICES)
+    description = models.TextField(null=True, blank=True)
+    number = models.CharField(max_length=100)  # Поле для номера обращения
+    date = models.DateTimeField()  # Поле для даты обращения
+    status = models.CharField(max_length=100, choices=STATUS_CHOICES)
+
+    def __str__(self):
+        return f'{self.number} - {self.status}'
+
 
 
 class Acoin(models.Model):
@@ -449,3 +459,59 @@ def create_acoin_transaction(test_attempt):
         test_attempt.employee.increase_experience(experience_reward)
 
 
+class Feedback(models.Model):
+    FEEDBACK_TYPE_CHOICES = [
+        ('complaint', 'Жалоба'),
+        ('praise', 'Похвала'),
+    ]
+
+    STATUS_CHOICES = [
+        ('pending', 'На модерации'),
+        ('approved', 'Одобрено'),
+        ('rejected', 'Отклонено'),
+    ]
+
+    LEVEL_CHOICES = [
+        (1, 'Низкий'),
+        (2, 'Средний'),
+        (3, 'Высокий'),
+    ]
+
+    type = models.CharField(max_length=10, choices=FEEDBACK_TYPE_CHOICES, verbose_name='Тип отзыва')
+    text = models.TextField(verbose_name='Текст')
+    level = models.PositiveSmallIntegerField(choices=LEVEL_CHOICES, verbose_name='Уровень', null=True, blank=True)
+    karma_change = models.IntegerField(verbose_name='Изменение кармы', default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name='Статус')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
+    moderator = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderated_feedbacks', verbose_name='Модератор')
+    target_employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='received_feedbacks', verbose_name='Целевой сотрудник')
+    moderator_comment = models.TextField(verbose_name='Комментарий модератора', null=True, blank=True)
+    moderation_date = models.DateTimeField(verbose_name='Дата модерации', null=True, blank=True)
+
+    def __str__(self):
+        return f'{self.get_type_display()} на {self.target_employee} (Уровень: {self.level})'
+
+class KarmaSettings(models.Model):
+    PRAISE = 'praise'
+    COMPLAINT = 'complaint'
+
+    FEEDBACK_TYPE_CHOICES = [
+        (PRAISE, 'Praise'),
+        (COMPLAINT, 'Complaint'),
+    ]
+
+    LEVEL_CHOICES = [
+        (1, 'Низкий'),
+        (2, 'Средний'),
+        (3, 'Высокий'),
+    ]
+
+    feedback_type = models.CharField(max_length=20, choices=FEEDBACK_TYPE_CHOICES)
+    level = models.PositiveSmallIntegerField(choices=LEVEL_CHOICES, verbose_name='Уровень', null=True, blank=True)
+    karma_change = models.IntegerField()
+
+    class Meta:
+        unique_together = ('feedback_type', 'level')
+
+    def __str__(self):
+        return f'{self.get_feedback_type_display()} - {self.get_level_display()}'

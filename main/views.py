@@ -42,7 +42,7 @@ from rest_framework.permissions import  BasePermission, IsAuthenticated, AllowAn
 from rest_framework.utils import json
 from json.decoder import JSONDecodeError
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
-    Acoin, TestAttempt, Theme, Classifications, FilePath, KarmaHistory
+    Acoin, TestAttempt, Theme, Classifications, FilePath, KarmaHistory, Feedback, KarmaSettings
 from rest_framework.generics import get_object_or_404
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
@@ -50,7 +50,8 @@ from rest_framework.decorators import api_view, parser_classes, permission_class
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
     ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer, \
-    GroupSerializer, PermissionSerializer, AdminEmployeeSerializer, StatusUpdateSerializer, ProfileUpdateSerializer
+    GroupSerializer, PermissionSerializer, AdminEmployeeSerializer, StatusUpdateSerializer, ProfileUpdateSerializer, \
+    FeedbackSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics, viewsets
@@ -514,36 +515,135 @@ def reset_karma_update(request, employee_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def create_feedback(request, type, employee_id):
+    if type not in dict(Feedback.FEEDBACK_TYPE_CHOICES).keys():
+        return Response({'error': 'Invalid feedback type provided'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        target_employee = Employee.objects.get(pk=employee_id)
+    except Employee.DoesNotExist:
+        return Response({'error': 'Target employee not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    data = request.data.copy()
+    data['type'] = type
+    data['target_employee'] = target_employee.id
+    data['status'] = 'pending'  # Устанавливаем статус "На модерации"
+
+    serializer = FeedbackSerializer(data=data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+
+
+@api_view(['POST'])
+@permission_classes([IsModeratorOrAdmin])
+def moderate_feedback(request, feedback_id):
+    try:
+        feedback = Feedback.objects.get(pk=feedback_id)
+    except Feedback.DoesNotExist:
+        return Response({'error': 'Feedback not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    data = request.data
+    action = data.get('action')
+    level = data.get('level', None)
+    moderator_comment = data.get('moderator_comment', '')
+
+    if action == 'approve':
+        if level is None:
+            return Response({'error': 'Level is required for approving feedback'}, status=status.HTTP_400_BAD_REQUEST)
+        feedback.level = level
+        feedback.karma_change = calculate_karma_change(feedback.type, level)
+        feedback.status = 'approved'
+        target_employee = feedback.target_employee
+        if feedback.type == 'praise':
+            target_employee.karma += feedback.karma_change
+        else:
+            target_employee.karma -= feedback.karma_change
+        target_employee.save()
+    elif action == 'reject':
+        feedback.status = 'rejected'
+        feedback.karma_change = 0
+
+    feedback.moderator = request.user
+    feedback.moderator_comment = moderator_comment
+    feedback.moderation_date = timezone.now()  # Устанавливаем дату модерации
+    feedback.save()
+
+    serializer = FeedbackSerializer(feedback)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+
+
+
+def calculate_karma_change(feedback_type, level):
+    try:
+        karma_setting = KarmaSettings.objects.get(feedback_type=feedback_type, level=level)
+        print("karma_setting"+str(karma_setting.id))
+        return karma_setting.karma_change
+    except KarmaSettings.DoesNotExist:
+        return 0  # Или значение по умолчанию, если настройки не найдены
+
+from .permissions import IsAdmin, IsModerator
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user(request):
     try:
-        # Получаем текущего аутентифицированного сотрудника
-        employee = request.user
+        current_employee = request.user
+        employee_id = request.query_params.get('employee_id', None)
 
-        # Сериализуем данные сотрудника
+        if employee_id:
+            try:
+                employee = Employee.objects.get(id=employee_id)
+            except Employee.DoesNotExist:
+                return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            employee = current_employee
+
         serializer = EmployeeSerializer(employee, context={'request': request})
 
-        # Дополнительная статистика
         registration_date = employee.date_joined.strftime('%Y-%m-%d')
         last_login = employee.last_login.strftime('%Y-%m-%d %H:%M:%S') if employee.last_login else 'Never'
-        # Получаем количество завершенных тестов
         completed_tests_count = TestAttempt.objects.filter(employee=employee, status=TestAttempt.PASSED).count()
+        complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint").count()
+        praises_count = Feedback.objects.filter(target_employee=employee, type="praise").count()
+
+        # Проверяем, имеет ли пользователь доступ к полной информации
+        is_admin = IsAdmin().has_permission(request, None)
+        is_moderator = IsModerator().has_permission(request, None)
+
+        if current_employee == employee or is_moderator or is_admin:
+            complaints = Feedback.objects.filter(target_employee=employee, type="complaint")
+        else:
+            complaints = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved')
+
+        praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
         statistics = {
             'registration_date': registration_date,
             'last_login': last_login,
-            'completed_tests': completed_tests_count
+            'completed_tests': completed_tests_count,
+            'complaints': complaints_count,
+            'praises': praises_count,
+            'complaints_details': FeedbackSerializer(complaints, many=True).data,
+            'praises_details': FeedbackSerializer(praises, many=True).data,
         }
 
-        # Возвращаем успешный ответ с данными сотрудника и статистикой
         return Response({
             'profile': serializer.data,
             'statistics': statistics
         })
-    except Employee.DoesNotExist:
-        # Если сотрудник не найден, возвращаем сообщение об ошибке
-        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
 
 
 #@permission_classes([IsAdmin])
@@ -1187,6 +1287,8 @@ def create_test(request):
                 mutable_data['image'] = save_base64_image(base64_image, filename)
             except ValueError as e:
                 return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        else:
+            mutable_data['image'] = None
     else:
         mutable_data.pop('image', None)
 
@@ -1217,6 +1319,8 @@ def create_test(request):
                         block_data['content']['image'] = save_base64_image(base64_image, filename)
                     except ValueError as e:
                         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                else:
+                    block_data['content']['image'] = None
             else:
                 block_data['content'].pop('image', None)
 
@@ -1231,6 +1335,8 @@ def create_test(request):
                         block_data['content']['image'] = save_base64_image(base64_image, filename)
                     except ValueError as e:
                         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+                else:
+                    block_data['content']['image'] = None
             else:
                 block_data['content'].pop('image', None)
 
@@ -1353,8 +1459,15 @@ def test_status(request, employee_id, test_id):
 
     return Response(response_data, status=status.HTTP_200_OK)
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsModeratorOrAdmin])
+def feedbacks_pending_moderation(request):
+    feedbacks = Feedback.objects.filter(status='pending')
+    serializer = FeedbackSerializer(feedbacks, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated, IsModeratorOrAdmin])
 def test_attempt_moderation_list(request):
     # Получаем последние попытки прохождения тестов на модерации для каждого пользователя и теста
     latest_attempts = TestAttempt.objects.filter(status=TestAttempt.MODERATION) \
