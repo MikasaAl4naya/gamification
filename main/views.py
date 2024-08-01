@@ -42,7 +42,8 @@ from rest_framework.permissions import  BasePermission, IsAuthenticated, AllowAn
 from rest_framework.utils import json
 from json.decoder import JSONDecodeError
 from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
-    Acoin, TestAttempt, Theme, Classifications, FilePath, KarmaHistory, Feedback, KarmaSettings
+    Acoin, TestAttempt, Theme, Classifications, FilePath, KarmaHistory, Feedback, KarmaSettings, SurveyQuestion, \
+    SurveyAnswer
 from rest_framework.generics import get_object_or_404
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
@@ -51,7 +52,7 @@ from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSer
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
     ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer, \
     GroupSerializer, PermissionSerializer, AdminEmployeeSerializer, StatusUpdateSerializer, ProfileUpdateSerializer, \
-    FeedbackSerializer, PlayersSerializer
+    FeedbackSerializer, PlayersSerializer, SurveyQuestionSerializer, SurveyAnswerSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics, viewsets
@@ -543,9 +544,6 @@ def create_feedback(request, type, employee_id):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-
-
-
 @api_view(['POST'])
 @permission_classes([IsModeratorOrAdmin])
 def moderate_feedback(request, feedback_id):
@@ -554,37 +552,50 @@ def moderate_feedback(request, feedback_id):
     except Feedback.DoesNotExist:
         return Response({'error': 'Feedback not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    data = request.data
-    action = data.get('action')
-    level = data.get('level', None)
-    moderator_comment = data.get('moderator_comment', '')
+    if feedback.status == 'pending':
+        data = request.data
+        action = data.get('action')
+        level = data.get('level', None)
+        karma_change = data.get('karma_change', None)
+        moderator_comment = data.get('moderator_comment', '')
 
-    if action == 'approve':
-        if level is None:
-            return Response({'error': 'Level is required for approving feedback'}, status=status.HTTP_400_BAD_REQUEST)
-        feedback.level = level
-        feedback.karma_change = calculate_karma_change(feedback.type, level)
-        feedback.status = 'approved'
-        target_employee = feedback.target_employee
-        if feedback.type == 'praise':
-            target_employee.karma += feedback.karma_change
-        else:
-            target_employee.karma -= feedback.karma_change
-        target_employee.save()
-    elif action == 'reject':
-        feedback.status = 'rejected'
-        feedback.karma_change = 0
+        if action == 'approve':
+            if level is not None:
+                karma_change = calculate_karma_change(feedback.type, level)
+                feedback.level = level
+            elif karma_change is None:
+                return Response({'error': 'Either karma change or level is required for approving feedback'},
+                                status=status.HTTP_400_BAD_REQUEST)
 
-    feedback.moderator = request.user
-    feedback.moderator_comment = moderator_comment
-    feedback.moderation_date = timezone.now()  # Устанавливаем дату модерации
-    feedback.save()
+            feedback.karma_change = karma_change
+            feedback.status = 'approved'
+            target_employee = feedback.target_employee
+            if feedback.type == 'praise':
+                target_employee.karma += karma_change
+            else:
+                target_employee.karma -= karma_change
+            target_employee.save()
+        elif action == 'reject':
+            feedback.status = 'rejected'
+            feedback.karma_change = 0
 
-    serializer = FeedbackSerializer(feedback)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+        feedback.moderator = request.user
+        feedback.moderator_comment = moderator_comment
+        feedback.moderation_date = timezone.now()
+        feedback.save()
+
+        serializer = FeedbackSerializer(feedback)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    else:
+        return Response({'error': 'Status must be pending'}, status=status.HTTP_400_BAD_REQUEST)
 
 
-
+def calculate_karma_change(feedback_type, level):
+    try:
+        karma_setting = KarmaSettings.objects.get(feedback_type=feedback_type, level=level)
+        return karma_setting.karma_change
+    except KarmaSettings.DoesNotExist:
+        return 0  # Или значение по умолчанию, если настройки не найдены
 
 
 def calculate_karma_change(feedback_type, level):
@@ -620,7 +631,6 @@ def get_user(request):
         complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint").count()
         praises_count = Feedback.objects.filter(target_employee=employee, type="praise").count()
 
-        # Проверяем, имеет ли пользователь доступ к полной информации
         is_admin = IsAdmin().has_permission(request, None)
         is_moderator = IsModerator().has_permission(request, None)
 
@@ -630,6 +640,9 @@ def get_user(request):
             complaints = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved')
 
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
+
+        survey_answers = SurveyAnswer.objects.filter(employee=employee)
+        survey_answers_data = SurveyAnswerSerializer(survey_answers, many=True).data
 
         statistics = {
             'registration_date': registration_date,
@@ -643,13 +656,25 @@ def get_user(request):
 
         return Response({
             'profile': serializer.data,
-            'statistics': statistics
+            'statistics': statistics,
+            'survey_answers': survey_answers_data,
         })
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+class SurveyQuestionViewSet(viewsets.ModelViewSet):
+    queryset = SurveyQuestion.objects.all()
+    serializer_class = SurveyQuestionSerializer
+    permission_classes = [IsAuthenticated]
 
+class SurveyAnswerViewSet(viewsets.ModelViewSet):
+    queryset = SurveyAnswer.objects.all()
+    serializer_class = SurveyAnswerSerializer
+    permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(employee=self.request.user)
 
 
 #@permission_classes([IsAdmin])

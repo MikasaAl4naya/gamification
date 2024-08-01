@@ -22,6 +22,19 @@ class Medal(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField()
 
+class SurveyQuestion(models.Model):
+    question_text = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.question_text
+
+class SurveyAnswer(models.Model):
+    employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    question = models.ForeignKey(SurveyQuestion, on_delete=models.CASCADE)
+    answer_text = models.TextField()
+
+    def __str__(self):
+        return f"{self.employee.username}: {self.answer_text[:50]}"
 class Employee(AbstractUser):
     POSITION_CHOICES = [
         ('Оператор ТП', 'Оператор ТП'),

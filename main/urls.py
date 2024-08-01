@@ -12,6 +12,8 @@ router = DefaultRouter()
 router.register(r'groups', GroupViewSet)
 router.register(r'permissions', PermissionViewSet)
 router.register(r'players', PlayersViewSet)
+router.register(r'survey-questions', SurveyQuestionViewSet)
+router.register(r'survey-answers', SurveyAnswerViewSet)
 
 urlpatterns = [
     path('api/login/', LoginAPIView.as_view(), name='api-login'),
