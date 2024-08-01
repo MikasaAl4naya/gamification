@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAdminUser
 
 from gamefication import settings
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
-    Request, Theme, Classifications, TestAttempt, Feedback
+    Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion
 
 
 class LoginSerializer(serializers.Serializer):
@@ -48,6 +48,15 @@ class PlayersSerializer(serializers.ModelSerializer):
             return f"http://solevoi.pythonanywhere.com{obj.avatar.url}"
         return "http://solevoi.pythonanywhere.com/media/default.jpg"
 
+class SurveyQuestionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SurveyQuestion
+        fields = '__all__'
+
+class SurveyAnswerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SurveyAnswer
+        fields = '__all__'
 
 class EmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
