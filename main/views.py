@@ -589,15 +589,6 @@ def moderate_feedback(request, feedback_id):
     else:
         return Response({'error': 'Status must be pending'}, status=status.HTTP_400_BAD_REQUEST)
 
-
-def calculate_karma_change(feedback_type, level):
-    try:
-        karma_setting = KarmaSettings.objects.get(feedback_type=feedback_type, level=level)
-        return karma_setting.karma_change
-    except KarmaSettings.DoesNotExist:
-        return 0  # Или значение по умолчанию, если настройки не найдены
-
-
 def calculate_karma_change(feedback_type, level):
     try:
         karma_setting = KarmaSettings.objects.get(feedback_type=feedback_type, level=level)
@@ -606,7 +597,6 @@ def calculate_karma_change(feedback_type, level):
     except KarmaSettings.DoesNotExist:
         return 0  # Или значение по умолчанию, если настройки не найдены
 
-from .permissions import IsAdmin, IsModerator
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

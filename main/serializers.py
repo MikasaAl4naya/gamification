@@ -57,6 +57,7 @@ class SurveyAnswerSerializer(serializers.ModelSerializer):
     class Meta:
         model = SurveyAnswer
         fields = '__all__'
+        read_only_fields = ['employee']
 
 class EmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
