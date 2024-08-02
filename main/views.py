@@ -47,12 +47,12 @@ from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, An
 from rest_framework.generics import get_object_or_404
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
-from rest_framework.decorators import api_view, parser_classes, permission_classes, authentication_classes
+from rest_framework.decorators import api_view, parser_classes, permission_classes, authentication_classes, action
 from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
     AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
     ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer, \
     GroupSerializer, PermissionSerializer, AdminEmployeeSerializer, StatusUpdateSerializer, ProfileUpdateSerializer, \
-    FeedbackSerializer, PlayersSerializer, SurveyQuestionSerializer, SurveyAnswerSerializer
+    FeedbackSerializer, PlayersSerializer, SurveyQuestionSerializer, SurveyAnswerSerializer, ClassificationsSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics, viewsets
@@ -653,6 +653,16 @@ def get_user(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+class ClassificationsViewSet(viewsets.ModelViewSet):
+    queryset = Classifications.objects.all()
+    serializer_class = ClassificationsSerializer
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def tree(self, request):
+        root_nodes = Classifications.objects.filter(parent__isnull=True)
+        serializer = self.get_serializer(root_nodes, many=True)
+        return Response(serializer.data)
 class SurveyQuestionViewSet(viewsets.ModelViewSet):
     queryset = SurveyQuestion.objects.all()
     serializer_class = SurveyQuestionSerializer

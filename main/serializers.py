@@ -58,7 +58,17 @@ class SurveyAnswerSerializer(serializers.ModelSerializer):
         model = SurveyAnswer
         fields = '__all__'
         read_only_fields = ['employee']
+class RecursiveField(serializers.Serializer):
+    def to_representation(self, value):
+        serializer = self.parent.parent.__class__(value, context=self.context)
+        return serializer.data
 
+class ClassificationsSerializer(serializers.ModelSerializer):
+    subclassifications = RecursiveField(many=True, read_only=True)
+
+    class Meta:
+        model = Classifications
+        fields = ['id', 'name', 'experience_points', 'parent', 'subclassifications']
 class EmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
     avatar_url = serializers.SerializerMethodField()

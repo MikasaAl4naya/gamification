@@ -14,7 +14,7 @@ router.register(r'permissions', PermissionViewSet)
 router.register(r'players', PlayersViewSet)
 router.register(r'survey-questions', SurveyQuestionViewSet)
 router.register(r'survey-answers', SurveyAnswerViewSet)
-
+router.register(r'classifications', ClassificationsViewSet)
 urlpatterns = [
     path('api/login/', LoginAPIView.as_view(), name='api-login'),
     path('employee/<str:username>/', EmployeeDetails.as_view(), name='employee-details'),

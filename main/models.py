@@ -138,6 +138,7 @@ class FilePath(models.Model):
 class Classifications(models.Model):
     name = models.CharField(max_length=100)
     parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subclassifications')
+    experience_points = models.IntegerField(default=0, verbose_name="Очки опыта")
 
     class Meta:
         unique_together = ('name', 'parent')
