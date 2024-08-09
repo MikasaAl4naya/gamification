@@ -5,7 +5,8 @@ from rest_framework.permissions import IsAdminUser
 
 from gamefication import settings
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
-    Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion
+    Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeLog, KarmaSettings, \
+    FilePath, ExperienceMultiplier
 
 
 class LoginSerializer(serializers.Serializer):
@@ -69,6 +70,21 @@ class ClassificationsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classifications
         fields = ['id', 'name', 'experience_points', 'parent', 'subclassifications']
+class ExperienceMultiplierSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExperienceMultiplier
+        fields = ['name', 'multiplier']
+class EmployeeLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmployeeLog
+        fields = '__all__'
+class FileUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()
+class FilePathSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FilePath
+        fields = '__all__'
+
 class EmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
     avatar_url = serializers.SerializerMethodField()
@@ -142,7 +158,10 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = ['first_name', 'last_name', 'birth_date', 'about_me', 'avatar']
-
+class KarmaSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KarmaSettings
+        fields = '__all__'
 class FeedbackSerializer(serializers.ModelSerializer):
     target_employee = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all())
 

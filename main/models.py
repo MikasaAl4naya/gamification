@@ -35,6 +35,9 @@ class SurveyAnswer(models.Model):
 
     def __str__(self):
         return f"{self.employee.username}: {self.answer_text[:50]}"
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
 class Employee(AbstractUser):
     POSITION_CHOICES = [
         ('Оператор ТП', 'Оператор ТП'),
@@ -53,6 +56,7 @@ class Employee(AbstractUser):
     avatar = models.ImageField(upload_to='avatars/', default='default.jpg', blank=True, null=True)
     status = models.CharField(max_length=100, null=True, blank=True)
     last_karma_update = models.DateTimeField(null=True, blank=True)
+    last_activity = models.DateTimeField(null=True, blank=True)
 
     def deactivate(self):
         self.is_active = False
@@ -74,41 +78,67 @@ class Employee(AbstractUser):
             self.karma = 100
         super().save(*args, **kwargs)
 
+    def log_change(self, change_type, old_value, new_value, description=None):
+        EmployeeLog.objects.create(
+            employee=self,
+            change_type=change_type,
+            old_value=old_value,
+            new_value=new_value,
+            description=description
+        )
+
+    def set_experience(self, amount):
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
+        old_experience = self.experience
+        self.experience = amount
+        self.log_change('experience', old_experience, self.experience, "Set experience")
+        self.check_level_up()
+
     def increase_experience(self, amount):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
-        self.experience += amount
-        if self.experience >= self.next_level_experience:
-            self.level_up()
+        self.set_experience(self.experience + amount)
 
-    def level_up(self):
-        if not self.is_active:
-            raise ValidationError("Cannot modify a deactivated account.")
-        self.level += 1
-        experience_multiplier = 2.0 - (self.level * 0.1)
-        if experience_multiplier < 1.0:
-            experience_multiplier = 1.0
-        self.next_level_experience = int(self.next_level_experience * experience_multiplier)
+    def check_level_up(self):
         while self.experience >= self.next_level_experience:
+            old_level = self.level
+            print(f"Current level: {self.level}. Experience: {self.experience}. Next level at: {self.next_level_experience}")
             self.level += 1
+            self.log_change('level', old_level, self.level, "Level up")
+            self.experience -= self.next_level_experience
+            print(f"Leveled up! New level: {self.level}. Remaining experience: {self.experience}")
             experience_multiplier = 2.0 - (self.level * 0.1)
             if experience_multiplier < 1.0:
                 experience_multiplier = 1.0
             self.next_level_experience = int(self.next_level_experience * experience_multiplier)
+            print(f"New next level experience: {self.next_level_experience}")
         self.save()
 
     def add_experience(self, experience):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
         if experience is not None:
-            self.experience += experience
-            self.save()
+            self.increase_experience(experience)
+
+    def set_karma(self, amount):
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
+        old_karma = self.karma
+        self.karma = amount
+        if self.karma > 100:
+            self.karma = 100
+        self.log_change('karma', old_karma, self.karma, "Set karma")
+        self.save()
 
     def add_acoins(self, acoins):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
         if acoins is not None:
             AcoinTransaction.objects.create(employee=self, amount=acoins)
+            self.log_change('acoins', self.acoin.amount, self.acoin.amount + acoins, "Add acoins")
+            self.acoin.amount += acoins
+            self.acoin.save()
 
     def add_achievement(self, achievement):
         if not self.is_active:
@@ -118,6 +148,11 @@ class Employee(AbstractUser):
     class Meta:
         app_label = 'main'
         swappable = 'AUTH_USER_MODEL'
+
+
+
+
+
 
 class KarmaHistory(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='karma_history')
@@ -131,6 +166,7 @@ class KarmaHistory(models.Model):
 class FilePath(models.Model):
     name = models.CharField(max_length=100)
     path = models.CharField(max_length=255, default='')
+    last_updated = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"{self.name}: {self.path}"
@@ -217,19 +253,35 @@ class Request(models.Model):
     ]
 
     classification = models.ForeignKey(Classifications, on_delete=models.CASCADE)
-    responsible = models.CharField(max_length=255)  # Изменено на текстовое поле
-    support_operator = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='registered_requests', null=True)  # Новый FK
-    initiator = models.CharField(max_length=255)  # Изменено на текстовое поле
+    responsible = models.CharField(max_length=255)
+    support_operator = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='registered_requests', null=True)
+    initiator = models.CharField(max_length=255)
     status = models.CharField(max_length=100, choices=STATUS_CHOICES)
     description = models.TextField(null=True, blank=True)
-    number = models.CharField(max_length=100)  # Поле для номера обращения
-    date = models.DateTimeField()  # Поле для даты обращения
-    status = models.CharField(max_length=100, choices=STATUS_CHOICES)
+    number = models.CharField(max_length=100)
+    date = models.DateTimeField()
+    is_massive = models.BooleanField(default=False)  # Новое поле для массовых обращений
+
+    def calculate_experience(self):
+        base_experience = 10  # Базовое количество опыта за обращение
+        if self.is_massive:
+            return base_experience * 2  # Увеличиваем опыт за массовое обращение
+        return base_experience
 
     def __str__(self):
-        return f'{self.number} - {self.status}'
+        return f'{self.number} - {self.get_status_display()}'
 
 
+class EmployeeLog(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    change_type = models.CharField(max_length=50)
+    old_value = models.IntegerField()
+    new_value = models.IntegerField()
+    description = models.TextField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.employee} - {self.change_type} at {self.timestamp}"
 
 class Acoin(models.Model):
     employee = models.OneToOneField(Employee, on_delete=models.CASCADE, blank=False, null=True)
@@ -244,7 +296,9 @@ class AcoinTransaction(models.Model):
     def create_from_achievement(cls, employee, achievement):
         transaction = cls(employee=employee, amount=achievement.reward_currency)
         transaction.save()
+        employee.log_change('acoins', employee.acoin.amount, employee.acoin.amount + achievement.reward_currency, "Achievement reward")
         return transaction
+
 
 
 class EmployeeItem(models.Model):
@@ -505,6 +559,12 @@ class Feedback(models.Model):
     def __str__(self):
         return f'{self.get_type_display()} на {self.target_employee} (Уровень: {self.level})'
 
+class ExperienceMultiplier(models.Model):
+    name = models.CharField(max_length=255, unique=True)  # Название условия (например, operator_responsible_multiplier)
+    multiplier = models.FloatField(default=1.0)  # Показатель множителя
+
+    def __str__(self):
+        return f"{self.name}: {self.multiplier}"
 class KarmaSettings(models.Model):
     PRAISE = 'praise'
     COMPLAINT = 'complaint'

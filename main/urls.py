@@ -15,10 +15,14 @@ router.register(r'players', PlayersViewSet)
 router.register(r'survey-questions', SurveyQuestionViewSet)
 router.register(r'survey-answers', SurveyAnswerViewSet)
 router.register(r'classifications', ClassificationsViewSet)
+router.register(r'employee-logs', EmployeeLogViewSet)
+router.register(r'karma-settings', KarmaSettingsViewSet)
+router.register(r'file-paths', FilePathViewSet)
+router.register(r'experience-multipliers', ExperienceMultiplierViewSet)
 urlpatterns = [
-    path('api/login/', LoginAPIView.as_view(), name='api-login'),
+    path('login/', LoginAPIView.as_view(), name='api-login'),
     path('employee/<str:username>/', EmployeeDetails.as_view(), name='employee-details'),
-    path('api/register/', RegisterAPIView.as_view(), name='register'),
+    path('register/', RegisterAPIView.as_view(), name='register'),
     path('create_test/', create_test, name='create_test'),
     path('create_question/', CreateQuestion.as_view(), name='create_question'),
     path('create_answer/', CreateAnswer.as_view(), name='create_answer'),
@@ -28,11 +32,11 @@ urlpatterns = [
     path('update_test/<int:id>/', UpdateTest.as_view(), name='update_test'),
     path('update_question/<int:id>/', UpdateQuestion.as_view(), name='update_question'),
     path('update_answer/<int:id>/', UpdateAnswer.as_view(), name='update_answer'),
-    path('api/test/<int:test_id>/', views.get_test_by_id, name='get_test'),
-    path('api/question/<int:question_id>/', views.get_question, name='get_question'),
-    path('api/answer/<int:answer_id>/', views.get_answer, name='get_answer'),
-    path('api/tests/', views.get_all_tests, name='get_all_tests'),
-    path('api/create_acoin_transaction/', views.create_acoin_transaction, name='create_acoin_transaction'),
+    path('test/<int:test_id>/', views.get_test_by_id, name='get_test'),
+    path('question/<int:question_id>/', views.get_question, name='get_question'),
+    path('answer/<int:answer_id>/', views.get_answer, name='get_answer'),
+    path('tests/', views.get_all_tests, name='get_all_tests'),
+    path('create_acoin_transaction/', views.create_acoin_transaction, name='create_acoin_transaction'),
     path('users/', get_all_users, name='get_all_users'),
     path('user/<int:user_id>/balance/', get_user_balance, name='get_user_balance'),
     path('user/<int:user_id>/transactions/', get_user_transactions, name='get_user_transactions'),
@@ -87,7 +91,7 @@ urlpatterns = [
     path('users/<int:user_id>/delete/', delete_user, name='delete_user'),
     path('users/<int:user_id>/activate/', activate_user, name='activate_user'),
     path('change-password/<int:user_id>/', change_password, name='change-password'),
-    path('api/set_file_path/', set_file_path, name='set_file_path'),
+    path('set_file_path/', set_file_path, name='set_file_path'),
     path('employee/<int:employee_id>/achievements/', EmployeeAchievementsView.as_view(), name='employee-achievements'),
     path('get_karma_history/<int:employee_id>/', get_karma_history, name='get_karma_history'),
     path('positions/', PositionListView.as_view(), name='position-list'),
@@ -100,6 +104,8 @@ urlpatterns = [
     path('create_feedback/<str:type>/<int:employee_id>/', views.create_feedback, name='create_feedback'),
     path('moderate_feedback/<int:feedback_id>/', views.moderate_feedback, name='moderate_feedback'),
     path('feedbacks/pending/', feedbacks_pending_moderation, name='feedbacks_pending_moderation'),
+    path('upload/', FileUploadView.as_view(), name='file-upload'),
+    path('system-statistics/', system_statistics, name='file-system_statistics'),
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
     path('', include(router.urls)),
 

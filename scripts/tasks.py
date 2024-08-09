@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timedelta, time
 import pandas as pd
 import re
+import calendar
 from django.utils import timezone
 from main.models import Employee, FilePath, KarmaHistory
 
@@ -14,8 +15,13 @@ def get_file_path(name):
         return None
 
 def process_work_schedule(file_path):
-    df = pd.read_excel(file_path, skiprows=3)
-    df = df.rename(columns={'Unnamed: 1': 'ФИО', 'Unnamed: 2': 'Город'})
+    df = pd.read_excel(file_path)
+    start_row, start_col = find_start_of_table(df)
+    if start_row is None or start_col is None:
+        print("Не удалось найти начало таблицы.")
+        return None
+    df = df.iloc[start_row:, start_col:].reset_index(drop=True)
+    df = df.rename(columns={df.columns[0]: 'ФИО', df.columns[1]: 'Город'})
     return df
 
 def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
@@ -42,7 +48,15 @@ def extract_date_from_filename(filename):
         return datetime(year, month, day)
     return None
 
+def find_start_of_table(df):
+    for i in range(len(df)):
+        for j in range(len(df.columns)):
+            if str(df.iloc[i, j]).lower() == 'фио':
+                return i + 1, j  # Предполагается, что данные начинаются на следующей строке
+    return None, None
+
 def update_employee_karma(file_path):
+    df = pd.read_excel(file_path)
     filename = os.path.basename(file_path)
     file_date = extract_date_from_filename(filename)
     if not file_date:
@@ -50,15 +64,18 @@ def update_employee_karma(file_path):
         return
 
     df = process_work_schedule(file_path)
+    if df is None:
+        print(f"Не удалось обработать файл: {file_path}")
+        return
 
     for index, row in df.iterrows():
         try:
             full_name = row['ФИО']
-            name_parts = full_name.split()
-            if len(name_parts) < 3:
-                print(f"Неправильный формат имени: {full_name}")
+            if pd.isna(full_name) or len(str(full_name).split()) < 3:
+                print(f"Пропуск строки с некорректным ФИО: {full_name}")
                 continue
-            last_name, first_name, middle_name = name_parts[0], name_parts[1], name_parts[2]
+
+            last_name, first_name, middle_name = full_name.split()
             print(f"Обработка {full_name} ({first_name} {last_name})")
 
             employees = Employee.objects.filter(first_name=first_name, last_name=last_name)
@@ -68,8 +85,7 @@ def update_employee_karma(file_path):
                 continue
 
             for employee in employees:
-                print(
-                    f"Сотрудник: {employee.id}, Имя: {employee.first_name} {employee.last_name}, Last karma update: {employee.last_karma_update}")
+                print(f"Сотрудник: {employee.id}, Имя: {employee.first_name} {employee.last_name}, Last karma update: {employee.last_karma_update}")
 
                 last_karma_update = employee.last_karma_update
 
@@ -81,9 +97,6 @@ def update_employee_karma(file_path):
                 print(f"Последнее обновление кармы: {last_update_date}")
                 print(f"Дата из файла: {file_date}")
 
-                # Преобразование last_update_date в datetime для использования timezone.make_aware
-                last_update_datetime = datetime.combine(last_update_date, time.min)
-
                 update_day = last_update_date.day + 1
                 update_month = last_update_date.month
                 update_year = last_update_date.year
@@ -91,19 +104,24 @@ def update_employee_karma(file_path):
                 last_processed_date = last_update_date
 
                 while (update_year, update_month, update_day) <= (file_date.year, file_date.month, file_date.day):
-                    shift_info = row.get(f'Unnamed: {update_day}', '').strip().lower()
-                    print(f"Смена для {update_year}-{update_month:02}-{update_day:02}: {shift_info}")
+                    # Проверка существования даты
+                    if update_day > calendar.monthrange(update_year, update_month)[1]:
+                        update_day = 1
+                        update_month += 1
+                        if update_month > 12:
+                            update_month = 1
+                            update_year += 1
 
+                    if (update_year, update_month) == (file_date.year, file_date.month) and update_day > file_date.day:
+                        break
+
+                    # Извлечение информации о смене
+                    shift_info = row.get(f'Unnamed: {update_day}', '').strip().lower()
+                    print(shift_info)
                     if any(x in shift_info for x in ['выходной', 'о', 'бс', 'б']):
                         print(f"Пропуск смены для {full_name} в {update_year}-{update_month:02}-{update_day:02} (выходной)")
                         last_processed_date = datetime(update_year, update_month, update_day)
                         update_day += 1
-                        if update_day > 31:
-                            update_day = 1
-                            update_month += 1
-                            if update_month > 12:
-                                update_month = 1
-                                update_year += 1
                         continue
 
                     if '\n' in shift_info:
@@ -113,17 +131,10 @@ def update_employee_karma(file_path):
                     else:
                         parts = [shift_info]
 
-                    print(f"Разделенные части: {parts}")
                     if len(parts) < 4:
                         print(f"Неполные данные для {update_year}-{update_month:02}-{update_day:02}: {parts}")
                         last_processed_date = datetime(update_year, update_month, update_day)
                         update_day += 1
-                        if update_day > 31:
-                            update_day = 1
-                            update_month += 1
-                            if update_month > 12:
-                                update_month = 1
-                                update_year += 1
                         continue
 
                     scheduled_time = parts[1]
@@ -156,14 +167,7 @@ def update_employee_karma(file_path):
 
                     last_processed_date = datetime(update_year, update_month, update_day)
                     update_day += 1
-                    if update_day > 31:
-                        update_day = 1
-                        update_month += 1
-                        if update_month > 12:
-                            update_month = 1
-                            update_year += 1
 
-                # Использование last_update_datetime для timezone.make_aware
                 employee.last_karma_update = timezone.make_aware(datetime.combine(last_processed_date + timedelta(days=1), time.min))
                 employee.save()
                 print(f"Дата последнего обновления кармы обновлена для {full_name}: {employee.last_karma_update}")

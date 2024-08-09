@@ -2,7 +2,7 @@ from django.db import models
 from django.db.models.signals import post_save, pre_delete, post_delete
 from django.dispatch import receiver
 from .models import TestAttempt, AcoinTransaction, Employee, create_acoin_transaction, TestQuestion, Test, Acoin, \
-    Request, Achievement, EmployeeAchievement
+    Request, Achievement, EmployeeAchievement, ExperienceMultiplier
 from django.contrib.auth.models import User, Group
 
 @receiver(post_save, sender=TestAttempt)
@@ -53,6 +53,32 @@ def assign_group(sender, instance, created, **kwargs):
             group_name = "Операторы"
         group = Group.objects.get(name=group_name)
         instance.groups.add(group)
+
+
+@receiver(post_save, sender=Request)
+def award_experience(sender, instance, created, **kwargs):
+    if created:
+        # Получаем множители из базы данных по их названиям
+        operator_responsible_multiplier = ExperienceMultiplier.objects.filter(name="operator_responsible_multiplier").first()
+        massive_request_multiplier = ExperienceMultiplier.objects.filter(name="massive_request_multiplier").first()
+
+        # Базовые очки опыта
+        experience_points = instance.calculate_experience()
+
+        # Увеличение опыта, если оператор и ответственный - одно и то же лицо
+        if instance.support_operator is not None and instance.responsible == instance.support_operator.username:
+            if operator_responsible_multiplier:
+                experience_points *= operator_responsible_multiplier.multiplier
+
+        # Увеличение опыта для массовых обращений
+        if instance.is_massive:
+            if massive_request_multiplier:
+                experience_points *= massive_request_multiplier.multiplier
+
+        support_operator = instance.support_operator
+        if support_operator is not None:
+            support_operator.add_experience(experience_points)
+            print(f"Awarded {experience_points} experience points to {support_operator.first_name} {support_operator.last_name}")
 
 @receiver(post_save, sender=Request)
 def update_achievement_progress(sender, instance, **kwargs):

@@ -12,12 +12,16 @@ from multiprocessing import Value
 
 from PIL import Image
 from django.contrib.auth.hashers import make_password
+from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.core.mail import EmailMessage
 from django.db import transaction
 from django.views.decorators.http import require_POST
 from rest_framework.exceptions import NotFound
+
+from scripts.tasks import update_employee_karma
 from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -41,25 +45,16 @@ from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import  BasePermission, IsAuthenticated, AllowAny
 from rest_framework.utils import json
 from json.decoder import JSONDecodeError
-from .models import Achievement, Employee, EmployeeAchievement, TestQuestion, AnswerOption, Test, AcoinTransaction, \
-    Acoin, TestAttempt, Theme, Classifications, FilePath, KarmaHistory, Feedback, KarmaSettings, SurveyQuestion, \
-    SurveyAnswer
+from .models import *
 from rest_framework.generics import get_object_or_404
 from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
     AnswerOptionForm
 from rest_framework.decorators import api_view, parser_classes, permission_classes, authentication_classes, action
-from .serializers import TestQuestionSerializer, AnswerOptionSerializer, TestSerializer, AcoinTransactionSerializer, \
-    AcoinSerializer, ThemeWithTestsSerializer, AchievementSerializer, RequestSerializer, ThemeSerializer, \
-    ClassificationSerializer, TestAttemptModerationSerializer, TestAttemptSerializer, PermissionsSerializer, \
-    GroupSerializer, PermissionSerializer, AdminEmployeeSerializer, StatusUpdateSerializer, ProfileUpdateSerializer, \
-    FeedbackSerializer, PlayersSerializer, SurveyQuestionSerializer, SurveyAnswerSerializer, ClassificationsSerializer
+from .serializers import *
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, generics, viewsets
-from .serializers import LoginSerializer, EmployeeSerializer, EmployeeRegSerializer  # Импортируем сериализатор
 from django.contrib.auth import authenticate
-from .models import Theory
-from .serializers import TheorySerializer
 from .views_base import EmployeeAPIView
 
 
@@ -652,7 +647,9 @@ def get_user(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
+class EmployeeLogViewSet(viewsets.ModelViewSet):
+    queryset = EmployeeLog.objects.all()
+    serializer_class = EmployeeLogSerializer
 class ClassificationsViewSet(viewsets.ModelViewSet):
     queryset = Classifications.objects.all()
     serializer_class = ClassificationsSerializer
@@ -677,7 +674,7 @@ class SurveyAnswerViewSet(viewsets.ModelViewSet):
         serializer.save(employee=self.request.user)
 
 
-#@permission_classes([IsAdmin])
+@permission_classes([IsAdmin])
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
@@ -702,6 +699,91 @@ class GroupViewSet(viewsets.ModelViewSet):
 class PermissionViewSet(viewsets.ModelViewSet):
     queryset = Permission.objects.all()
     serializer_class = PermissionSerializer
+
+
+@api_view(['GET'])
+def system_statistics(request):
+    # 1. Активные пользователи
+    active_users = get_active_users(minutes=5).values_list('username', flat=True)
+    active_users_count = active_users.count()
+
+    # 2. Общее количество зарегистрированных пользователей
+    users = Employee.objects.all().values_list('username', flat=True)
+    total_users_count = Employee.objects.count()
+
+    # 3. Количество деактивированных пользователей
+    deactivated_users_count = Employee.objects.filter(is_active=False).count()
+
+    # 4. Количество созданных тестов и их названия
+    tests = Test.objects.all().values('name')
+    total_tests_count = tests.count()
+
+    # 5. Получить тесты, где есть успешные попытки прохождения
+    successful_tests = (
+        Test.objects.annotate(
+            passed_attempts=Count('testattempt', filter=Q(testattempt__status=TestAttempt.PASSED))
+        ).filter(passed_attempts__gt=0)
+        .values('name', 'passed_attempts')
+    )
+
+    # 6. Получить тесты, которые были модерированы
+    moderated_tests = []
+    moderated_tests_queryset = TestAttempt.objects.filter(test_results__icontains='moderator')
+
+    # Обработка результатов вручную
+    for attempt in moderated_tests_queryset:
+        test_result = json.loads(attempt.test_results)
+        if 'moderator' in test_result:
+            test_name = attempt.test.name
+            moderated_test = next((item for item in moderated_tests if item['name'] == test_name), None)
+            if moderated_test:
+                moderated_test['moderated_attempts'] += 1
+            else:
+                moderated_tests.append({'name': test_name, 'moderated_attempts': 1})
+
+    # Подготовка ответа
+    data = {
+        'active_users_count': active_users_count,
+        'active_users': list(active_users),
+        'total_users_count': total_users_count,
+        'users_count': list(users),
+        'deactivated_users_count': deactivated_users_count,
+        'total_tests_count': total_tests_count,
+        'tests': list(tests),
+        'successful_tests': list(successful_tests),
+        'moderated_tests': moderated_tests,
+    }
+
+    return Response(data)
+class ExperienceMultiplierViewSet(viewsets.ModelViewSet):
+    queryset = ExperienceMultiplier.objects.all()
+    serializer_class = ExperienceMultiplierSerializer
+class KarmaSettingsViewSet(viewsets.ModelViewSet):
+    queryset = KarmaSettings.objects.all()
+    serializer_class = KarmaSettingsSerializer
+
+class FilePathViewSet(viewsets.ModelViewSet):
+    queryset = FilePath.objects.all()
+    serializer_class = FilePathSerializer
+
+def get_active_users(minutes=5):
+    time_threshold = timezone.now() - timedelta(minutes=minutes)
+    active_users = Employee.objects.filter(last_login__gte=time_threshold, is_active=True)
+    return active_users
+class FileUploadView(APIView):
+    def post(self, request, *args, **kwargs):
+        serializer = FileUploadSerializer(data=request.data)
+        if serializer.is_valid():
+            file = serializer.validated_data['file']
+            file_path = default_storage.save(file.name, ContentFile(file.read()))
+            absolute_file_path = default_storage.path(file_path)
+
+            # Здесь вызываем соответствующий скрипт для обработки файла
+            update_employee_karma(absolute_file_path)
+
+            return Response({"status": "success", "file_path": file_path}, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 @permission_classes([IsAdmin])
 @api_view(['DELETE'])
 def delete_all_tests(request):
