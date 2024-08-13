@@ -1,7 +1,6 @@
 from django.contrib import admin
 
-from main.models import Employee, Achievement, Classifications, Request, Test, TestAttempt, TestQuestion, Theme, \
-    Permission, FilePath, KarmaSettings, Feedback
+from main.models import *
 
 # Register your models here.
 admin.site.register(Employee)
@@ -15,6 +14,7 @@ admin.site.register(Theme)
 admin.site.register(Permission)
 admin.site.register(FilePath)
 admin.site.register(Feedback)
+admin.site.register(SystemSetting)
 @admin.register(KarmaSettings)
 class KarmaSettingsAdmin(admin.ModelAdmin):
     list_display = ('feedback_type', 'level', 'karma_change')

@@ -5,7 +5,7 @@ from rest_framework.authtoken.models import Token
 from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 
-from main.models import Employee
+from main.models import Employee, UserSession
 
 
 class CheckActiveUserMiddleware:
@@ -54,3 +54,26 @@ class UpdateLastActivityMiddleware(MiddlewareMixin):
         if request.user.is_authenticated:
             request.user.last_activity = timezone.now()
             request.user.save()
+class ActiveSessionMiddleware(MiddlewareMixin):
+    def process_request(self, request):
+        if request.user.is_authenticated:
+            session_key = request.session.session_key
+            user_sessions = UserSession.objects.filter(user=request.user)
+
+            # Проверка максимального количества активных сессий
+            max_active_sessions = 5  # например, 5 активных сессий на пользователя
+            if user_sessions.count() >= max_active_sessions:
+                # Завершаем самую старую сессию
+                oldest_session = user_sessions.order_by('created_at').first()
+                oldest_session.session.delete()
+                oldest_session.delete()
+
+            # Обновляем или создаем новую запись для сессии
+            user_session, created = UserSession.objects.get_or_create(user=request.user, session_id=session_key)
+            user_session.last_activity = timezone.now()
+            user_session.ip_address = request.META.get('REMOTE_ADDR')
+            user_session.user_agent = request.META.get('HTTP_USER_AGENT')
+            user_session.save()
+
+        # Очищаем старые сессии, если они не обновлялись длительное время
+        UserSession.objects.filter(last_activity__lt=timezone.now() - timezone.timedelta(hours=1)).delete()

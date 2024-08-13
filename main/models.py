@@ -1,5 +1,6 @@
 import logging
 from django.contrib.auth.models import AbstractUser, Group, Permission, User
+from django.contrib.sessions.models import Session
 from django.db import models, transaction
 from django.core.validators import EmailValidator, MinValueValidator
 from django.core.exceptions import ValidationError
@@ -52,11 +53,11 @@ class Employee(AbstractUser):
     next_level_experience = models.IntegerField(default=100)
     karma = models.IntegerField(default=50)
     birth_date = models.DateField(null=True, blank=True)
-    about_me = models.TextField(null=True, blank=True)
     avatar = models.ImageField(upload_to='avatars/', default='default.jpg', blank=True, null=True)
     status = models.CharField(max_length=100, null=True, blank=True)
     last_karma_update = models.DateTimeField(null=True, blank=True)
     last_activity = models.DateTimeField(null=True, blank=True)
+
 
     def deactivate(self):
         self.is_active = False
@@ -71,6 +72,15 @@ class Employee(AbstractUser):
         self.force_save = True
         self.save()
 
+    @property
+    def level_title(self):
+        try:
+            level_title = LevelTitle.objects.get(level=self.level)
+            return level_title.title
+        except LevelTitle.DoesNotExist:
+            return "Неизвестный уровень"
+    def get_survey_answers(self):
+        return self.survey_answers.select_related('question').all()
     def save(self, *args, **kwargs):
         if not self.is_active and not getattr(self, 'force_save', False):
             raise ValidationError("Cannot modify a deactivated account.")
@@ -150,9 +160,40 @@ class Employee(AbstractUser):
         swappable = 'AUTH_USER_MODEL'
 
 
+class UserSession(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    session = models.OneToOneField(Session, on_delete=models.CASCADE)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_activity = models.DateTimeField(auto_now=True)
 
+    def __str__(self):
+        return f"Session for {self.user.username} from {self.ip_address}"
 
+    def deactivate(self):
+        self.is_active = False
+        self.force_save = True
+        self.save()
 
+        # Завершение всех активных сессий пользователя
+        UserSession.objects.filter(user=self).delete()
+
+class SystemSetting(models.Model):
+    key = models.CharField(max_length=100, unique=True)
+    value = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.key}: {self.value}"
+class PasswordPolicy(models.Model):
+    min_length = models.PositiveIntegerField(default=8)
+    max_length = models.PositiveIntegerField(default=128)
+    min_uppercase = models.PositiveIntegerField(default=1)
+    min_lowercase = models.PositiveIntegerField(default=1)
+    min_digits = models.PositiveIntegerField(default=1)
+    allowed_symbols = models.CharField(max_length=255, default="~!@#$%^&*()-_=+[{]}|;:'\",<.>/?")
+    arabic_only = models.BooleanField(default=True)
+    no_spaces = models.BooleanField(default=True)
 
 class KarmaHistory(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='karma_history')
@@ -526,7 +567,12 @@ def create_acoin_transaction(test_attempt):
         # Начисляем опыт сотруднику
         test_attempt.employee.increase_experience(experience_reward)
 
+class LevelTitle(models.Model):
+    level = models.PositiveIntegerField(unique=True)
+    title = models.CharField(max_length=255)
 
+    def __str__(self):
+        return f"Level {self.level}: {self.title}"
 class Feedback(models.Model):
     FEEDBACK_TYPE_CHOICES = [
         ('complaint', 'Жалоба'),
@@ -589,3 +635,4 @@ class KarmaSettings(models.Model):
 
     def __str__(self):
         return f'{self.get_feedback_type_display()} - {self.get_level_display()}'
+

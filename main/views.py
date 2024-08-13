@@ -11,7 +11,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
 
 from PIL import Image
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.files.base import ContentFile
@@ -592,7 +592,41 @@ def calculate_karma_change(feedback_type, level):
     except KarmaSettings.DoesNotExist:
         return 0  # Или значение по умолчанию, если настройки не найдены
 
+class LevelTitleViewSet(viewsets.ViewSet):
+    permission_classes = [IsAdminUser]
 
+    @action(detail=False, methods=['post'])
+    def create_levels(self, request):
+        levels = request.data.get('levels', [])
+
+        if not levels:
+            return Response({"message": "No levels provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        created_levels = []
+        for i, title in enumerate(levels, start=1):
+            level_title, created = LevelTitle.objects.update_or_create(level=i, defaults={'title': title})
+            created_levels.append({'level': level_title.level, 'title': level_title.title})
+
+        return Response({
+            "message": "Levels created/updated successfully",
+            "created_levels": created_levels
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['put'])
+    def update_level(self, request, pk=None):
+        try:
+            level_title = LevelTitle.objects.get(level=pk)
+            level_title.title = request.data.get('title', level_title.title)
+            level_title.save()
+            return Response({"message": "Level updated successfully", "level": pk, "title": level_title.title})
+        except LevelTitle.DoesNotExist:
+            return Response({"message": "Level not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    @action(detail=False, methods=['get'])
+    def list_levels(self, request):
+        levels = LevelTitle.objects.all()
+        data = [{'level': lt.level, 'title': lt.title} for lt in levels]
+        return Response(data, status=status.HTTP_200_OK)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_user(request):
@@ -601,10 +635,7 @@ def get_user(request):
         employee_id = request.query_params.get('employee_id', None)
 
         if employee_id:
-            try:
-                employee = Employee.objects.get(id=employee_id)
-            except Employee.DoesNotExist:
-                return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+            employee = get_object_or_404(Employee, id=employee_id)
         else:
             employee = current_employee
 
@@ -627,7 +658,13 @@ def get_user(request):
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
         survey_answers = SurveyAnswer.objects.filter(employee=employee)
-        survey_answers_data = SurveyAnswerSerializer(survey_answers, many=True).data
+        survey_answers_data = [
+            {
+                "question": answer.question.question_text,
+                "answer": answer.answer_text
+            }
+            for answer in survey_answers
+        ]
 
         statistics = {
             'registration_date': registration_date,
@@ -641,15 +678,87 @@ def get_user(request):
 
         return Response({
             'profile': serializer.data,
+            'level_title': employee.level_title,  # Уровень и название
             'statistics': statistics,
             'survey_answers': survey_answers_data,
-        })
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+class FeedbackDetailView(generics.RetrieveAPIView):
+    queryset = Feedback.objects.all()
+    serializer_class = FeedbackSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # Дополнительные фильтры или логика, если потребуется
+        return super().get_queryset()
+
 class EmployeeLogViewSet(viewsets.ModelViewSet):
     queryset = EmployeeLog.objects.all()
     serializer_class = EmployeeLogSerializer
+
+class SurveyQuestionView(APIView):
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAdminUser()]
+        return [IsAuthenticated()]
+
+    def post(self, request):
+        questions_data = request.data.get('questions', [])
+
+        if not questions_data:
+            return Response({"message": "No questions provided"}, status=status.HTTP_400_BAD_REQUEST)
+
+        created_questions = []
+
+        for question_data in questions_data:
+            serializer = SurveyQuestionSerializer(data=question_data)
+            if serializer.is_valid():
+                question = serializer.save()
+                created_questions.append(serializer.data)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({
+            "message": "Questions created successfully",
+            "created_questions": created_questions
+        }, status=status.HTTP_201_CREATED)
+
+    def get(self, request):
+        try:
+            questions = SurveyQuestion.objects.all()
+            serializer = SurveyQuestionSerializer(questions, many=True)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_survey_answers(request):
+    try:
+        employee = request.user
+        answers = request.data.get('answers', [])
+
+        for answer_data in answers:
+            question_id = answer_data.get('question_id')
+            answer_text = answer_data.get('answer_text')
+
+            try:
+                question = SurveyQuestion.objects.get(id=question_id)
+            except SurveyQuestion.DoesNotExist:
+                return Response({'error': f'Question with ID {question_id} not found'}, status=status.HTTP_404_NOT_FOUND)
+
+            # Сохранение ответа на вопрос
+            SurveyAnswer.objects.update_or_create(
+                employee=employee,
+                question=question,
+                defaults={'answer_text': answer_text}
+            )
+
+        return Response({"message": "Answers submitted successfully"}, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 class ClassificationsViewSet(viewsets.ModelViewSet):
     queryset = Classifications.objects.all()
     serializer_class = ClassificationsSerializer
@@ -765,6 +874,66 @@ class KarmaSettingsViewSet(viewsets.ModelViewSet):
 class FilePathViewSet(viewsets.ModelViewSet):
     queryset = FilePath.objects.all()
     serializer_class = FilePathSerializer
+
+
+def delete_inactive_sessions():
+    # Определяем пороговую дату для удаления сессий (например, сессии, неактивные более 30 дней)
+    threshold_date = timezone.now() - timedelta(days=30)
+
+    # Удаление всех сессий, которые были активны до пороговой даты
+    Session.objects.filter(expire_date__lt=threshold_date).delete()
+    print("Неактивные сессии успешно удалены")
+
+class SessionListView(APIView):
+    def get(self, request):
+        # Получение всех активных сессий
+        sessions = Session.objects.all()
+        session_data = []
+
+        for session in sessions:
+            session_info = {
+                'session_key': session.session_key,
+                'expire_date': session.expire_date,
+                'data': session.get_decoded(),  # Расшифровка данных сессии
+            }
+            session_data.append(session_info)
+
+        return Response(session_data, status=status.HTTP_200_OK)
+
+    def delete(self, request):
+        # Удаление всех неактивных сессий
+        delete_inactive_sessions()
+        return Response({"message": "Неактивные сессии удалены"}, status=status.HTTP_200_OK)
+
+class SystemSettingViewSet(viewsets.ViewSet):
+    @action(detail=False, methods=['get'])
+    def list_settings(self, request):
+        settings = SystemSetting.objects.all()
+        serializer = SystemSettingSerializer(settings, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def update_setting(self, request):
+        key = request.data.get('key')
+        value = request.data.get('value')
+        setting, created = SystemSetting.objects.get_or_create(key=key)
+        setting.value = value
+        setting.save()
+        return Response({'message': f'{key} updated', key: value})
+    @action(detail=False, methods=['get'])
+    def max_active_sessions(self, request):
+        setting = SystemSetting.objects.get(key='max_active_sessions')
+        serializer = SystemSettingSerializer(setting)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def update_max_active_sessions(self, request):
+        value = request.data.get('value')
+        setting, created = SystemSetting.objects.get_or_create(key='max_active_sessions')
+        setting.value = value
+        setting.save()
+        return Response({'message': 'Max active sessions updated', 'max_active_sessions': value})
+
 
 def get_active_users(minutes=5):
     time_threshold = timezone.now() - timedelta(minutes=minutes)
@@ -1213,42 +1382,128 @@ class ThemesWithTestsView(APIView):
 
         return Response(themes_with_tests)
 
-
-
-
 @api_view(['GET'])
 def get_question(request, question_id):
     question = get_object_or_404(TestQuestion, id=question_id)
     serializer = TestQuestionSerializer(question)
     return Response(serializer.data)
 
+class PasswordManagementView(APIView):
+    def post(self, request, user_id=None):
+        # В зависимости от наличия user_id, выбираем нужный метод
+        if user_id:
+            return self.admin_change_password(request, user_id)
+        else:
+            return self.user_change_password(request)
+    @staticmethod
+    def validate_password_policy(password, policy):
+        """
+        Функция для проверки пароля на соответствие политике паролей.
+        """
+        if len(password) < policy.min_length:
+            raise ValidationError(f"Пароль должен содержать минимум {policy.min_length} символов.")
+        if len(password) > policy.max_length:
+            raise ValidationError(f"Пароль должен содержать не более {policy.max_length} символов.")
+        if sum(1 for c in password if c.isupper()) < policy.min_uppercase:
+            raise ValidationError(f"Пароль должен содержать минимум {policy.min_uppercase} заглавных букв.")
+        if sum(1 for c in password if c.islower()) < policy.min_lowercase:
+            raise ValidationError(f"Пароль должен содержать минимум {policy.min_lowercase} строчных букв.")
+        if sum(1 for c in password if c.isdigit()) < policy.min_digits:
+            raise ValidationError(f"Пароль должен содержать минимум {policy.min_digits} цифр.")
+        if sum(1 for c in password if c in policy.allowed_symbols) < policy.min_symbols:
+            raise ValidationError(f"Пароль должен содержать минимум {policy.min_symbols} символов из списка допустимых.")
 
-@permission_classes([IsAdmin])
-@api_view(['POST'])
-def change_password(request, user_id):
-    try:
-        employee = get_object_or_404(Employee, id=user_id)
-        new_password = get_random_string(length=10)
+    def admin_change_password(self, request, user_id):
+        """
+        Метод для смены пароля администратора.
+        """
+        try:
+            # Проверка прав администратора
+            self.permission_classes = [IsAdminUser]
 
-        # Хешируем новый пароль
-        hashed_password = make_password(new_password)
+            employee = get_object_or_404(Employee, id=user_id)
+            password_policy = PasswordPolicy.objects.first()
 
-        # Устанавливаем хешированный пароль для пользователя и сохраняем его
-        employee.password = hashed_password
-        employee.save()
+            # Получаем новый пароль из запроса
+            new_password = request.data.get('new_password', None)
 
-        # Отправка электронной почты с новым паролем
-        subject = 'Ваш новый пароль'
-        message = f'Здравствуйте, {employee.first_name}!\n\nВаш новый пароль: {new_password}\n'
-        email = EmailMessage(subject, message, to=[employee.email])
-        email.send()
+            if new_password:
+                # Проверка вручную введенного пароля на соответствие политике
+                self.validate_password_policy(new_password, password_policy)
+            else:
+                # Если новый пароль не предоставлен, генерируем случайный
+                new_password = get_random_string(length=password_policy.min_length)
 
-        # Возвращаем сообщение об успешной смене пароля
-        return Response({"message": "Password changed successfully and sent to email.","password": new_password}, status=status.HTTP_200_OK)
+                # Проверка случайно сгенерированного пароля на соответствие политике
+                self.validate_password_policy(new_password, password_policy)
+
+            # Хеширование и сохранение пароля
+            employee.password = make_password(new_password)
+            employee.save()
+
+            # Отправка нового пароля на email
+            subject = 'Ваш новый пароль'
+            message = f'Здравствуйте, {employee.first_name}!\n\nВаш новый пароль: {new_password}\n'
+            email = EmailMessage(subject, message, to=[employee.email])
+            email.send()
+
+            return Response({"message": "Пароль успешно изменен и отправлен на email.", "password": new_password},
+                            status=status.HTTP_200_OK)
+
+        except ValidationError as e:
+            return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def user_change_password(self, request):
+        """
+        Метод для смены пароля пользователя.
+        """
+        try:
+            user = request.user
+            old_password = request.data.get('old_password')
+            new_password = request.data.get('new_password')
+
+            if not old_password or not new_password:
+                return Response({"message": "Оба поля 'старый пароль' и 'новый пароль' должны быть заполнены."},
+                                status=status.HTTP_400_BAD_REQUEST)
+
+            if not check_password(old_password, user.password):
+                return Response({"message": "Старый пароль неверен."}, status=status.HTTP_400_BAD_REQUEST)
+
+            password_policy = PasswordPolicy.objects.first()
+
+            # Проверка нового пароля на соответствие политике паролей
+            self.validate_password_policy(new_password, password_policy)
+
+            # Хеширование и сохранение нового пароля
+            user.password = make_password(new_password)
+            user.save()
+
+            return Response({"message": "Пароль успешно изменен."}, status=status.HTTP_200_OK)
+
+        except ValidationError as e:
+            return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-    except Exception as e:
-        return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+class PasswordPolicyViewSet(viewsets.ViewSet):
+
+    @action(detail=False, methods=['get'])
+    def get_policy(self, request):
+        policy = PasswordPolicy.objects.first()
+        serializer = PasswordPolicySerializer(policy)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def update_policy(self, request):
+        policy = PasswordPolicy.objects.first()
+        serializer = PasswordPolicySerializer(policy, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['POST'])
 @permission_classes([IsAdmin])
 def create_request(request):

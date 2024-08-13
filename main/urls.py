@@ -19,7 +19,13 @@ router.register(r'employee-logs', EmployeeLogViewSet)
 router.register(r'karma-settings', KarmaSettingsViewSet)
 router.register(r'file-paths', FilePathViewSet)
 router.register(r'experience-multipliers', ExperienceMultiplierViewSet)
+router.register(r'system-settings', SystemSettingViewSet, basename='system-setting')
+router.register(r'level-titles', LevelTitleViewSet, basename='level-titles')
+
+
 urlpatterns = [
+    # Включение маршрутов, зарегистрированных с помощью DefaultRouter
+    path('', include(router.urls)),
     path('login/', LoginAPIView.as_view(), name='api-login'),
     path('employee/<str:username>/', EmployeeDetails.as_view(), name='employee-details'),
     path('register/', RegisterAPIView.as_view(), name='register'),
@@ -90,7 +96,6 @@ urlpatterns = [
     path('users/<int:user_id>/deactivate/', deactivate_user, name='deactivate_user'),
     path('users/<int:user_id>/delete/', delete_user, name='delete_user'),
     path('users/<int:user_id>/activate/', activate_user, name='activate_user'),
-    path('change-password/<int:user_id>/', change_password, name='change-password'),
     path('set_file_path/', set_file_path, name='set_file_path'),
     path('employee/<int:employee_id>/achievements/', EmployeeAchievementsView.as_view(), name='employee-achievements'),
     path('get_karma_history/<int:employee_id>/', get_karma_history, name='get_karma_history'),
@@ -106,8 +111,14 @@ urlpatterns = [
     path('feedbacks/pending/', feedbacks_pending_moderation, name='feedbacks_pending_moderation'),
     path('upload/', FileUploadView.as_view(), name='file-upload'),
     path('system-statistics/', system_statistics, name='file-system_statistics'),
-    # Включение маршрутов, зарегистрированных с помощью DefaultRouter
-    path('', include(router.urls)),
+    path('sessions/', SessionListView.as_view(), name='session-list'),
+    path('admin-change-password/<int:user_id>/', PasswordManagementView.as_view(), name='admin_change_password'),
+    path('password-change/', PasswordManagementView.as_view(), name='user_change_password'),
+    path('survey/questions/', SurveyQuestionView.as_view(), name='survey-questions'),
+    path('survey/answers/', PasswordManagementView.as_view(), name='user_change_password'),
+    path('feedback/<int:pk>/', FeedbackDetailView.as_view(), name='feedback-detail'),
+
+
 
 ]
 

@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAdminUser
 from gamefication import settings
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
     Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeLog, KarmaSettings, \
-    FilePath, ExperienceMultiplier
+    FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy
 
 
 class LoginSerializer(serializers.Serializer):
@@ -63,6 +63,28 @@ class RecursiveField(serializers.Serializer):
     def to_representation(self, value):
         serializer = self.parent.parent.__class__(value, context=self.context)
         return serializer.data
+class SystemSettingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SystemSetting
+        fields = '__all__'
+
+class SurveyAnswerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SurveyAnswer
+        fields = ['question', 'answer']
+
+class SurveyQuestionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SurveyQuestion
+        fields = ['id', 'question_text']
+
+class EmployeeProfileSerializer(serializers.ModelSerializer):
+    survey_answers = SurveyAnswerSerializer(many=True, read_only=True)
+    birth_date = serializers.DateField(source='employee.birth_date', read_only=True)
+
+    class Meta:
+        model = Employee
+        fields = ['first_name', 'last_name', 'email', 'position', 'birth_date', 'survey_answers']
 
 class ClassificationsSerializer(serializers.ModelSerializer):
     subclassifications = RecursiveField(many=True, read_only=True)
@@ -70,6 +92,10 @@ class ClassificationsSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classifications
         fields = ['id', 'name', 'experience_points', 'parent', 'subclassifications']
+class PasswordPolicySerializer( serializers.ModelSerializer):
+    class Meta:
+        model = PasswordPolicy
+        fields = '__all__'
 class ExperienceMultiplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExperienceMultiplier
@@ -93,7 +119,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         model = Employee
         fields = [
             'id','username', 'email', 'first_name', 'last_name', 'position', 'level', 'experience',
-            'next_level_experience', 'karma', 'birth_date', 'about_me',
+            'next_level_experience', 'karma', 'birth_date',
             'avatar_url', 'status', 'acoin_amount', 'is_active', 'groups'
         ]
         read_only_fields = ['username', 'email', 'position', 'level', 'experience', 'next_level_experience', 'karma']
@@ -128,7 +154,7 @@ class AdminEmployeeSerializer(serializers.ModelSerializer):
         fields = [
             'username', 'first_name', 'last_name', 'email', 'position',
             'level', 'experience', 'next_level_experience', 'karma', 'birth_date',
-            'about_me', 'avatar', 'status', 'is_active', 'acoin_amount', 'groups'
+            'avatar', 'status', 'is_active', 'acoin_amount', 'groups'
         ]
 
     def update(self, instance, validated_data):
@@ -157,18 +183,28 @@ class StatusUpdateSerializer(serializers.ModelSerializer):
 class ProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
-        fields = ['first_name', 'last_name', 'birth_date', 'about_me', 'avatar']
+        fields = ['first_name', 'last_name', 'birth_date', 'avatar']
 class KarmaSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = KarmaSettings
         fields = '__all__'
 class FeedbackSerializer(serializers.ModelSerializer):
     target_employee = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all())
+    moderator_comment = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = Feedback
-        fields = '__all__'
-
+        fields = [
+            'id',
+            'target_employee',
+            'type',
+            'text',
+            'status',
+            'created_at',
+            'moderation_date',
+            'moderator_comment',  # Явно включаем поле
+            'moderator'
+        ]
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation.pop('level', None)
