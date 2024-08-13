@@ -10,7 +10,7 @@ from .views import *
 
 router = DefaultRouter()
 router.register(r'groups', GroupViewSet)
-router.register(r'permissions', PermissionViewSet)
+router.register(r'permissions', PermissionManagementViewSet,basename='permission-management')
 router.register(r'players', PlayersViewSet)
 router.register(r'survey-questions', SurveyQuestionViewSet)
 router.register(r'survey-answers', SurveyAnswerViewSet)
@@ -115,7 +115,7 @@ urlpatterns = [
     path('admin-change-password/<int:user_id>/', PasswordManagementView.as_view(), name='admin_change_password'),
     path('password-change/', PasswordManagementView.as_view(), name='user_change_password'),
     path('survey/questions/', SurveyQuestionView.as_view(), name='survey-questions'),
-    path('survey/answers/', PasswordManagementView.as_view(), name='user_change_password'),
+    path('survey/answers/', submit_survey_answers, name='user_change_password'),
     path('feedback/<int:pk>/', FeedbackDetailView.as_view(), name='feedback-detail'),
 
 

@@ -804,10 +804,64 @@ class GroupViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         return Response(serializer.data)
-@permission_classes([IsAdmin])
-class PermissionViewSet(viewsets.ModelViewSet):
-    queryset = Permission.objects.all()
-    serializer_class = PermissionSerializer
+
+
+class PermissionManagementViewSet(viewsets.ViewSet):
+    queryset = Permission.objects.none()  # Фиктивный queryset
+
+    @action(detail=False, methods=['get'])
+    def list_permissions(self, request):
+        permissions = Permission.objects.all()
+        serializer = PermissionSerializer(permissions, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'])
+    def assign_permission_to_user(self, request, pk=None):
+        user = get_object_or_404(Employee, pk=pk)
+        permission = get_object_or_404(Permission, id=request.data.get('permission_id'))
+        user.user_permissions.add(permission)
+        return Response({'status': 'permission assigned'})
+
+    @action(detail=True, methods=['post'])
+    def remove_permission_from_user(self, request, pk=None):
+        user = get_object_or_404(Employee, pk=pk)
+        permission = get_object_or_404(Permission, id=request.data.get('permission_id'))
+        user.user_permissions.remove(permission)
+        return Response({'status': 'permission removed'})
+
+    @action(detail=True, methods=['post'])
+    def assign_permission_to_group(self, request, pk=None):
+        group = get_object_or_404(Group, pk=pk)
+        permission = get_object_or_404(Permission, id=request.data.get('permission_id'))
+        group.permissions.add(permission)
+        return Response({'status': 'permission assigned'})
+
+    @action(detail=True, methods=['post'])
+    def remove_permission_from_group(self, request, pk=None):
+        group = get_object_or_404(Group, pk=pk)
+        permission = get_object_or_404(Permission, id=request.data.get('permission_id'))
+        group.permissions.remove(permission)
+        return Response({'status': 'permission removed'})
+
+    @action(detail=True, methods=['get'])
+    def list_user_permissions(self, request, pk=None):
+        user = get_object_or_404(Employee, pk=pk)
+        permissions = user.user_permissions.all()
+        serializer = PermissionSerializer(permissions, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
+    def list_group_permissions(self, request, pk=None):
+        group = get_object_or_404(Group, pk=pk)
+        permissions = group.permissions.all()
+        serializer = PermissionSerializer(permissions, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def list_groups(self, request):
+        groups = Group.objects.all()
+        serializer = GroupSerializer(groups, many=True)
+        return Response(serializer.data)
 
 
 @api_view(['GET'])
