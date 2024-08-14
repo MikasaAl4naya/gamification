@@ -246,6 +246,9 @@ class GroupSerializer(serializers.ModelSerializer):
         model = Group
         fields = ['id', 'name', 'permissions', 'permissions_info']
 
+class FileUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()
+    name = serializers.CharField(max_length=100)
 
 
     def update(self, instance, validated_data):
