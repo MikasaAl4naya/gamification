@@ -627,7 +627,7 @@ class LevelTitleViewSet(viewsets.ViewSet):
             return Response({"message": "Level updated successfully", "level": pk, "title": level_title.title})
         except LevelTitle.DoesNotExist:
             return Response({"message": "Level not found"}, status=status.HTTP_404_NOT_FOUND)
-
+#########
     @action(detail=False, methods=['get'])
     def list_levels(self, request):
         levels = LevelTitle.objects.all()
