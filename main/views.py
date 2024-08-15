@@ -611,64 +611,64 @@ class LevelTitleViewSet(viewsets.ViewSet):
         return Response(data, status=status.HTTP_200_OK)
 
 
-# class FileUploadAndAnalysisView(APIView):
-#     def post(self, request):
-#         file = request.FILES.get('file')
-#         if not file:
-#             return Response({"message": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
-#         print(f"Received file: {file.name}")
-#         # Определение директории на основе типа файла
-#         if "Тип обращений" in file.name:
-#             print("Detected 'Тип обращений' in file name")
-#             file_path_entry = FilePath.objects.get(name="Requests")
-#         elif self.has_date_format(file.name):
-#             print(f"Detected date format in file name: {file.name}")
-#             file_path_entry = FilePath.objects.get(name="Work Schedule")
-#         else:
-#             print(f"Unknown file type or incorrect date format for file: {file.name}")
-#             return Response({"message": "Unknown file type or incorrect date format"},
-#                             status=status.HTTP_400_BAD_REQUEST)
-#         directory_path = file_path_entry.path
-#         if not os.path.exists(directory_path):
-#             return Response({"message": f"Directory does not exist: {directory_path}"},
-#                             status=status.HTTP_400_BAD_REQUEST)
-#         # Сохранение файла в указанную директорию
-#         destination_file_path = os.path.join(directory_path, file.name)
-#         with open(destination_file_path, 'wb+') as destination_file:
-#             for chunk in file.chunks():
-#                 destination_file.write(chunk)
-#         # Запуск соответствующего скрипта на основе имени файла
-#         if "Тип обращений" in file.name:
-#             self.run_classifications_script(destination_file_path)
-#         elif self.has_date_format(file.name):
-#             self.run_schedule_script(destination_file_path)
-#         else:
-#             return Response({"message": "Unknown file type or incorrect date format"},
-#                             status=status.HTTP_400_BAD_REQUEST)
-#
-#         return Response({"message": "File processed successfully"}, status=status.HTTP_200_OK)
-#
-#     def run_classifications_script(self, file_path):
-#         try:
-#             from scripts.class_script import run_classification_script
-#             run_classification_script()  # Вызов без аргументов
-#             print(f"Classification script executed for file: {file_path}")
-#         except Exception as e:
-#             print(f"Error running classification script: {e}")
-#     def run_schedule_script(self, file_path):
-#         try:
-#             from scripts.tasks import update_employee_karma
-#             update_employee_karma(file_path)
-#             print(f"Schedule script executed for file: {file_path}")
-#         except Exception as e:
-#             print(f"Error running schedule script: {e}")
-#     def has_date_format(self, filename):
-#         # Регулярное выражение теперь включает проверку расширения .xlsx
-#         date_pattern = r'\d{2}\.\d{2}\.\d{4}\.xlsx$'  # dd.mm.yyyy.xlsx
-#         match = re.search(date_pattern, filename)
-#         print(
-#             f"Date format check for filename '{filename}': Match found: {bool(match)}, Matched text: {match.group(0) if match else 'None'}")
-#         return bool(match)
+class FileUploadAndAnalysisView(APIView):
+    def post(self, request):
+        file = request.FILES.get('file')
+        if not file:
+            return Response({"message": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+        print(f"Received file: {file.name}")
+        # Определение директории на основе типа файла
+        if "Тип обращений" in file.name:
+            print("Detected 'Тип обращений' in file name")
+            file_path_entry = FilePath.objects.get(name="Requests")
+        elif self.has_date_format(file.name):
+            print(f"Detected date format in file name: {file.name}")
+            file_path_entry = FilePath.objects.get(name="Work Schedule")
+        else:
+            print(f"Unknown file type or incorrect date format for file: {file.name}")
+            return Response({"message": "Unknown file type or incorrect date format"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        directory_path = file_path_entry.path
+        if not os.path.exists(directory_path):
+            return Response({"message": f"Directory does not exist: {directory_path}"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        # Сохранение файла в указанную директорию
+        destination_file_path = os.path.join(directory_path, file.name)
+        with open(destination_file_path, 'wb+') as destination_file:
+            for chunk in file.chunks():
+                destination_file.write(chunk)
+        # Запуск соответствующего скрипта на основе имени файла
+        if "Тип обращений" in file.name:
+            self.run_classifications_script(destination_file_path)
+        elif self.has_date_format(file.name):
+            self.run_schedule_script(destination_file_path)
+        else:
+            return Response({"message": "Unknown file type or incorrect date format"},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({"message": "File processed successfully"}, status=status.HTTP_200_OK)
+
+    def run_classifications_script(self, file_path):
+        try:
+            from scripts.class_script import run_classification_script
+            run_classification_script()  # Вызов без аргументов
+            print(f"Classification script executed for file: {file_path}")
+        except Exception as e:
+            print(f"Error running classification script: {e}")
+    def run_schedule_script(self, file_path):
+        try:
+            from scripts.tasks import update_employee_karma
+            update_employee_karma(file_path)
+            print(f"Schedule script executed for file: {file_path}")
+        except Exception as e:
+            print(f"Error running schedule script: {e}")
+    def has_date_format(self, filename):
+        # Регулярное выражение теперь включает проверку расширения .xlsx
+        date_pattern = r'\d{2}\.\d{2}\.\d{4}\.xlsx$'  # dd.mm.yyyy.xlsx
+        match = re.search(date_pattern, filename)
+        print(
+            f"Date format check for filename '{filename}': Match found: {bool(match)}, Matched text: {match.group(0) if match else 'None'}")
+        return bool(match)
 class ManualRunAnalysisView(APIView):
     def post(self, request):
         file_path = request.data.get('file_path')
