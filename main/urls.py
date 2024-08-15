@@ -109,7 +109,6 @@ urlpatterns = [
     path('create_feedback/<str:type>/<int:employee_id>/', views.create_feedback, name='create_feedback'),
     path('moderate_feedback/<int:feedback_id>/', views.moderate_feedback, name='moderate_feedback'),
     path('feedbacks/pending/', feedbacks_pending_moderation, name='feedbacks_pending_moderation'),
-    path('upload/', FileUploadView.as_view(), name='file-upload'),
     path('system-statistics/', system_statistics, name='file-system_statistics'),
     path('sessions/', SessionListView.as_view(), name='session-list'),
     path('admin-change-password/<int:user_id>/', PasswordManagementView.as_view(), name='admin_change_password'),
@@ -117,7 +116,7 @@ urlpatterns = [
     path('survey/questions/', SurveyQuestionView.as_view(), name='survey-questions'),
     path('survey/answers/', submit_survey_answers, name='user_change_password'),
     path('feedback/<int:pk>/', FeedbackDetailView.as_view(), name='feedback-detail'),
-    path('upload-and-analyze/', FileUploadAndAnalysisView.as_view(), name='upload-and-analyze'),
+    # path('upload-and-analyze/', FileUploadAndAnalysisView.as_view(), name='upload-and-analyze'),
 ]
 
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
