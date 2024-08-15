@@ -1,32 +1,16 @@
-import ast
 import base64
-import importlib
-import io
-import logging
 import math
 import os
-import re
-import subprocess
-import sys
-import tempfile
 import uuid
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from multiprocessing import Value
-import scripts.class_script
-import scripts.tasks
-from PIL import Image
 from django.contrib.auth.hashers import make_password, check_password
-from django.contrib.sessions.models import Session
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
 from django.core.mail import EmailMessage
-from django.db import transaction
 from django.views.decorators.http import require_POST
-from rest_framework.exceptions import NotFound
-
 from scripts.tasks import update_employee_karma
 from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin
 from django.utils.decorators import method_decorator
@@ -35,16 +19,10 @@ from rest_framework.authentication import TokenAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import pytz
-from django.contrib.auth import login, logout, get_user_model
-from django.core.checks import messages
-from django.core.serializers import serialize
 from django.db.models import Max, FloatField, Avg, Count, Q, F, Sum, ExpressionWrapper, DurationField, OuterRef, \
     Subquery, Window, When, Case
 from django.db.models.functions import Coalesce, RowNumber
 from django.http import HttpResponse, JsonResponse
-from django.contrib.auth.models import User, Permission, Group
-from django.utils import timezone
-from django.utils.crypto import get_random_string
 from django.utils.timezone import localtime
 from rest_framework.fields import IntegerField
 from rest_framework.generics import RetrieveAPIView
@@ -53,8 +31,6 @@ from rest_framework.utils import json
 from json.decoder import JSONDecodeError
 from .models import *
 from rest_framework.generics import get_object_or_404
-from .forms import AchievementForm, RequestForm, EmployeeRegistrationForm, EmployeeAuthenticationForm, QuestionForm, \
-    AnswerOptionForm
 from rest_framework.decorators import api_view, parser_classes, permission_classes, authentication_classes, action
 from .serializers import *
 from rest_framework.views import APIView
@@ -635,64 +611,64 @@ class LevelTitleViewSet(viewsets.ViewSet):
         return Response(data, status=status.HTTP_200_OK)
 
 
-class FileUploadAndAnalysisView(APIView):
-    def post(self, request):
-        file = request.FILES.get('file')
-        if not file:
-            return Response({"message": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
-        print(f"Received file: {file.name}")
-        # Определение директории на основе типа файла
-        if "Тип обращений" in file.name:
-            print("Detected 'Тип обращений' in file name")
-            file_path_entry = FilePath.objects.get(name="Requests")
-        elif self.has_date_format(file.name):
-            print(f"Detected date format in file name: {file.name}")
-            file_path_entry = FilePath.objects.get(name="Work Schedule")
-        else:
-            print(f"Unknown file type or incorrect date format for file: {file.name}")
-            return Response({"message": "Unknown file type or incorrect date format"},
-                            status=status.HTTP_400_BAD_REQUEST)
-        directory_path = file_path_entry.path
-        if not os.path.exists(directory_path):
-            return Response({"message": f"Directory does not exist: {directory_path}"},
-                            status=status.HTTP_400_BAD_REQUEST)
-        # Сохранение файла в указанную директорию
-        destination_file_path = os.path.join(directory_path, file.name)
-        with open(destination_file_path, 'wb+') as destination_file:
-            for chunk in file.chunks():
-                destination_file.write(chunk)
-        # Запуск соответствующего скрипта на основе имени файла
-        if "Тип обращений" in file.name:
-            self.run_classifications_script(destination_file_path)
-        elif self.has_date_format(file.name):
-            self.run_schedule_script(destination_file_path)
-        else:
-            return Response({"message": "Unknown file type or incorrect date format"},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        return Response({"message": "File processed successfully"}, status=status.HTTP_200_OK)
-
-    def run_classifications_script(self, file_path):
-        try:
-            from scripts.class_script import run_classification_script
-            run_classification_script()  # Вызов без аргументов
-            print(f"Classification script executed for file: {file_path}")
-        except Exception as e:
-            print(f"Error running classification script: {e}")
-    def run_schedule_script(self, file_path):
-        try:
-            from scripts.tasks import update_employee_karma
-            update_employee_karma(file_path)
-            print(f"Schedule script executed for file: {file_path}")
-        except Exception as e:
-            print(f"Error running schedule script: {e}")
-    def has_date_format(self, filename):
-        # Регулярное выражение теперь включает проверку расширения .xlsx
-        date_pattern = r'\d{2}\.\d{2}\.\d{4}\.xlsx$'  # dd.mm.yyyy.xlsx
-        match = re.search(date_pattern, filename)
-        print(
-            f"Date format check for filename '{filename}': Match found: {bool(match)}, Matched text: {match.group(0) if match else 'None'}")
-        return bool(match)
+# class FileUploadAndAnalysisView(APIView):
+#     def post(self, request):
+#         file = request.FILES.get('file')
+#         if not file:
+#             return Response({"message": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
+#         print(f"Received file: {file.name}")
+#         # Определение директории на основе типа файла
+#         if "Тип обращений" in file.name:
+#             print("Detected 'Тип обращений' in file name")
+#             file_path_entry = FilePath.objects.get(name="Requests")
+#         elif self.has_date_format(file.name):
+#             print(f"Detected date format in file name: {file.name}")
+#             file_path_entry = FilePath.objects.get(name="Work Schedule")
+#         else:
+#             print(f"Unknown file type or incorrect date format for file: {file.name}")
+#             return Response({"message": "Unknown file type or incorrect date format"},
+#                             status=status.HTTP_400_BAD_REQUEST)
+#         directory_path = file_path_entry.path
+#         if not os.path.exists(directory_path):
+#             return Response({"message": f"Directory does not exist: {directory_path}"},
+#                             status=status.HTTP_400_BAD_REQUEST)
+#         # Сохранение файла в указанную директорию
+#         destination_file_path = os.path.join(directory_path, file.name)
+#         with open(destination_file_path, 'wb+') as destination_file:
+#             for chunk in file.chunks():
+#                 destination_file.write(chunk)
+#         # Запуск соответствующего скрипта на основе имени файла
+#         if "Тип обращений" in file.name:
+#             self.run_classifications_script(destination_file_path)
+#         elif self.has_date_format(file.name):
+#             self.run_schedule_script(destination_file_path)
+#         else:
+#             return Response({"message": "Unknown file type or incorrect date format"},
+#                             status=status.HTTP_400_BAD_REQUEST)
+#
+#         return Response({"message": "File processed successfully"}, status=status.HTTP_200_OK)
+#
+#     def run_classifications_script(self, file_path):
+#         try:
+#             from scripts.class_script import run_classification_script
+#             run_classification_script()  # Вызов без аргументов
+#             print(f"Classification script executed for file: {file_path}")
+#         except Exception as e:
+#             print(f"Error running classification script: {e}")
+#     def run_schedule_script(self, file_path):
+#         try:
+#             from scripts.tasks import update_employee_karma
+#             update_employee_karma(file_path)
+#             print(f"Schedule script executed for file: {file_path}")
+#         except Exception as e:
+#             print(f"Error running schedule script: {e}")
+#     def has_date_format(self, filename):
+#         # Регулярное выражение теперь включает проверку расширения .xlsx
+#         date_pattern = r'\d{2}\.\d{2}\.\d{4}\.xlsx$'  # dd.mm.yyyy.xlsx
+#         match = re.search(date_pattern, filename)
+#         print(
+#             f"Date format check for filename '{filename}': Match found: {bool(match)}, Matched text: {match.group(0) if match else 'None'}")
+#         return bool(match)
 class ManualRunAnalysisView(APIView):
     def post(self, request):
         file_path = request.data.get('file_path')
@@ -1073,20 +1049,6 @@ def get_active_users(minutes=5):
     time_threshold = timezone.now() - timedelta(minutes=minutes)
     active_users = Employee.objects.filter(last_login__gte=time_threshold, is_active=True)
     return active_users
-class FileUploadView(APIView):
-    def post(self, request, *args, **kwargs):
-        serializer = FileUploadSerializer(data=request.data)
-        if serializer.is_valid():
-            file = serializer.validated_data['file']
-            file_path = default_storage.save(file.name, ContentFile(file.read()))
-            absolute_file_path = default_storage.path(file_path)
-
-            # Здесь вызываем соответствующий скрипт для обработки файла
-            update_employee_karma(absolute_file_path)
-
-            return Response({"status": "success", "file_path": file_path}, status=status.HTTP_201_CREATED)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 @permission_classes([IsAdmin])
 @api_view(['DELETE'])
 def delete_all_tests(request):
