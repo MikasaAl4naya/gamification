@@ -16,9 +16,9 @@ django.setup()
 from tasks import run_update_karma
 
 # Конфигурация базы данных для бэкапа
-DB_HOST = 'solevoi.mysql.pythonanywhere-services.com'
-DB_USER = 'Solevoi'
-DB_NAME = '"Solevoi\\$gamificationBASE"'
+DB_HOST = 'shaman.mysql.pythonanywhere-services.com'
+DB_USER = 'Shaman'
+DB_NAME = '"Shaman\\$default"'
 DB_PASSWORD = 'Oleg.iori1'
 
 # Получение пути для резервных копий из модели FilePath
@@ -62,7 +62,7 @@ def main():
     else:
         send_email("Резервное копирование не удалось", f"Резервное копирование не удалось. Ошибка: {error}")
 
-    cleanup_old_backups()
+    # cleanup_old_backups()
     run_update_karma("work_schedule")
 
 if __name__ == "__main__":
