@@ -1,4 +1,6 @@
 import logging
+
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser, Group, Permission, User
 from django.contrib.sessions.models import Session
 from django.db import models, transaction
@@ -158,6 +160,16 @@ class Employee(AbstractUser):
     class Meta:
         app_label = 'main'
         swappable = 'AUTH_USER_MODEL'
+class EmployeeActionLog(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    action_type = models.CharField(max_length=50)
+    model_name = models.CharField(max_length=50)
+    object_id = models.CharField(max_length=50)
+    description = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.employee.username} - {self.action_type} {self.model_name} at {self.timestamp}"
 
 
 class UserSession(models.Model):

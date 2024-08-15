@@ -2,7 +2,7 @@ from django.db import models
 from django.db.models.signals import post_save, pre_delete, post_delete
 from django.dispatch import receiver
 from .models import TestAttempt, AcoinTransaction, Employee, create_acoin_transaction, TestQuestion, Test, Acoin, \
-    Request, Achievement, EmployeeAchievement, ExperienceMultiplier
+    Request, Achievement, EmployeeAchievement, ExperienceMultiplier, EmployeeActionLog
 from django.contrib.auth.models import User, Group
 
 @receiver(post_save, sender=TestAttempt)
@@ -94,3 +94,45 @@ def update_achievement_progress(sender, instance, **kwargs):
         )
         employee_achievement.increment_progress()
         employee_achievement.save()
+
+
+@receiver(post_save)
+def log_model_save(sender, instance, created, **kwargs):
+    if sender == EmployeeActionLog:
+        return
+
+    employee = None
+    if hasattr(instance, 'employee'):
+        employee = instance.employee
+    elif hasattr(instance, 'user'):
+        employee = instance.user
+
+    if employee:
+        action = 'created' if created else 'updated'
+        EmployeeActionLog.objects.create(
+            employee=employee,
+            action_type=action,
+            model_name=sender.__name__,
+            object_id=str(instance.pk),
+            description=f"{sender.__name__} was {action}"
+        )
+
+@receiver(post_delete)
+def log_model_delete(sender, instance, **kwargs):
+    if sender == EmployeeActionLog:
+        return
+
+    employee = None
+    if hasattr(instance, 'employee'):
+        employee = instance.employee
+    elif hasattr(instance, 'user'):
+        employee = instance.user
+
+    if employee:
+        EmployeeActionLog.objects.create(
+            employee=employee,
+            action_type='deleted',
+            model_name=sender.__name__,
+            object_id=str(instance.pk),
+            description=f"{sender.__name__} was deleted"
+        )

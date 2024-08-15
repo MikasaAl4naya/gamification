@@ -633,27 +633,6 @@ class LevelTitleViewSet(viewsets.ViewSet):
         levels = LevelTitle.objects.all()
         data = [{'level': lt.level, 'title': lt.title} for lt in levels]
         return Response(data, status=status.HTTP_200_OK)
-class ManualFileUploadView(APIView):
-
-    def post(self, request):
-        serializer = FileUploadSerializer(data=request.data)
-        if serializer.is_valid():
-            file = serializer.validated_data['file']
-
-            # Определяем путь для сохранения файла в отдельной директории
-            manual_directory = 'manual_uploads/'
-            if not os.path.exists(manual_directory):
-                os.makedirs(manual_directory)
-
-            file_path = os.path.join(manual_directory, file.name)
-            file_name = default_storage.save(file_path, ContentFile(file.read()))
-
-            return Response({
-                "message": "File uploaded successfully for manual processing",
-                "file_name": file.name,
-                "file_path": file_path
-            }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class FileUploadAndAnalysisView(APIView):
@@ -662,7 +641,6 @@ class FileUploadAndAnalysisView(APIView):
         if not file:
             return Response({"message": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
         print(f"Received file: {file.name}")
-        print(self.has_date_format(file.name))
         # Определение директории на основе типа файла
         if "Тип обращений" in file.name:
             print("Detected 'Тип обращений' in file name")
@@ -693,10 +671,11 @@ class FileUploadAndAnalysisView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         return Response({"message": "File processed successfully"}, status=status.HTTP_200_OK)
+
     def run_classifications_script(self, file_path):
         try:
             from scripts.class_script import run_classification_script
-            run_classification_script(file_path)
+            run_classification_script()  # Вызов без аргументов
             print(f"Classification script executed for file: {file_path}")
         except Exception as e:
             print(f"Error running classification script: {e}")
@@ -796,7 +775,7 @@ class FeedbackDetailView(generics.RetrieveAPIView):
         return super().get_queryset()
 
 class EmployeeLogViewSet(viewsets.ModelViewSet):
-    queryset = EmployeeLog.objects.all()
+    queryset = EmployeeActionLog.objects.all()
     serializer_class = EmployeeLogSerializer
 
 class SurveyQuestionView(APIView):

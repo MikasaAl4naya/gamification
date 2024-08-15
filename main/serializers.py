@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAdminUser
 
 from gamefication import settings
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
-    Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeLog, KarmaSettings, \
+    Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, KarmaSettings, \
     FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy
 
 
@@ -102,7 +102,7 @@ class ExperienceMultiplierSerializer(serializers.ModelSerializer):
         fields = ['name', 'multiplier']
 class EmployeeLogSerializer(serializers.ModelSerializer):
     class Meta:
-        model = EmployeeLog
+        model = EmployeeActionLog
         fields = '__all__'
 class FileUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
