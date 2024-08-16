@@ -658,6 +658,10 @@ class KarmaSettings(models.Model):
         verbose_name_plural = "Настройки операций"
 
     def __str__(self):
+        # Определите строковое представление объекта
         level_str = f" - {self.get_level_display()}" if self.level else ""
+        operation_type_str = self.get_operation_type_display() if self.operation_type else "Неизвестный тип операции"
+        return f'{operation_type_str}{level_str}'
+
 
 
