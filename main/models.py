@@ -629,7 +629,6 @@ class KarmaSettings(models.Model):
     COMPLAINT = 'complaint'
     TEST_MODERATION = 'test_moderation'
     SHIFT_COMPLETION = 'shift_completion'
-    LATE_PENALTY = 'late_penalty'  # Новый тип операции для штрафов за опоздание
     FEEDBACK_MODERATION = 'feedback_moderation'
     OTHER = 'other'  # Можно добавить больше типов операций
 
@@ -638,12 +637,10 @@ class KarmaSettings(models.Model):
         (COMPLAINT, 'Complaint'),
         (TEST_MODERATION, 'Test Moderation'),
         (SHIFT_COMPLETION, 'Shift Completion'),
-        (LATE_PENALTY, 'Late Penalty'),
         (FEEDBACK_MODERATION, 'Feedback Moderation'),
         (OTHER, 'Other'),
     ]
 
-    # Уровни только для фидбеков
     LEVEL_CHOICES = [
         (1, 'Низкий'),
         (2, 'Средний'),
@@ -662,5 +659,5 @@ class KarmaSettings(models.Model):
 
     def __str__(self):
         level_str = f" - {self.get_level_display()}" if self.level else ""
-        return f'{self.get_operation_type_display()}{level_str}'
+
 
