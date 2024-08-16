@@ -647,7 +647,7 @@ class KarmaSettings(models.Model):
         (3, 'Высокий'),
     ]
 
-    operation_type = models.CharField(max_length=50, choices=OPERATION_TYPE_CHOICES)
+    operation_type = models.CharField(max_length=50, choices=OPERATION_TYPE_CHOICES, null=True)
     level = models.PositiveSmallIntegerField(choices=LEVEL_CHOICES, verbose_name='Уровень', null=True, blank=True)
     karma_change = models.IntegerField(null=True, blank=True, help_text="Изменение кармы")
     experience_change = models.IntegerField(null=True, blank=True, help_text="Изменение опыта")
