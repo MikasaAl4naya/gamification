@@ -653,7 +653,6 @@ class KarmaSettings(models.Model):
     experience_change = models.IntegerField(null=True, blank=True, help_text="Изменение опыта")
 
     class Meta:
-        unique_together = ('operation_type', 'level')
         verbose_name = "Настройка операции"
         verbose_name_plural = "Настройки операций"
 
