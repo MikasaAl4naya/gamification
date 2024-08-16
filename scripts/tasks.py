@@ -116,7 +116,14 @@ def update_employee_karma(file_path):
                         break
 
                     # Извлечение информации о смене
-                    shift_info = row.get(f'Unnamed: {update_day}', '').strip().lower()
+                    shift_info = row.get(f'Unnamed: {update_day}', '')
+
+                    # Проверка типа данных перед вызовом strip
+                    if isinstance(shift_info, str):
+                        shift_info = shift_info.strip().lower()
+                    else:
+                        shift_info = str(shift_info).lower()
+
                     print(shift_info)
                     if any(x in shift_info for x in ['выходной', 'о', 'бс', 'б']):
                         print(f"Пропуск смены для {full_name} в {update_year}-{update_month:02}-{update_day:02} (выходной)")
@@ -168,7 +175,8 @@ def update_employee_karma(file_path):
                     last_processed_date = datetime(update_year, update_month, update_day)
                     update_day += 1
 
-                employee.last_karma_update = timezone.make_aware(datetime.combine(last_processed_date + timedelta(days=1), time.min))
+                # Обновляем поле last_karma_update на дату из названия файла
+                employee.last_karma_update = timezone.make_aware(datetime.combine(file_date, time.min))
                 employee.save()
                 print(f"Дата последнего обновления кармы обновлена для {full_name}: {employee.last_karma_update}")
 
@@ -176,6 +184,9 @@ def update_employee_karma(file_path):
             print(f"Сотрудник с именем {full_name} не существует.")
         except Exception as e:
             print(f"Ошибка при обработке {full_name}: {e}")
+
+
+
 
 def run_update_karma(name):
     directory_path = get_file_path(name)
