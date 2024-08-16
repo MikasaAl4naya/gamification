@@ -624,27 +624,43 @@ class ExperienceMultiplier(models.Model):
     def __str__(self):
         return f"{self.name}: {self.multiplier}"
 class KarmaSettings(models.Model):
+    # Типы операций
     PRAISE = 'praise'
     COMPLAINT = 'complaint'
+    TEST_MODERATION = 'test_moderation'
+    SHIFT_COMPLETION = 'shift_completion'
+    LATE_PENALTY = 'late_penalty'  # Новый тип операции для штрафов за опоздание
+    FEEDBACK_MODERATION = 'feedback_moderation'
+    OTHER = 'other'  # Можно добавить больше типов операций
 
-    FEEDBACK_TYPE_CHOICES = [
+    OPERATION_TYPE_CHOICES = [
         (PRAISE, 'Praise'),
         (COMPLAINT, 'Complaint'),
+        (TEST_MODERATION, 'Test Moderation'),
+        (SHIFT_COMPLETION, 'Shift Completion'),
+        (LATE_PENALTY, 'Late Penalty'),
+        (FEEDBACK_MODERATION, 'Feedback Moderation'),
+        (OTHER, 'Other'),
     ]
 
+    # Уровни только для фидбеков
     LEVEL_CHOICES = [
         (1, 'Низкий'),
         (2, 'Средний'),
         (3, 'Высокий'),
     ]
 
-    feedback_type = models.CharField(max_length=20, choices=FEEDBACK_TYPE_CHOICES)
+    operation_type = models.CharField(max_length=50, choices=OPERATION_TYPE_CHOICES)
     level = models.PositiveSmallIntegerField(choices=LEVEL_CHOICES, verbose_name='Уровень', null=True, blank=True)
-    karma_change = models.IntegerField()
+    karma_change = models.IntegerField(null=True, blank=True, help_text="Изменение кармы")
+    experience_change = models.IntegerField(null=True, blank=True, help_text="Изменение опыта")
 
     class Meta:
-        unique_together = ('feedback_type', 'level')
+        unique_together = ('operation_type', 'level')
+        verbose_name = "Настройка операции"
+        verbose_name_plural = "Настройки операций"
 
     def __str__(self):
-        return f'{self.get_feedback_type_display()} - {self.get_level_display()}'
+        level_str = f" - {self.get_level_display()}" if self.level else ""
+        return f'{self.get_operation_type_display()}{level_str}'
 

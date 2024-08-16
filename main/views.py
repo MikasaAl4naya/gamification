@@ -533,28 +533,37 @@ def moderate_feedback(request, feedback_id):
         data = request.data
         action = data.get('action')
         level = data.get('level', None)
-        karma_change = data.get('karma_change', None)
         moderator_comment = data.get('moderator_comment', '')
 
         if action == 'approve':
             if level is not None:
-                karma_change = calculate_karma_change(feedback.type, level)
+                changes = calculate_karma_change(feedback.type, level)
                 feedback.level = level
-            elif karma_change is None:
-                return Response({'error': 'Either karma change or level is required for approving feedback'},
-                                status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response({'error': 'Level is required for approving feedback'}, status=status.HTTP_400_BAD_REQUEST)
+
+            karma_change = changes['karma_change']
+            experience_change = changes['experience_change']
 
             feedback.karma_change = karma_change
+            feedback.experience_change = experience_change
             feedback.status = 'approved'
+
             target_employee = feedback.target_employee
             if feedback.type == 'praise':
                 target_employee.karma += karma_change
             else:
                 target_employee.karma -= karma_change
+
+            # Применяем изменения опыта, если они есть
+            if experience_change:
+                target_employee.add_experience(experience_change)
+
             target_employee.save()
         elif action == 'reject':
             feedback.status = 'rejected'
             feedback.karma_change = 0
+            feedback.experience_change = 0
 
         feedback.moderator = request.user
         feedback.moderator_comment = moderator_comment
@@ -566,13 +575,25 @@ def moderate_feedback(request, feedback_id):
     else:
         return Response({'error': 'Status must be pending'}, status=status.HTTP_400_BAD_REQUEST)
 
-def calculate_karma_change(feedback_type, level):
+
+
+def calculate_karma_change(operation_type, level=None):
     try:
-        karma_setting = KarmaSettings.objects.get(feedback_type=feedback_type, level=level)
-        print("karma_setting"+str(karma_setting.id))
-        return karma_setting.karma_change
+        if level is not None:
+            karma_setting = KarmaSettings.objects.get(operation_type=operation_type, level=level)
+        else:
+            karma_setting = KarmaSettings.objects.get(operation_type=operation_type, level__isnull=True)
+
+        return {
+            "karma_change": karma_setting.karma_change or 0,
+            "experience_change": karma_setting.experience_change or 0
+        }
     except KarmaSettings.DoesNotExist:
-        return 0  # Или значение по умолчанию, если настройки не найдены
+        return {
+            "karma_change": 0,
+            "experience_change": 0
+        }  # Или значения по умолчанию, если настройки не найдены
+
 
 class LevelTitleViewSet(viewsets.ViewSet):
     permission_classes = [IsAdminUser]
@@ -714,6 +735,7 @@ def get_user(request):
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
         survey_answers = SurveyAnswer.objects.filter(employee=employee)
+
         survey_answers_data = [
             {
                 "question": answer.question.question_text,
@@ -829,6 +851,19 @@ class SurveyQuestionViewSet(viewsets.ModelViewSet):
     queryset = SurveyQuestion.objects.all()
     serializer_class = SurveyQuestionSerializer
     permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['post'])
+    def bulk_create(self, request):
+        if isinstance(request.data, list):
+            serializer = self.get_serializer(data=request.data, many=True)
+            serializer.is_valid(raise_exception=True)
+            self.perform_bulk_create(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        else:
+            return Response({"detail": "Invalid data. Expected a list of dictionaries."}, status=status.HTTP_400_BAD_REQUEST)
+
+    def perform_bulk_create(self, serializer):
+        SurveyQuestion.objects.bulk_create([SurveyQuestion(**data) for data in serializer.validated_data])
 
 class SurveyAnswerViewSet(viewsets.ModelViewSet):
     queryset = SurveyAnswer.objects.all()

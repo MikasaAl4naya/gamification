@@ -246,17 +246,6 @@ class GroupSerializer(serializers.ModelSerializer):
         model = Group
         fields = ['id', 'name', 'permissions', 'permissions_info']
 
-class FileUploadSerializer(serializers.Serializer):
-    file = serializers.FileField()
-    name = serializers.CharField(max_length=100)
-
-
-    def update(self, instance, validated_data):
-        permissions = validated_data.pop('permissions', None)
-        instance = super(GroupSerializer, self).update(instance, validated_data)
-        if permissions is not None:
-            instance.permissions.set(permissions)
-        return instance
 
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
