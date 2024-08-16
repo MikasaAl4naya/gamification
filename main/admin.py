@@ -15,6 +15,7 @@ admin.site.register(Permission)
 admin.site.register(FilePath)
 admin.site.register(Feedback)
 admin.site.register(SystemSetting)
+admin.site.register(LevelTitle)
 
 
 @admin.register(KarmaSettings)
