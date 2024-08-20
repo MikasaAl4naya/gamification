@@ -232,6 +232,7 @@ class PasswordPolicy(models.Model):
     min_uppercase = models.PositiveIntegerField(default=1)
     min_lowercase = models.PositiveIntegerField(default=1)
     min_digits = models.PositiveIntegerField(default=1)
+    min_symbols = models.PositiveIntegerField(default=1)  # Добавлено новое поле
     allowed_symbols = models.CharField(max_length=255, default="~!@#$%^&*()-_=+[{]}|;:'\",<.>/?")
     arabic_only = models.BooleanField(default=True)
     no_spaces = models.BooleanField(default=True)

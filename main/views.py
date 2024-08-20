@@ -1555,8 +1555,8 @@ class PasswordManagementView(APIView):
             raise ValidationError(f"Пароль должен содержать минимум {policy.min_lowercase} строчных букв.")
         if sum(1 for c in password if c.isdigit()) < policy.min_digits:
             raise ValidationError(f"Пароль должен содержать минимум {policy.min_digits} цифр.")
-        if sum(1 for c in password if c in policy.allowed_symbols) < policy.min_symbols:
-            raise ValidationError(f"Пароль должен содержать минимум {policy.min_symbols} символов из списка допустимых.")
+        if sum(1 for c in password if c in policy.allowed_symbols) < policy.min_length:
+            raise ValidationError(f"Пароль должен содержать минимум {policy.min_length} символов из списка допустимых.")
 
     def admin_change_password(self, request, user_id):
         """
@@ -1635,15 +1635,85 @@ class PasswordManagementView(APIView):
 
 class PasswordPolicyViewSet(viewsets.ViewSet):
 
+    def generate_password_policy_description(self, policy):
+        """
+        Функция для генерации краткого описания политики пароля.
+        Возвращает список описаний.
+        """
+        descriptions = []
+
+        if policy.min_uppercase > 0:
+            description = f"{policy.min_uppercase} заглавная" if policy.min_uppercase == 1 else f"{policy.min_uppercase} заглавных"
+            regex = f"(?=(.*[A-Z]){{{policy.min_uppercase},}})"
+            descriptions.append({"description": description, "regex": regex})
+
+        if policy.min_lowercase > 0:
+            description = f"{policy.min_lowercase} строчная" if policy.min_lowercase == 1 else f"{policy.min_lowercase} строчных"
+            regex = f"(?=(.*[a-z]){{{policy.min_lowercase},}})"
+            descriptions.append({"description": description, "regex": regex})
+
+        if policy.min_digits > 0:
+            description = f"{policy.min_digits} цифра" if policy.min_digits == 1 else f"{policy.min_digits} цифр"
+            regex = f"(?=(.*[0-9]){{{policy.min_digits},}})"
+            descriptions.append({"description": description, "regex": regex})
+
+        if policy.min_symbols > 0:
+            description = f"{policy.min_symbols} спец. символ" if policy.min_symbols == 1 else f"{policy.min_symbols} спец. символов"
+            allowed_symbols_escaped = re.escape(policy.allowed_symbols)
+            regex = f"(?=(.*[{allowed_symbols_escaped}]){{{policy.min_symbols},}})"
+            descriptions.append({"description": description, "regex": regex})
+
+        if policy.no_spaces:
+            description = "Без пробелов"
+            regex = r"(?!.*\s)"
+            descriptions.append({"description": description, "regex": regex})
+
+        if policy.min_length > 0:
+            description = f"{policy.min_length}-{policy.max_length} символов"
+            regex = f".{{{policy.min_length},{policy.max_length}}}"
+            descriptions.append({"description": description, "regex": regex})
+
+        return descriptions
+
+    @action(detail=False, methods=['get'])
+    def get_password_policy_regex(self, request):
+        """
+        API-запрос для получения частей регулярного выражения, соответствующего политике паролей, с описанием.
+        """
+        try:
+            policy = PasswordPolicy.objects.first()  # Предполагается, что политика одна
+
+            if not policy:
+                return Response({"error": "Политика паролей не найдена."}, status=404)
+
+            # Генерация краткого описания политики пароля с регулярными выражениями
+            descriptions = self.generate_password_policy_description(policy)
+
+            return Response({"descriptions": descriptions}, status=200)
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
+
     @action(detail=False, methods=['get'])
     def get_policy(self, request):
+        """
+        API-запрос для получения текущей политики паролей.
+        """
         policy = PasswordPolicy.objects.first()
+        if not policy:
+            return Response({"error": "Политика паролей не найдена."}, status=404)
+
         serializer = PasswordPolicySerializer(policy)
         return Response(serializer.data)
 
     @action(detail=False, methods=['post'])
     def update_policy(self, request):
+        """
+        API-запрос для обновления текущей политики паролей.
+        """
         policy = PasswordPolicy.objects.first()
+        if not policy:
+            return Response({"error": "Политика паролей не найдена."}, status=404)
+
         serializer = PasswordPolicySerializer(policy, data=request.data)
         if serializer.is_valid():
             serializer.save()

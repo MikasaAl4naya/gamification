@@ -1,6 +1,8 @@
 from django.db import models
 from django.db.models.signals import post_save, pre_delete, post_delete
 from django.dispatch import receiver
+from django.forms import model_to_dict
+
 from .models import TestAttempt, AcoinTransaction, Employee, create_acoin_transaction, TestQuestion, Test, Acoin, \
     Request, Achievement, EmployeeAchievement, ExperienceMultiplier, EmployeeActionLog
 from django.contrib.auth.models import User, Group
@@ -109,13 +111,32 @@ def log_model_save(sender, instance, created, **kwargs):
 
     if employee:
         action = 'created' if created else 'updated'
+
+        # Получаем текущие данные модели
+        current_data = model_to_dict(instance)
+        # Получаем предыдущие данные модели (если обновление)
+        if not created:
+            old_instance = sender.objects.get(pk=instance.pk)
+            old_data = model_to_dict(old_instance)
+        else:
+            old_data = {}
+
+        changes = []
+        for field, value in current_data.items():
+            old_value = old_data.get(field, None)
+            if old_value != value:
+                changes.append(f"{field}: '{old_value}' -> '{value}'")
+
+        change_description = "; ".join(changes) if changes else f"{sender.__name__} was {action}"
+
         EmployeeActionLog.objects.create(
             employee=employee,
             action_type=action,
             model_name=sender.__name__,
             object_id=str(instance.pk),
-            description=f"{sender.__name__} was {action}"
+            description=change_description
         )
+
 
 @receiver(post_delete)
 def log_model_delete(sender, instance, **kwargs):
