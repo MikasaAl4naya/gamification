@@ -1540,6 +1540,7 @@ class PasswordManagementView(APIView):
             return self.admin_change_password(request, user_id)
         else:
             return self.user_change_password(request)
+
     @staticmethod
     def validate_password_policy(password, policy):
         """
@@ -1555,9 +1556,9 @@ class PasswordManagementView(APIView):
             raise ValidationError(f"Пароль должен содержать минимум {policy.min_lowercase} строчных букв.")
         if sum(1 for c in password if c.isdigit()) < policy.min_digits:
             raise ValidationError(f"Пароль должен содержать минимум {policy.min_digits} цифр.")
-        if sum(1 for c in password if c in policy.allowed_symbols) < policy.min_length:
-            raise ValidationError(f"Пароль должен содержать минимум {policy.min_length} символов из списка допустимых.")
-
+        if sum(1 for c in password if c in policy.allowed_symbols) < policy.min_symbols:  # Изменение здесь
+            raise ValidationError(
+                f"Пароль должен содержать минимум {policy.min_symbols} символов из списка допустимых.")
     def admin_change_password(self, request, user_id):
         """
         Метод для смены пароля администратора.
