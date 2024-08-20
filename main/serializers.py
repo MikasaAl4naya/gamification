@@ -114,15 +114,29 @@ class FilePathSerializer(serializers.ModelSerializer):
 class EmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
     avatar_url = serializers.SerializerMethodField()
+    remaining_experience = serializers.SerializerMethodField()
+    experience_progress = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
         fields = [
-            'id','username', 'email', 'first_name', 'last_name', 'position', 'level', 'experience',
-            'next_level_experience', 'karma', 'birth_date',
+            'id', 'username', 'email', 'first_name', 'last_name', 'position', 'level', 'experience',
+            'next_level_experience', 'remaining_experience', 'experience_progress', 'karma', 'birth_date',
             'avatar_url', 'status', 'acoin_amount', 'is_active', 'groups'
         ]
         read_only_fields = ['username', 'email', 'position', 'level', 'experience', 'next_level_experience', 'karma']
+
+    def get_remaining_experience(self, obj):
+        """Возвращает количество опыта, необходимое для достижения следующего уровня."""
+        return obj.next_level_experience - obj.experience
+
+    def get_experience_progress(self, obj):
+        """Возвращает прогресс опыта в процентах внутри текущего уровня."""
+        if obj.next_level_experience > 0:
+            progress = (obj.experience / obj.next_level_experience) * 100
+            return max(0, min(int(progress), 100))
+        return 0
+
 
     def get_avatar_url(self, obj):
         request = self.context.get('request')
