@@ -81,7 +81,10 @@ class Employee(AbstractUser):
             return "Неизвестный уровень"
     def get_survey_answers(self):
         return self.survey_answers.select_related('question').all()
+
     def save(self, *args, **kwargs):
+        if self.experience < 0:
+            self.experience = 0
         if not self.is_active and not getattr(self, 'force_save', False):
             raise ValidationError("Cannot modify a deactivated account.")
         if self.karma > 100:
@@ -102,6 +105,10 @@ class Employee(AbstractUser):
     def set_experience(self, amount):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
+
+        if amount < 0:
+            raise ValidationError("Experience cannot be negative.")
+
         old_experience = self.experience
         self.experience = amount
         self.log_change('experience', old_experience, self.experience, "Set experience")
@@ -110,7 +117,18 @@ class Employee(AbstractUser):
     def increase_experience(self, amount):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
-        self.set_experience(self.experience + amount)
+
+        new_experience = self.experience + amount
+        if new_experience < 0:
+            raise ValidationError("Experience cannot be negative.")
+
+        self.set_experience(new_experience)
+
+    def add_experience(self, experience):
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
+        if experience is not None:
+            self.increase_experience(experience)
 
     def check_level_up(self):
         leveled_up = False  # Флаг для отслеживания, был ли уровень повышен
@@ -143,11 +161,6 @@ class Employee(AbstractUser):
         if leveled_up:
             self.save()
 
-    def add_experience(self, experience):
-        if not self.is_active:
-            raise ValidationError("Cannot modify a deactivated account.")
-        if experience is not None:
-            self.increase_experience(experience)
 
     def set_karma(self, amount):
         if not self.is_active:

@@ -1556,9 +1556,12 @@ class PasswordManagementView(APIView):
             raise ValidationError(f"Пароль должен содержать минимум {policy.min_lowercase} строчных букв.")
         if sum(1 for c in password if c.isdigit()) < policy.min_digits:
             raise ValidationError(f"Пароль должен содержать минимум {policy.min_digits} цифр.")
-        if sum(1 for c in password if c in policy.allowed_symbols) < policy.min_symbols:  # Изменение здесь
+        if sum(1 for c in password if c in policy.allowed_symbols) < policy.min_symbols:
             raise ValidationError(
                 f"Пароль должен содержать минимум {policy.min_symbols} символов из списка допустимых.")
+        if policy.no_spaces and ' ' in password:  # Добавлена явная проверка на пробелы
+            raise ValidationError("Пароль не должен содержать пробелов.")
+
     def admin_change_password(self, request, user_id):
         """
         Метод для смены пароля администратора.
@@ -2968,7 +2971,6 @@ class FullStatisticsAPIView(APIView):
                 employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
                 total_acoins = AcoinTransaction.objects.filter(employee=employee).aggregate(total=Sum('amount'))[
                     'total']
-
                 employee_stats.append({
                     "employee_id": employee.id,
                     "total_acoins": total_acoins or 0,
