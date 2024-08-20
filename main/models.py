@@ -38,8 +38,6 @@ class SurveyAnswer(models.Model):
 
     def __str__(self):
         return f"{self.employee.username}: {self.answer_text[:50]}"
-from django.db.models.signals import post_save
-from django.dispatch import receiver
 
 class Employee(AbstractUser):
     POSITION_CHOICES = [
@@ -88,6 +86,8 @@ class Employee(AbstractUser):
             raise ValidationError("Cannot modify a deactivated account.")
         if self.karma > 100:
             self.karma = 100
+        # Проверка и обновление уровня на основе текущего опыта
+        self.check_level_up()
         super().save(*args, **kwargs)
 
     def log_change(self, change_type, old_value, new_value, description=None):
@@ -113,19 +113,31 @@ class Employee(AbstractUser):
         self.set_experience(self.experience + amount)
 
     def check_level_up(self):
+        leveled_up = False  # Флаг для отслеживания, был ли уровень повышен
+
         while self.experience >= self.next_level_experience:
             old_level = self.level
-            print(f"Current level: {self.level}. Experience: {self.experience}. Next level at: {self.next_level_experience}")
+            print(
+                f"Current level: {self.level}. Experience: {self.experience}. Next level at: {self.next_level_experience}")
+
             self.level += 1
+            leveled_up = True
             self.log_change('level', old_level, self.level, "Level up")
+
+            # Вычитаем необходимое количество опыта для текущего уровня
             self.experience -= self.next_level_experience
-            print(f"Leveled up! New level: {self.level}. Remaining experience: {self.experience}")
+
+            # Рассчитываем опыт, необходимый для следующего уровня
             experience_multiplier = 2.0 - (self.level * 0.1)
             if experience_multiplier < 1.0:
                 experience_multiplier = 1.0
             self.next_level_experience = int(self.next_level_experience * experience_multiplier)
+            print(f"Leveled up! New level: {self.level}. Remaining experience: {self.experience}")
             print(f"New next level experience: {self.next_level_experience}")
-        self.save()
+
+        # Только если уровень был повышен, сохраняем изменения
+        if leveled_up:
+            self.save()
 
     def add_experience(self, experience):
         if not self.is_active:
