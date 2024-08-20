@@ -202,7 +202,24 @@ class UserSession(models.Model):
 
         # Завершение всех активных сессий пользователя
         UserSession.objects.filter(user=self).delete()
+class ShiftHistory(models.Model):
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
+    date = models.DateField()
+    scheduled_start = models.TimeField()
+    scheduled_end = models.TimeField()
+    actual_start = models.TimeField()
+    actual_end = models.TimeField()
+    karma_change = models.IntegerField()
+    experience_change = models.IntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        unique_together = ('employee', 'date', 'scheduled_start', 'scheduled_end')
+        verbose_name = "История смен"
+        verbose_name_plural = "История смен"
+
+    def __str__(self):
+        return f"{self.employee} - {self.date} - {self.scheduled_start}-{self.scheduled_end}"
 class SystemSetting(models.Model):
     key = models.CharField(max_length=100, unique=True)
     value = models.CharField(max_length=255)

@@ -734,15 +734,28 @@ def get_user(request):
 
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
+        survey_questions = SurveyQuestion.objects.all()
         survey_answers = SurveyAnswer.objects.filter(employee=employee)
 
-        survey_answers_data = [
-            {
-                "question": answer.question.question_text,
-                "answer": answer.answer_text
-            }
-            for answer in survey_answers
-        ]
+        answers_with_text = []
+        answers_without_text = []
+
+        for question in survey_questions:
+            answer = survey_answers.filter(question=question).first()
+            if answer and answer.answer_text:
+                answers_with_text.append({
+                    "question_id": question.id,
+                    "question_text": question.question_text,
+                    "answer_text": answer.answer_text
+                })
+            else:
+                answers_without_text.append({
+                    "question_id": question.id,
+                    "question_text": question.question_text,
+                    "answer_text": ""
+                })
+
+        answers = answers_with_text + answers_without_text
 
         statistics = {
             'registration_date': registration_date,
@@ -758,11 +771,12 @@ def get_user(request):
             'profile': serializer.data,
             'level_title': employee.level_title,  # Уровень и название
             'statistics': statistics,
-            'survey_answers': survey_answers_data,
+            'answers': answers,
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 class FeedbackDetailView(generics.RetrieveAPIView):
     queryset = Feedback.objects.all()
     serializer_class = FeedbackSerializer
