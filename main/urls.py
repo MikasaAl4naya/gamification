@@ -22,6 +22,7 @@ router.register(r'experience-multipliers', ExperienceMultiplierViewSet)
 router.register(r'system-settings', SystemSettingViewSet, basename='system-setting')
 router.register(r'level-titles', LevelTitleViewSet, basename='level-titles')
 router.register(r'password-policy', PasswordPolicyViewSet, basename='password_policy_regex')
+router.register(r'logs', EmployeeActionLogViewSet, basename='logs')
 
 urlpatterns = [
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter

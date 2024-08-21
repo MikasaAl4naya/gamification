@@ -887,6 +887,10 @@ class SurveyAnswerViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(employee=self.request.user)
 
+class EmployeeActionLogViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = EmployeeActionLog.objects.all().order_by('-created_at')
+    serializer_class = EmployeeActionLogSerializer
+    permission_classes = [IsAuthenticated]
 
 @permission_classes([IsAdmin])
 class GroupViewSet(viewsets.ModelViewSet):

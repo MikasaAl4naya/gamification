@@ -258,7 +258,30 @@ class GroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Group
         fields = ['id', 'name', 'permissions', 'permissions_info']
+class EmployeeActionLogSerializer(serializers.ModelSerializer):
+    readable_description = serializers.SerializerMethodField()
 
+    class Meta:
+        model = EmployeeActionLog
+        fields = ['employee', 'action_type', 'model_name', 'object_id', 'description', 'created_at', 'readable_description']
+
+    def get_readable_description(self, obj):
+        """
+        Преобразует лог в более читабельный вид.
+        """
+        if obj.model_name == 'TestAttempt':
+            if 'status' in obj.description:
+                if "status: '' -> 'PASSED'" in obj.description:
+                    return f"{obj.employee} успешно завершил тест."
+                elif "status: '' -> 'FAILED'" in obj.description:
+                    return f"{obj.employee} не прошел тест."
+                else:
+                    return f"{obj.employee} начал прохождение теста."
+        elif obj.model_name == 'AnotherModel':  # Пример для другой модели
+            return f"{obj.employee} сделал действие: {obj.description}"
+
+        # Общий случай
+        return f"{obj.employee} {obj.action_type} {obj.model_name} (ID: {obj.object_id}). {obj.description}"
 
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()

@@ -4,7 +4,7 @@ from django.dispatch import receiver
 from django.forms import model_to_dict
 
 from .models import TestAttempt, AcoinTransaction, Employee, create_acoin_transaction, TestQuestion, Test, Acoin, \
-    Request, Achievement, EmployeeAchievement, ExperienceMultiplier, EmployeeActionLog
+    Request, Achievement, EmployeeAchievement, ExperienceMultiplier, EmployeeActionLog, ShiftHistory, EmployeeLog
 from django.contrib.auth.models import User, Group
 
 @receiver(post_save, sender=TestAttempt)
@@ -100,7 +100,8 @@ def update_achievement_progress(sender, instance, **kwargs):
 
 @receiver(post_save)
 def log_model_save(sender, instance, created, **kwargs):
-    if sender == EmployeeActionLog:
+    # Исключаем отслеживание определенных моделей
+    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request]:
         return
 
     employee = None
@@ -137,10 +138,9 @@ def log_model_save(sender, instance, created, **kwargs):
             description=change_description
         )
 
-
 @receiver(post_delete)
 def log_model_delete(sender, instance, **kwargs):
-    if sender == EmployeeActionLog:
+    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request]:
         return
 
     employee = None
