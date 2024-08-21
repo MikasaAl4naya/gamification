@@ -137,10 +137,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
             return max(0, min(int(progress), 100))
         return 0
 
-
     def get_avatar_url(self, obj):
         request = self.context.get('request')
-        if obj.avatar and hasattr(obj.avatar, 'url'):
+        if request and obj.avatar and hasattr(obj.avatar, 'url'):
             return request.build_absolute_uri(obj.avatar.url)
         return None
     def get_role(self, obj):
