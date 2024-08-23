@@ -668,7 +668,7 @@ class Feedback(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Дата создания')
     moderator = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name='moderated_feedbacks', verbose_name='Модератор')
     target_employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='received_feedbacks', verbose_name='Целевой сотрудник')
-    moderator_comment = models.TextField(verbose_name='Комментарий модератора', null=True, blank=True)
+    moderation_comment = models.TextField(verbose_name='Комментарий модератора', null=True, blank=True)
     moderation_date = models.DateTimeField(verbose_name='Дата модерации', null=True, blank=True)
 
     def __str__(self):

@@ -508,17 +508,20 @@ def create_feedback(request, type, employee_id):
         target_employee = Employee.objects.get(pk=employee_id)
     except Employee.DoesNotExist:
         return Response({'error': 'Target employee not found'}, status=status.HTTP_404_NOT_FOUND)
-    print("target_employee:"+str(target_employee), employee_id)
+
     data = request.data.copy()
     data['type'] = type
-    data['target_employee'] = employee_id  # Используем employee_id вместо target_employee.id
-    data['status'] = 'pending'  # Устанавливаем статус "На модерации"
+    data['target_employee'] = employee_id
+    data['status'] = 'pending'
+    data['moderator_comment'] = data.get('moderator_comment', None)  # Устанавливаем null, если комментарий не передан
 
     serializer = FeedbackSerializer(data=data)
     if serializer.is_valid():
-        serializer.save()
+        feedback = serializer.save()
+
         return Response(serializer.data, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(['POST'])

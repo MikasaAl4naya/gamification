@@ -203,7 +203,7 @@ class KarmaSettingsSerializer(serializers.ModelSerializer):
         fields = '__all__'
 class FeedbackSerializer(serializers.ModelSerializer):
     target_employee = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all())
-    moderator_comment = serializers.CharField(required=False, allow_blank=True)
+    moderation_comment = serializers.CharField(required=False, allow_blank=True, allow_null=True)  # Добавлено allow_null=True
 
     class Meta:
         model = Feedback
@@ -215,9 +215,10 @@ class FeedbackSerializer(serializers.ModelSerializer):
             'status',
             'created_at',
             'moderation_date',
-            'moderator_comment',  # Явно включаем поле
+            'moderation_comment',  # Явно включаем поле
             'moderator'
         ]
+
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         representation.pop('level', None)
