@@ -142,7 +142,7 @@ class Employee(AbstractUser):
             if self.experience < previous_level_experience:
                 old_level = self.level
                 self.level -= 1
-                self.next_level_experience = previous_level_experience
+                self.next_level_experience = self.calculate_experience_for_level(self.level)
                 self.log_change('level', old_level, self.level, "Level down")
                 leveled_up_or_down = True
             else:
@@ -152,22 +152,24 @@ class Employee(AbstractUser):
         while self.experience >= self.next_level_experience and self.level < max_level:
             old_level = self.level
             self.level += 1
-            self.log_change('level', old_level, self.level, "Level up")
-            self.next_level_experience = self.calculate_experience_for_level(self.level)
             leveled_up_or_down = True
+            self.next_level_experience = self.calculate_experience_for_level(self.level)
+            self.log_change('level', old_level, self.level, "Level up")
+
+        # Убедиться, что `next_level_experience` корректен после всех изменений
+        self.next_level_experience = self.calculate_experience_for_level(self.level)
 
         # Сохранение изменений только если уровень был изменен
         if leveled_up_or_down:
             super(Employee, self).save(update_fields=['level', 'experience', 'next_level_experience'])
 
     def calculate_experience_for_level(self, level):
-        # Метод для вычисления опыта, необходимого для достижения определенного уровня
-        experience_required = 100  # Начальный опыт для первого уровня
+        base_experience = 100  # базовый опыт, необходимый для первого уровня
+        experience_required = base_experience
+
         for i in range(2, level + 1):
-            experience_multiplier = 2.0 - ((i - 1) * 0.1)
-            if experience_multiplier < 1.0:
-                experience_multiplier = 1.0
-            experience_required += int(experience_required * experience_multiplier)
+            experience_required += int(base_experience * (i - 1) * 0.2)  # более плавный рост опыта
+
         return experience_required
 
     def set_karma(self, amount):
