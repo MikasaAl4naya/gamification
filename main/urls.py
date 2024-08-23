@@ -119,7 +119,7 @@ urlpatterns = [
     path('survey/answers/', submit_survey_answers, name='user_change_password'),
     path('feedback/<int:pk>/', FeedbackDetailView.as_view(), name='feedback-detail'),
     path('upload-and-analyze/', FileUploadAndAnalysisView.as_view(), name='upload-and-analyze'),
-    path('change-avatar/', change_avatar, name='change-avatar'),
+    path('select-avatar/', select_avatar, name='change-avatar'),
 ]
 
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки

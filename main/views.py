@@ -1102,6 +1102,27 @@ class SystemSettingViewSet(viewsets.ViewSet):
         return Response({'message': 'Max active sessions updated', 'max_active_sessions': value})
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def select_avatar(request):
+    try:
+        avatar_id = request.data.get('avatar_id')
+        if not avatar_id:
+            return Response({'error': 'Avatar ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Получаем аватарку из пула
+        avatar = PreloadedAvatar.objects.get(pk=avatar_id)
+
+        # Устанавливаем аватарку для текущего пользователя
+        request.user.avatar = avatar.image
+        request.user.save()
+
+        return Response({'message': 'Avatar updated successfully'}, status=status.HTTP_200_OK)
+    except PreloadedAvatar.DoesNotExist:
+        return Response({'error': 'Avatar not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 class PreloadedAvatarUploadViewSet(viewsets.ModelViewSet):
     queryset = PreloadedAvatar.objects.all()
     serializer_class = PreloadedAvatarSerializer
@@ -1124,6 +1145,7 @@ class PreloadedAvatarUploadViewSet(viewsets.ModelViewSet):
         # Сохраняем путь в базе данных (в формате относительно media root)
         relative_image_path = os.path.join('avatars', original_image.name)
         serializer.save(image=relative_image_path)
+
 
     def perform_update(self, serializer):
         file_path = FilePath.objects.filter(name='Avatars').first()
