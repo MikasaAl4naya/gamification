@@ -721,17 +721,13 @@ def get_user(request):
         registration_date = employee.date_joined.strftime('%Y-%m-%d')
         last_login = employee.last_login.strftime('%Y-%m-%d %H:%M:%S') if employee.last_login else 'Never'
         completed_tests_count = TestAttempt.objects.filter(employee=employee, status=TestAttempt.PASSED).count()
-        complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint").count()
-        praises_count = Feedback.objects.filter(target_employee=employee, type="praise").count()
 
-        is_admin = IsAdmin().has_permission(request, None)
-        is_moderator = IsModerator().has_permission(request, None)
+        # Отображаем только approved жалобы и похвалы
+        complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved').count()
+        praises_count = Feedback.objects.filter(target_employee=employee, type="praise", status='approved').count()
 
-        if current_employee == employee or is_moderator or is_admin:
-            complaints = Feedback.objects.filter(target_employee=employee, type="complaint")
-        else:
-            complaints = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved')
-
+        # Только approved фидбеки будут отображаться
+        complaints = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved')
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
         survey_questions = SurveyQuestion.objects.all()
@@ -776,6 +772,7 @@ def get_user(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class FeedbackDetailView(generics.RetrieveAPIView):
     queryset = Feedback.objects.all()
