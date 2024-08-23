@@ -1102,6 +1102,63 @@ class SystemSettingViewSet(viewsets.ViewSet):
         return Response({'message': 'Max active sessions updated', 'max_active_sessions': value})
 
 
+class PreloadedAvatarUploadViewSet(viewsets.ModelViewSet):
+    queryset = PreloadedAvatar.objects.all()
+    serializer_class = PreloadedAvatarSerializer
+    permission_classes = [IsAdminUser]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def perform_create(self, serializer):
+        file_path = FilePath.objects.filter(name='Avatars').first()
+        if not file_path:
+            raise serializers.ValidationError("FilePath for 'Avatars' not found.")
+
+        original_image = self.request.FILES['image']
+        new_image_path = os.path.join(file_path.path, original_image.name)
+
+        # Сохраняем изображение в указанную папку
+        with open(new_image_path, 'wb+') as destination:
+            for chunk in original_image.chunks():
+                destination.write(chunk)
+
+        # Сохраняем путь в базе данных (в формате относительно media root)
+        relative_image_path = os.path.join('avatars', original_image.name)
+        serializer.save(image=relative_image_path)
+
+    def perform_update(self, serializer):
+        file_path = FilePath.objects.filter(name='Avatars').first()
+        if not file_path:
+            raise serializers.ValidationError("FilePath for 'Avatars' not found.")
+
+        original_image = self.request.FILES['image']
+        new_image_path = os.path.join(file_path.path, original_image.name)
+
+        # Сохраняем изображение в указанную папку
+        with open(new_image_path, 'wb+') as destination:
+            for chunk in original_image.chunks():
+                destination.write(chunk)
+
+        # Сохраняем путь в базе данных (в формате относительно media root)
+        relative_image_path = os.path.join('avatars', original_image.name)
+        serializer.save(image=relative_image_path)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_avatar(request):
+    avatar_id = request.data.get('avatar_id')
+
+    if not avatar_id:
+        return Response({'error': 'Avatar ID is required'}, status=400)
+
+    avatar = get_object_or_404(PreloadedAvatar, id=avatar_id)
+
+    employee = request.user
+    employee.avatar = avatar.image
+    employee.save()
+
+    return Response({'message': 'Avatar updated successfully'}, status=200)
+
+
 def get_active_users(minutes=5):
     time_threshold = timezone.now() - timedelta(minutes=minutes)
     active_users = Employee.objects.filter(last_login__gte=time_threshold, is_active=True)

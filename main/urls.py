@@ -23,6 +23,7 @@ router.register(r'system-settings', SystemSettingViewSet, basename='system-setti
 router.register(r'level-titles', LevelTitleViewSet, basename='level-titles')
 router.register(r'password-policy', PasswordPolicyViewSet, basename='password_policy_regex')
 router.register(r'logs', EmployeeActionLogViewSet, basename='logs')
+router.register(r'preloaded-avatars', PreloadedAvatarUploadViewSet, basename='preloaded-avatars')
 
 urlpatterns = [
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
@@ -118,6 +119,7 @@ urlpatterns = [
     path('survey/answers/', submit_survey_answers, name='user_change_password'),
     path('feedback/<int:pk>/', FeedbackDetailView.as_view(), name='feedback-detail'),
     path('upload-and-analyze/', FileUploadAndAnalysisView.as_view(), name='upload-and-analyze'),
+    path('change-avatar/', change_avatar, name='change-avatar'),
 ]
 
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки

@@ -5,8 +5,9 @@ from rest_framework.permissions import IsAdminUser
 
 from gamefication import settings
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
-    Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, KarmaSettings, \
-    FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy
+    Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, \
+    KarmaSettings, \
+    FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar
 
 
 class LoginSerializer(serializers.Serializer):
@@ -31,7 +32,10 @@ class ClassificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classifications
         fields = '__all__'
-
+class PreloadedAvatarSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PreloadedAvatar
+        fields = ['id', 'name', 'image']
 class PlayersSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
     avatar_url = serializers.SerializerMethodField()

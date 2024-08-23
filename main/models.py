@@ -1,4 +1,5 @@
 import logging
+import os
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser, Group, Permission, User
@@ -30,6 +31,24 @@ class SurveyQuestion(models.Model):
 
     def __str__(self):
         return self.question_text
+
+
+def get_avatar_upload_path(instance, filename):
+    # Получаем объект FilePath с именем 'Avatars'
+    file_path = FilePath.objects.filter(name='Avatars').first()
+    if not file_path:
+        # Если FilePath не найден, используем стандартный путь
+        return os.path.join('avatars', filename)
+
+    # Формируем полный путь для сохранения файла
+    return os.path.join(file_path.path, filename)
+
+class PreloadedAvatar(models.Model):
+    name = models.CharField(max_length=100)
+    image = models.ImageField(upload_to=get_avatar_upload_path, default="default.jpg")
+
+    def __str__(self):
+        return self.name
 
 class SurveyAnswer(models.Model):
     employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
