@@ -130,6 +130,10 @@ class EmployeeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['username', 'email', 'position', 'level', 'experience', 'next_level_experience', 'karma']
 
+    def get_avatar_url(self, obj):
+        if obj.avatar and hasattr(obj.avatar, 'url'):
+            return f"http://shaman.pythonanywhere.com{obj.avatar.url}"
+        return "http://shaman.pythonanywhere.com/media/default.jpg"
     def get_remaining_experience(self, obj):
         """Возвращает количество опыта, необходимое для достижения следующего уровня."""
         return obj.next_level_experience - obj.experience
@@ -140,12 +144,6 @@ class EmployeeSerializer(serializers.ModelSerializer):
             progress = (obj.experience / obj.next_level_experience) * 100
             return max(0, min(int(progress), 100))
         return 0
-
-    def get_avatar_url(self, obj):
-        request = self.context.get('request')
-        if request and obj.avatar and hasattr(obj.avatar, 'url'):
-            return request.build_absolute_uri(obj.avatar.url)
-        return None
     def get_role(self, obj):
         roles = [group.name[:-1] if group.name.endswith('Ы') else group.name for group in obj.groups.all()]
         return roles
