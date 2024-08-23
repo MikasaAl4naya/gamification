@@ -131,59 +131,41 @@ class Employee(AbstractUser):
             self.increase_experience(experience)
 
     def check_level_up(self):
-        leveled_up = False  # Флаг для отслеживания, был ли уровень повышен
-        leveled_down = False  # Флаг для отслеживания, был ли уровень понижен
-
         # Максимальное количество уровней
         max_level = 50
 
-        # Повышение уровня
+        # Проверка на понижение уровня
+        while self.level > 1:
+            previous_level_experience = self.calculate_experience_for_level(self.level - 1)
+            if self.experience < previous_level_experience:
+                old_level = self.level
+                self.level -= 1
+                self.next_level_experience = previous_level_experience
+                self.log_change('level', old_level, self.level, "Level down")
+                print(f"Leveled down to {self.level}. Experience: {self.experience}")
+            else:
+                break
+
+        # Проверка на повышение уровня
         while self.experience >= self.next_level_experience and self.level < max_level:
             old_level = self.level
-            print(
-                f"Current level: {self.level}. Experience: {self.experience}. Next level at: {self.next_level_experience}")
-
             self.level += 1
-            leveled_up = True
             self.log_change('level', old_level, self.level, "Level up")
+            print(f"Leveled up to {self.level}. Experience: {self.experience}")
+            self.next_level_experience = self.calculate_experience_for_level(self.level)
 
-            # Рассчитываем опыт, необходимый для следующего уровня как сумма текущего и прошлого
-            previous_level_experience = self.next_level_experience
-            experience_multiplier = 2.0 - (self.level * 0.1)
+        # Сохранение изменений уровня и опыта
+        self.save()
+
+    def calculate_experience_for_level(self, level):
+        # Метод для вычисления опыта, необходимого для достижения определенного уровня
+        experience_required = 100  # Начальный опыт для первого уровня
+        for i in range(2, level + 1):
+            experience_multiplier = 2.0 - ((i - 1) * 0.1)
             if experience_multiplier < 1.0:
                 experience_multiplier = 1.0
-            self.next_level_experience = previous_level_experience + int(
-                previous_level_experience * experience_multiplier)
-
-            print(f"Leveled up! New level: {self.level}. Remaining experience: {self.experience}")
-            print(f"New next level experience: {self.next_level_experience}")
-
-        # Понижение уровня
-        while self.experience < (self.next_level_experience - self.get_previous_level_experience()) and self.level > 1:
-            old_level = self.level
-            self.level -= 1
-            leveled_down = True
-            self.log_change('level', old_level, self.level, "Level down")
-
-            # Рассчитываем опыт, необходимый для предыдущего уровня
-            experience_multiplier = 2.0 - (self.level * 0.1)
-            if experience_multiplier < 1.0:
-                experience_multiplier = 1.0
-            self.next_level_experience = int(self.next_level_experience / experience_multiplier)
-
-            print(f"Leveled down! New level: {self.level}. Experience: {self.experience}")
-            print(f"Next level experience: {self.next_level_experience}")
-
-        # Сохранение изменений только если уровень был изменен
-        if leveled_up or leveled_down:
-            self.save()
-
-    def get_previous_level_experience(self):
-        experience_multiplier = 2.0 - ((self.level - 1) * 0.1)
-        if experience_multiplier < 1.0:
-            experience_multiplier = 1.0
-        return int(self.next_level_experience / experience_multiplier)
-
+            experience_required += int(experience_required * experience_multiplier)
+        return experience_required
 
     def set_karma(self, amount):
         if not self.is_active:
