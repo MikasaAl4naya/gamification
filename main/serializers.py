@@ -46,8 +46,8 @@ class PlayersSerializer(serializers.ModelSerializer):
 
     def get_avatar_url(self, obj):
         if obj.avatar:
-            return f"http://solevoi.pythonanywhere.com{obj.avatar.url}"
-        return "http://solevoi.pythonanywhere.com/media/default.jpg"
+            return f"http://shaman.pythonanywhere.com{obj.avatar.url}"
+        return "http://shaman.pythonanywhere.com/media/default.jpg"
 
 class SurveyQuestionSerializer(serializers.ModelSerializer):
     class Meta:
