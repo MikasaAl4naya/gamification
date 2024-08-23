@@ -529,6 +529,10 @@ def moderate_feedback(request, feedback_id):
     except Feedback.DoesNotExist:
         return Response({'error': 'Feedback not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # Если карма или опыт были изменены вручную, то устанавливаем статус "pending"
+    if feedback.status != 'pending' and (feedback.karma_change != 0 or feedback.experience_change != 0):
+        feedback.status = 'pending'
+
     if feedback.status == 'pending':
         data = request.data
         action = data.get('action')
@@ -540,7 +544,8 @@ def moderate_feedback(request, feedback_id):
                 changes = calculate_karma_change(feedback.type, level)
                 feedback.level = level
             else:
-                return Response({'error': 'Level is required for approving feedback'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Level is required for approving feedback'},
+                                status=status.HTTP_400_BAD_REQUEST)
 
             karma_change = changes['karma_change']
             experience_change = changes['experience_change']
@@ -574,7 +579,6 @@ def moderate_feedback(request, feedback_id):
         return Response(serializer.data, status=status.HTTP_200_OK)
     else:
         return Response({'error': 'Status must be pending'}, status=status.HTTP_400_BAD_REQUEST)
-
 
 
 def calculate_karma_change(operation_type, level=None):
