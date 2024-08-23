@@ -131,6 +131,8 @@ class Employee(AbstractUser):
             self.increase_experience(experience)
 
     def check_level_up(self):
+        leveled_up_or_down = False  # Флаг для отслеживания, был ли уровень изменен
+
         # Максимальное количество уровней
         max_level = 50
 
@@ -142,7 +144,7 @@ class Employee(AbstractUser):
                 self.level -= 1
                 self.next_level_experience = previous_level_experience
                 self.log_change('level', old_level, self.level, "Level down")
-                print(f"Leveled down to {self.level}. Experience: {self.experience}")
+                leveled_up_or_down = True
             else:
                 break
 
@@ -151,11 +153,12 @@ class Employee(AbstractUser):
             old_level = self.level
             self.level += 1
             self.log_change('level', old_level, self.level, "Level up")
-            print(f"Leveled up to {self.level}. Experience: {self.experience}")
             self.next_level_experience = self.calculate_experience_for_level(self.level)
+            leveled_up_or_down = True
 
-        # Сохранение изменений уровня и опыта
-        self.save()
+        # Сохранение изменений только если уровень был изменен
+        if leveled_up_or_down:
+            super(Employee, self).save(update_fields=['level', 'experience', 'next_level_experience'])
 
     def calculate_experience_for_level(self, level):
         # Метод для вычисления опыта, необходимого для достижения определенного уровня
