@@ -132,11 +132,12 @@ class Employee(AbstractUser):
 
     def check_level_up(self):
         leveled_up = False  # Флаг для отслеживания, был ли уровень повышен
+        leveled_down = False  # Флаг для отслеживания, был ли уровень понижен
 
         # Максимальное количество уровней
         max_level = 50
 
-        # Пока опыта хватает для повышения уровня и текущий уровень меньше максимального
+        # Повышение уровня
         while self.experience >= self.next_level_experience and self.level < max_level:
             old_level = self.level
             print(
@@ -157,9 +158,31 @@ class Employee(AbstractUser):
             print(f"Leveled up! New level: {self.level}. Remaining experience: {self.experience}")
             print(f"New next level experience: {self.next_level_experience}")
 
-        # Сохранение изменений только если уровень был повышен
-        if leveled_up:
+        # Понижение уровня
+        while self.experience < (self.next_level_experience - self.get_previous_level_experience()) and self.level > 1:
+            old_level = self.level
+            self.level -= 1
+            leveled_down = True
+            self.log_change('level', old_level, self.level, "Level down")
+
+            # Рассчитываем опыт, необходимый для предыдущего уровня
+            experience_multiplier = 2.0 - (self.level * 0.1)
+            if experience_multiplier < 1.0:
+                experience_multiplier = 1.0
+            self.next_level_experience = int(self.next_level_experience / experience_multiplier)
+
+            print(f"Leveled down! New level: {self.level}. Experience: {self.experience}")
+            print(f"Next level experience: {self.next_level_experience}")
+
+        # Сохранение изменений только если уровень был изменен
+        if leveled_up or leveled_down:
             self.save()
+
+    def get_previous_level_experience(self):
+        experience_multiplier = 2.0 - ((self.level - 1) * 0.1)
+        if experience_multiplier < 1.0:
+            experience_multiplier = 1.0
+        return int(self.next_level_experience / experience_multiplier)
 
 
     def set_karma(self, amount):
