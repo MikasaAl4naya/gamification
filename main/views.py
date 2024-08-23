@@ -513,7 +513,7 @@ def create_feedback(request, type, employee_id):
     data['type'] = type
     data['target_employee'] = employee_id
     data['status'] = 'pending'
-    data['moderator_comment'] = data.get('moderator_comment', None)  # Устанавливаем null, если комментарий не передан
+    data['moderation_comment'] = data.get('moderation_comment', None)  # Устанавливаем null, если комментарий не передан
 
     serializer = FeedbackSerializer(data=data)
     if serializer.is_valid():
@@ -540,7 +540,7 @@ def moderate_feedback(request, feedback_id):
         data = request.data
         action = data.get('action')
         level = data.get('level', None)
-        moderator_comment = data.get('moderator_comment', '')
+        moderation_comment = data.get('moderation_comment', '')
 
         if action == 'approve':
             if level is not None:
@@ -574,7 +574,7 @@ def moderate_feedback(request, feedback_id):
             feedback.experience_change = 0
 
         feedback.moderator = request.user
-        feedback.moderator_comment = moderator_comment
+        feedback.moderation_comment = moderation_comment
         feedback.moderation_date = timezone.now()
         feedback.save()
 
