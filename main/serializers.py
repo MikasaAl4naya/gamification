@@ -447,6 +447,11 @@ class EmployeeAchievementSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployeeAchievement
         fields = ['achievement_name', 'achievement_image', 'level', 'progress']
+    def get_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.image:
+            return request.build_absolute_uri(obj.image.url)
+        return None
 class ThemeWithTestsSerializer(serializers.ModelSerializer):
     tests = TestSerializer(many=True, read_only=True)
 
@@ -458,6 +463,11 @@ class AchievementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Achievement
         fields = '__all__'
+    def get_image_url(self, obj):
+        request = self.context.get('request')
+        if obj.image:
+            return request.build_absolute_uri(obj.image.url)
+        return None
 class ClassificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classifications
