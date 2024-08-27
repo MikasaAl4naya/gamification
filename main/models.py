@@ -227,7 +227,7 @@ class EmployeeActionLog(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.employee.username} - {self.action_type} {self.model_name} at {self.timestamp}"
+        return f"{self.employee.username} - {self.action_type} {self.model_name} at {self.created_at}"
 
 
 class UserSession(models.Model):
