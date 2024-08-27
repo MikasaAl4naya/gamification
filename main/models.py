@@ -445,17 +445,15 @@ class EmployeeAchievement(models.Model):
         self.progress += 1
         if self.achievement.required_count is not None and self.progress >= self.achievement.required_count:
             self.level_up()
+        self.save()  # Убедитесь, что изменения сохраняются
 
     def level_up(self):
         if self.level >= self.achievement.max_level:
             return
         else:
             self.level += 1
-            if self.achievement.required_count is not None:
-                self.achievement.required_count = int(self.achievement.required_count * 1.5)
-            if self.achievement.reward_experience is not None:
-                self.achievement.reward_experience = int(self.achievement.reward_experience * 1.5)
-            self.achievement.save()
+            self.progress = 0  # Сбрасываем прогресс после повышения уровня
+            self.achievement.required_count = int(self.achievement.required_count * 1.5)
             self.reward_employee()
 
     def reward_employee(self):
@@ -464,8 +462,8 @@ class EmployeeAchievement(models.Model):
         reward_experience = self.achievement.reward_experience
         employee.add_experience(reward_experience)
         employee.add_acoins(reward_currency)
-        self.progress = 0
         self.save()
+
 
 class EmployeeMedal(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)

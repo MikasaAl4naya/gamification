@@ -313,9 +313,17 @@ class DynamicPermission(BasePermission):
             return has_perm
         logger.debug("No required permission for this method")
         return False
-class AchievementListView(generics.ListAPIView):
+class AchievementViewSet(viewsets.ModelViewSet):
     queryset = Achievement.objects.all()
     serializer_class = AchievementSerializer
+    permission_classes = [IsAuthenticated]  # Только аутентифицированные пользователи могут создавать или изменять записи
+    parser_classes = [MultiPartParser, FormParser]  # Поддержка загрузки файлов
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    def perform_update(self, serializer):
+        serializer.save()
 class UpdateStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -760,6 +768,10 @@ def get_user(request):
 
         answers = answers_with_text + answers_without_text
 
+        # Получаем достижения сотрудника
+        employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
+        employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
+
         statistics = {
             'registration_date': registration_date,
             'last_login': last_login,
@@ -775,10 +787,12 @@ def get_user(request):
             'level_title': employee.level_title,  # Уровень и название
             'statistics': statistics,
             'answers': answers,
+            'achievements': employee_achievements_data,  # Включаем достижения
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 class FeedbackDetailView(generics.RetrieveAPIView):
@@ -2847,11 +2861,6 @@ class CreateQuestion(APIView):
 
         return Response({'message': 'Question and answers created successfully'}, status=status.HTTP_201_CREATED)
 
-
-
-
-
-
 class DeleteTest(generics.DestroyAPIView):
     queryset = Test.objects.all()
     serializer_class = TestSerializer
@@ -2951,10 +2960,6 @@ class UpdateTestAndContent(APIView):
                 return Response(response_data, status=status.HTTP_200_OK)
         except ValueError as e:
             return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
-
-
 class FullStatisticsAPIView(APIView):
     def get(self, request):
         # Initialize response dictionary

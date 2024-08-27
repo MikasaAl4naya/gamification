@@ -24,6 +24,7 @@ router.register(r'level-titles', LevelTitleViewSet, basename='level-titles')
 router.register(r'password-policy', PasswordPolicyViewSet, basename='password_policy_regex')
 router.register(r'logs', EmployeeActionLogViewSet, basename='logs')
 router.register(r'preloaded-avatars', PreloadedAvatarUploadViewSet, basename='preloaded-avatars')
+router.register(r'achievements', AchievementViewSet, basename='achievement')
 
 urlpatterns = [
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter
@@ -93,7 +94,6 @@ urlpatterns = [
     # path('test/<int:test_id>/top_participants/', top_test_participants, name='top_test_participants'),
     path('top_participants/', top_participants, name='top_participants'),
     path('delete_user/<int:user_id>/', delete_user, name='delete_user'),
-    path('achievements/', AchievementListView.as_view(), name='achievement-list'),
     path('employee/update/<int:pk>/', AdminEmployeeUpdateView.as_view(), name='admin-employee-update'),
     path('users/<int:user_id>/deactivate/', deactivate_user, name='deactivate_user'),
     path('users/<int:user_id>/delete/', delete_user, name='delete_user'),

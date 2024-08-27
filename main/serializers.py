@@ -7,7 +7,7 @@ from gamefication import settings
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
     Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, \
     KarmaSettings, \
-    FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar
+    FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement
 
 
 class LoginSerializer(serializers.Serializer):
@@ -159,8 +159,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if acoin_amount is not None:
             instance.acoin.amount = acoin_amount
             instance.acoin.save()
-
         return super().update(instance, validated_data)
+
 class AdminEmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', required=False)
 
@@ -440,6 +440,13 @@ class RequestSerializer(serializers.ModelSerializer):
         fields = ['classification', 'responsible', 'status']
 
 
+class EmployeeAchievementSerializer(serializers.ModelSerializer):
+    achievement_name = serializers.CharField(source='achievement.name')
+    achievement_image = serializers.ImageField(source='achievement.image')
+
+    class Meta:
+        model = EmployeeAchievement
+        fields = ['achievement_name', 'achievement_image', 'level', 'progress']
 class ThemeWithTestsSerializer(serializers.ModelSerializer):
     tests = TestSerializer(many=True, read_only=True)
 
@@ -450,7 +457,7 @@ class ThemeWithTestsSerializer(serializers.ModelSerializer):
 class AchievementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Achievement
-        fields = ['id', 'name', 'description', 'type', 'request_type', 'required_count', 'reward_experience', 'reward_currency', 'image']
+        fields = '__all__'
 class ClassificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classifications

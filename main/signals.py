@@ -157,3 +157,42 @@ def log_model_delete(sender, instance, **kwargs):
             object_id=str(instance.pk),
             description=f"{sender.__name__} was deleted"
         )
+
+
+@receiver(post_save, sender=Request)
+def track_request_classification(sender, instance, created, **kwargs):
+    if created:
+        try:
+            employee = instance.support_operator
+            request_classification = instance.classification
+
+            request_achievements = Achievement.objects.filter(type='Requests')
+
+            for achievement in request_achievements:
+                if achievement_matches_classification(achievement, request_classification):
+                    employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                        employee=employee,
+                        achievement=achievement
+                    )
+                    employee_achievement.increment_progress()
+
+        except Exception as e:
+            print(f"Ошибка при обновлении прогресса ачивки: {e}")
+
+
+
+def achievement_matches_classification(achievement, classification):
+    """
+    Проверяет, соответствует ли классификация (или её родители) классификации в ачивке.
+    """
+    if classification == achievement.request_type:
+        return True
+
+    # Проверяем родителей классификации
+    parent_classification = classification.parent
+    while parent_classification:
+        if parent_classification == achievement.request_type:
+            return True
+        parent_classification = parent_classification.parent
+
+    return False
