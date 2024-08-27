@@ -442,16 +442,17 @@ class RequestSerializer(serializers.ModelSerializer):
 
 class EmployeeAchievementSerializer(serializers.ModelSerializer):
     achievement_name = serializers.CharField(source='achievement.name')
-    achievement_image = serializers.ImageField(source='achievement.image')
+    achievement_image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeAchievement
-        fields = ['achievement_name', 'achievement_image', 'level', 'progress']
-    def get_image_url(self, obj):
-        request = self.context.get('request')
-        if obj.image:
-            return request.build_absolute_uri(obj.image.url)
-        return None
+        fields = ['achievement_name', 'achievement_image_url', 'level', 'progress']
+
+    def get_achievement_image_url(self, obj):
+        if obj.achievement.image and hasattr(obj.achievement.image, 'url'):
+            return f"http://shaman.pythonanywhere.com{obj.achievement.image.url}"
+        return "http://shaman.pythonanywhere.com/media/default.jpg"
+
 class ThemeWithTestsSerializer(serializers.ModelSerializer):
     tests = TestSerializer(many=True, read_only=True)
 
