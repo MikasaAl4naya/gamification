@@ -4,7 +4,8 @@ from django.dispatch import receiver
 from django.forms import model_to_dict
 
 from .models import TestAttempt, AcoinTransaction, Employee, create_acoin_transaction, TestQuestion, Test, Acoin, \
-    Request, Achievement, EmployeeAchievement, ExperienceMultiplier, EmployeeActionLog, ShiftHistory, EmployeeLog
+    Request, Achievement, EmployeeAchievement, ExperienceMultiplier, EmployeeActionLog, ShiftHistory, EmployeeLog, \
+    UserSession
 from django.contrib.auth.models import User, Group
 
 @receiver(post_save, sender=TestAttempt)
@@ -101,7 +102,7 @@ def update_achievement_progress(sender, instance, **kwargs):
 @receiver(post_save)
 def log_model_save(sender, instance, created, **kwargs):
     # Исключаем отслеживание определенных моделей
-    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request]:
+    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession]:
         return
 
     employee = None
@@ -179,6 +180,9 @@ def track_request_classification(sender, instance, created, **kwargs):
         except Exception as e:
             print(f"Ошибка при обновлении прогресса ачивки: {e}")
 
+@receiver(pre_delete, sender=Employee)
+def delete_related_logs(sender, instance, **kwargs):
+    EmployeeActionLog.objects.filter(employee=instance).delete()
 
 
 def achievement_matches_classification(achievement, classification):

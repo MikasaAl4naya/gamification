@@ -17,6 +17,10 @@ admin.site.register(Feedback)
 admin.site.register(SystemSetting)
 admin.site.register(LevelTitle)
 admin.site.register(PasswordPolicy)
+admin.site.register(EmployeeActionLog)
+
+
+
 
 @admin.register(KarmaSettings)
 class OperationSettingsAdmin(admin.ModelAdmin):
