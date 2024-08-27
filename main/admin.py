@@ -2,8 +2,6 @@ from django.contrib import admin
 
 from main.models import *
 
-# Register your models here.
-admin.site.register(Employee)
 admin.site.register(Achievement)
 admin.site.register(Classifications)
 admin.site.register(Request)
@@ -20,7 +18,9 @@ admin.site.register(PasswordPolicy)
 admin.site.register(EmployeeActionLog)
 
 
-
+@admin.register(Employee)
+class EmployeeAdmin(admin.ModelAdmin):
+    list_display = ('first_name', 'last_name')
 
 @admin.register(KarmaSettings)
 class OperationSettingsAdmin(admin.ModelAdmin):
