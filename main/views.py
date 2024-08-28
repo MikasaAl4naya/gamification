@@ -1502,6 +1502,7 @@ def get_test_statistics(request):
         max_score=F('test__max_score'),
         result=F('status'),
     ).values(
+        'test__id',  # Добавляем ID теста
         'employee__first_name',
         'employee__last_name',
         'test__theme__name',
@@ -1527,6 +1528,7 @@ def get_test_statistics(request):
         del stat['employee__last_name']
 
     return Response(list(statistics))
+
 @api_view(['GET'])
 def get_test_by_id(request, test_id):
     # Получаем тест по его ID или возвращаем ошибку 404, если тест не найден
@@ -1735,10 +1737,13 @@ class PasswordManagementView(APIView):
 
             # Получаем новый пароль из запроса
             new_password = request.data.get('new_password', None)
+            ignore_policy = request.data.get('ignore_policy', False)  # Флаг для игнорирования политики
 
             if new_password:
-                # Проверка вручную введенного пароля на соответствие политике
-                self.validate_password_policy(new_password, password_policy)
+                if not ignore_policy:
+                    # Проверка вручную введенного пароля на соответствие политике
+                    self.validate_password_policy(new_password, password_policy)
+                # Если флаг ignore_policy установлен, пропускаем проверку политики пароля
             else:
                 # Если новый пароль не предоставлен, генерируем случайный
                 new_password = get_random_string(length=password_policy.min_length)
