@@ -27,7 +27,16 @@ class LoginSerializer(serializers.Serializer):
 
         # Вернуть данные, если они валидны
         return data
+class MicroEmployeeSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
 
+    class Meta:
+        model = Employee
+        fields = ['first_name', 'avatar_url']
+    def get_avatar_url(self, obj):
+        if obj.avatar:
+            return f"http://shaman.pythonanywhere.com{obj.avatar.url}"
+        return "http://shaman.pythonanywhere.com/media/default.jpg"
 class ClassificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Classifications

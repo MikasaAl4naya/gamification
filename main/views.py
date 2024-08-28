@@ -722,6 +722,30 @@ class ManualRunAnalysisView(APIView):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def get_micro_user(request):
+    try:
+        # Получаем текущего сотрудника по токену
+        current_employee = request.user
+        employee_id = request.query_params.get('employee_id', None)
+
+        # Если передан employee_id, получаем сотрудника по этому id, иначе берем текущего пользователя
+        if employee_id:
+            employee = get_object_or_404(Employee, id=employee_id)
+        else:
+            employee = current_employee
+
+        # Сериализуем данные сотрудника
+        serializer = MicroEmployeeSerializer(employee)
+
+        # Возвращаем данные в ответе
+        return Response(serializer.data)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_user(request):
     try:
         current_employee = request.user

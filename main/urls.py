@@ -120,6 +120,7 @@ urlpatterns = [
     path('feedback/<int:pk>/', FeedbackDetailView.as_view(), name='feedback-detail'),
     path('upload-and-analyze/', FileUploadAndAnalysisView.as_view(), name='upload-and-analyze'),
     path('select-avatar/', select_avatar, name='change-avatar'),
+    path('micro-profile/', get_micro_user, name='micro-profile'),
 ]
 
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
