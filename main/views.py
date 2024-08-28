@@ -1,6 +1,6 @@
 import base64
 import math
-from django.db.models import F, ExpressionWrapper, IntegerField, CharField, Value
+from django.db.models import F, ExpressionWrapper, IntegerField, CharField, Value, BooleanField
 import uuid
 from collections import Counter, defaultdict
 from datetime import timedelta
@@ -1497,12 +1497,24 @@ def test_results(request, test_attempt_id):
 @api_view(['GET'])
 @permission_classes([partial(HasPermission, perm='contenttypes.view_stat')])
 def get_test_statistics(request):
+    # Подзапрос для получения последней попытки каждого пользователя на каждом тесте
+    last_attempt_subquery = TestAttempt.objects.filter(
+        employee_id=OuterRef('employee_id'),
+        test_id=OuterRef('test_id')
+    ).order_by('-end_time').values('id')[:1]
+
     statistics = TestAttempt.objects.annotate(
         total_score=F('score'),
         max_score=F('test__max_score'),
         result=F('status'),
+        is_last_attempt=Case(
+            When(id=Subquery(last_attempt_subquery), then=True),
+            default=False,
+            output_field=BooleanField()
+        ),  # Проверка на последнюю попытку
     ).values(
-        'test__id',  # Добавляем ID теста
+        'id',  # Нам нужен id для извлечения данных позже
+        'test__id',
         'employee__first_name',
         'employee__last_name',
         'test__theme__name',
@@ -1512,22 +1524,45 @@ def get_test_statistics(request):
         'result',
         'start_time',
         'end_time',
+        'is_last_attempt'
     )
 
-    # Обработка данных в Python: объединение имени и фамилии и удаление ненужных полей
+    # Обработка данных в Python: объединение имени и фамилии и добавление модератора
+    statistics_list = []
     for stat in statistics:
-        stat['full_name'] = f"{stat['employee__first_name']} {stat['employee__last_name']}"
-        if stat['start_time'] and stat['end_time']:
-            # Округляем до целого числа
-            stat['duration_seconds'] = int((stat['end_time'] - stat['start_time']).total_seconds())
-        else:
-            stat['duration_seconds'] = None
+        try:
+            # Извлекаем full_name
+            stat['full_name'] = f"{stat['employee__first_name']} {stat['employee__last_name']}"
 
-        # Удаляем поля 'employee__first_name' и 'employee__last_name'
-        del stat['employee__first_name']
-        del stat['employee__last_name']
+            # Округляем до целого числа duration_seconds
+            if stat['start_time'] and stat['end_time']:
+                stat['duration_seconds'] = int((stat['end_time'] - stat['start_time']).total_seconds())
+            else:
+                stat['duration_seconds'] = None
 
-    return Response(list(statistics))
+            # Извлечение модератора из JSON-поля test_results
+            test_attempt = TestAttempt.objects.get(id=stat['id'])
+            if test_attempt.test_results:
+                try:
+                    test_results = json.loads(test_attempt.test_results)
+                    stat['moderator'] = test_results.get('moderator', None)
+                except json.JSONDecodeError as e:
+                    stat['moderator'] = None
+                    print(f"Ошибка разбора JSON для попытки {test_attempt.id}: {str(e)}")
+            else:
+                stat['moderator'] = None
+
+            # Удаляем ненужные поля
+            del stat['employee__first_name']
+            del stat['employee__last_name']
+
+            statistics_list.append(stat)
+        except ObjectDoesNotExist as e:
+            print(f"Ошибка: Не удалось найти TestAttempt с id {stat['id']}")
+        except Exception as e:
+            print(f"Неожиданная ошибка для попытки {stat['id']}: {str(e)}")
+
+    return Response(statistics_list)
 
 @api_view(['GET'])
 def get_test_by_id(request, test_id):
