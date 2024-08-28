@@ -13,7 +13,7 @@ from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.views.decorators.http import require_POST
 from scripts.tasks import update_employee_karma
-from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin, HasModelPermission
+from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin, HasPermission
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.authentication import TokenAuthentication
@@ -39,7 +39,35 @@ from rest_framework.response import Response
 from rest_framework import status, generics, viewsets
 from django.contrib.auth import authenticate
 from .views_base import EmployeeAPIView
+class BasePermissionViewSet(viewsets.ModelViewSet):
+    """
+    Базовый класс для ViewSet, который автоматически проверяет права на основе модели и действия.
+    """
+    permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        """
+        Определяем нужные права на основе действия и модели.
+        """
+        # Получаем имя разрешения на основе действия и модели
+        if self.action in ['create', 'update', 'destroy', 'list', 'retrieve']:
+            model = self.queryset.model
+            action = {
+                'create': 'add',
+                'update': 'change',
+                'partial_update': 'change',
+                'destroy': 'delete',
+                'list': 'view',
+                'retrieve': 'view',
+            }[self.action]
+            perm = f"{model._meta.app_label}.{action}_{model._meta.model_name}"
+            self.permission_classes = [IsAuthenticated, partial(HasPermission, perm=perm)]
+
+        # Если действие нестандартное или требует кастомных прав, определяем в extra_permission_classes
+        if hasattr(self, 'extra_permission_classes') and self.action in self.extra_permission_classes:
+            self.permission_classes = [IsAuthenticated] + self.extra_permission_classes[self.action]
+
+        return super().get_permissions()
 
 class LoginAPIView(APIView):
     permission_classes = [AllowAny]
@@ -314,7 +342,7 @@ class DynamicPermission(BasePermission):
             return has_perm
         logger.debug("No required permission for this method")
         return False
-class AchievementViewSet(viewsets.ModelViewSet):
+class AchievementViewSet(BasePermissionViewSet):
     queryset = Achievement.objects.all()
     serializer_class = AchievementSerializer
     permission_classes = [IsAuthenticated]  # Только аутентифицированные пользователи могут создавать или изменять записи
@@ -501,7 +529,7 @@ def reset_karma_update(request, employee_id):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-class PlayersViewSet(viewsets.ReadOnlyModelViewSet):
+class PlayersViewSet(BasePermissionViewSet):
     queryset = Employee.objects.all()
     serializer_class = PlayersSerializer
     permission_classes = [IsAuthenticated]
@@ -611,7 +639,7 @@ def calculate_karma_change(operation_type, level=None):
         }  # Или значения по умолчанию, если настройки не найдены
 
 
-class LevelTitleViewSet(viewsets.ViewSet):
+class LevelTitleViewSet(BasePermissionViewSet):
     permission_classes = [IsAdminUser]
 
     @action(detail=False, methods=['post'])
@@ -829,7 +857,7 @@ class FeedbackDetailView(generics.RetrieveAPIView):
         # Дополнительные фильтры или логика, если потребуется
         return super().get_queryset()
 
-class EmployeeLogViewSet(viewsets.ModelViewSet):
+class EmployeeLogViewSet(BasePermissionViewSet):
     queryset = EmployeeActionLog.objects.all()
     serializer_class = EmployeeLogSerializer
 
@@ -867,6 +895,7 @@ class SurveyQuestionView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def submit_survey_answers(request):
@@ -894,7 +923,7 @@ def submit_survey_answers(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-class ClassificationsViewSet(viewsets.ModelViewSet):
+class ClassificationsViewSet(BasePermissionViewSet):
     queryset = Classifications.objects.all()
     serializer_class = ClassificationsSerializer
     permission_classes = [IsAuthenticated]
@@ -904,7 +933,7 @@ class ClassificationsViewSet(viewsets.ModelViewSet):
         root_nodes = Classifications.objects.filter(parent__isnull=True)
         serializer = self.get_serializer(root_nodes, many=True)
         return Response(serializer.data)
-class SurveyQuestionViewSet(viewsets.ModelViewSet):
+class SurveyQuestionViewSet(BasePermissionViewSet):
     queryset = SurveyQuestion.objects.all()
     serializer_class = SurveyQuestionSerializer
     permission_classes = [IsAuthenticated]
@@ -922,7 +951,7 @@ class SurveyQuestionViewSet(viewsets.ModelViewSet):
     def perform_bulk_create(self, serializer):
         SurveyQuestion.objects.bulk_create([SurveyQuestion(**data) for data in serializer.validated_data])
 
-class SurveyAnswerViewSet(viewsets.ModelViewSet):
+class SurveyAnswerViewSet(BasePermissionViewSet):
     queryset = SurveyAnswer.objects.all()
     serializer_class = SurveyAnswerSerializer
     permission_classes = [IsAuthenticated]
@@ -930,18 +959,19 @@ class SurveyAnswerViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(employee=self.request.user)
 
-class EmployeeActionLogViewSet(viewsets.ReadOnlyModelViewSet):
+class EmployeeActionLogViewSet(BasePermissionViewSet):
     queryset = EmployeeActionLog.objects.all().order_by('-created_at')
     serializer_class = EmployeeActionLogSerializer
     permission_classes = [IsAuthenticated]
 
-@permission_classes([IsAdmin])
-class GroupViewSet(viewsets.ModelViewSet):
+class GroupViewSet(BasePermissionViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
-    permission_classes = [IsAdmin]
 
-
+    extra_permission_classes = {
+        # Если нужно задать специфическое право для нестандартного действия
+        'custom_action': [partial(HasPermission, perm='custom_permission')]
+    }
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -958,7 +988,7 @@ class GroupViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
-class PermissionManagementViewSet(viewsets.ViewSet):
+class PermissionManagementViewSet(BasePermissionViewSet):
     queryset = Permission.objects.none()  # Фиктивный queryset
 
     @action(detail=False, methods=['get'])
@@ -1070,14 +1100,14 @@ def system_statistics(request):
     }
 
     return Response(data)
-class ExperienceMultiplierViewSet(viewsets.ModelViewSet):
+class ExperienceMultiplierViewSet(BasePermissionViewSet):
     queryset = ExperienceMultiplier.objects.all()
     serializer_class = ExperienceMultiplierSerializer
-class KarmaSettingsViewSet(viewsets.ModelViewSet):
+class KarmaSettingsViewSet(BasePermissionViewSet):
     queryset = KarmaSettings.objects.all()
     serializer_class = KarmaSettingsSerializer
 
-class FilePathViewSet(viewsets.ModelViewSet):
+class FilePathViewSet(BasePermissionViewSet):
     queryset = FilePath.objects.all()
     serializer_class = FilePathSerializer
 
@@ -1111,7 +1141,7 @@ class SessionListView(APIView):
         delete_inactive_sessions()
         return Response({"message": "Неактивные сессии удалены"}, status=status.HTTP_200_OK)
 
-class SystemSettingViewSet(viewsets.ViewSet):
+class SystemSettingViewSet(BasePermissionViewSet):
     @action(detail=False, methods=['get'])
     def list_settings(self, request):
         settings = SystemSetting.objects.all()
@@ -1162,7 +1192,7 @@ def select_avatar(request):
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class PreloadedAvatarUploadViewSet(viewsets.ModelViewSet):
+class PreloadedAvatarUploadViewSet(BasePermissionViewSet):
     queryset = PreloadedAvatar.objects.all()
     serializer_class = PreloadedAvatarSerializer
     permission_classes = [IsAdminUser]
@@ -1465,7 +1495,7 @@ def test_results(request, test_attempt_id):
 
 
 @api_view(['GET'])
-@permission_classes([partial(HasModelPermission, perm='contenttypes.view_stat')])
+@permission_classes([partial(HasPermission, perm='contenttypes.view_stat')])
 def get_test_statistics(request):
     statistics = TestAttempt.objects.annotate(
         total_score=F('score'),
@@ -1767,7 +1797,7 @@ class PasswordManagementView(APIView):
             return Response({"message": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class PasswordPolicyViewSet(viewsets.ViewSet):
+class PasswordPolicyViewSet(BasePermissionViewSet):
 
     def generate_password_policy_description(self, policy):
         """
@@ -1854,7 +1884,7 @@ class PasswordPolicyViewSet(viewsets.ViewSet):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['POST'])
-@permission_classes([partial(HasModelPermission, perm='main.add_request')])
+@permission_classes([partial(HasPermission, perm='main.add_request')])
 def create_request(request):
     serializer = RequestSerializer(data=request.data)
     if serializer.is_valid():
