@@ -437,7 +437,11 @@ class TestSerializer(serializers.ModelSerializer):
 class RequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Request
-        fields = ['classification', 'responsible', 'status']
+        fields = [
+            'classification', 'responsible', 'support_operator',
+            'initiator', 'status', 'description', 'number',
+            'date', 'is_massive'
+        ]
 
 
 class EmployeeAchievementSerializer(serializers.ModelSerializer):

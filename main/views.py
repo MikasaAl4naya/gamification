@@ -5,6 +5,7 @@ import uuid
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from functools import partial
 from multiprocessing import Value
 from django.contrib.auth.hashers import make_password, check_password
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
@@ -12,7 +13,7 @@ from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.views.decorators.http import require_POST
 from scripts.tasks import update_employee_karma
-from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin
+from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin, HasModelPermission
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.authentication import TokenAuthentication
@@ -24,7 +25,7 @@ from django.db.models import Max, FloatField, Avg, Count, Q, F, Sum, ExpressionW
 from django.db.models.functions import Coalesce, RowNumber
 from django.http import HttpResponse, JsonResponse
 from django.utils.timezone import localtime
-from rest_framework.fields import IntegerField
+from rest_framework.fields import IntegerField, CharField
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import  BasePermission, IsAuthenticated, AllowAny
 from rest_framework.utils import json
@@ -938,7 +939,7 @@ class PermissionManagementViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def list_permissions(self, request):
-        permissions = Permission.objects.all()
+        permissions = Permission.objects.all().order_by('id')
         serializer = PermissionSerializer(permissions, many=True)
         return Response(serializer.data)
 
@@ -1438,9 +1439,9 @@ def test_results(request, test_attempt_id):
 
     return Response(response_data, status=status.HTTP_200_OK)
 
-
-@permission_classes([IsAdmin])
-def get_statistics():
+@api_view(['GET'])
+@permission_classes([partial(HasModelPermission, perm='main.view_stat')])
+def get_statistics(request):
     statistics = TestAttempt.objects.annotate(
         total_score=F('score'),
         max_score=F('test__max_score'),
@@ -1449,7 +1450,35 @@ def get_statistics():
             When(is_failed=True, then=Value('Провален')),
             When(is_moderated=True, then=Value('На модерации')),
             default=Value('Не завершен'),
-            output_field=IntegerField(),
+            output_field=CharField(),  # Используем CharField для строк
+        ),
+        duration_seconds=ExpressionWrapper(
+            F('end_time') - F('start_time'),
+            output_field=IntegerField()
+        ),
+    ).values(
+        'employee__full_name',
+        'test__theme__name',
+        'test__name',
+        'total_score',
+        'max_score',
+        'result',
+        'duration_seconds',
+        'end_time__date',
+    )
+    return statistics
+@api_view(['GET'])
+@permission_classes([partial(HasModelPermission, perm='contenttypes.view_stat')])
+def get_test_statistics(request):
+    statistics = TestAttempt.objects.annotate(
+        total_score=F('score'),
+        max_score=F('test__max_score'),
+        result=Case(
+            When(is_passed=True, then=Value('Пройден')),
+            When(is_failed=True, then=Value('Провален')),
+            When(is_moderated=True, then=Value('На модерации')),
+            default=Value('Не завершен'),
+            output_field=CharField(),  # Используем CharField для строк
         ),
         duration_seconds=ExpressionWrapper(
             F('end_time') - F('start_time'),
@@ -1466,8 +1495,7 @@ def get_statistics():
         'end_time__date',
     )
 
-    return statistics
-
+    return Response(list(statistics))
 @api_view(['GET'])
 def get_test_by_id(request, test_id):
     # Получаем тест по его ID или возвращаем ошибку 404, если тест не найден
@@ -1825,14 +1853,14 @@ class PasswordPolicyViewSet(viewsets.ViewSet):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['POST'])
-@permission_classes([IsAdmin])
+@permission_classes([partial(HasModelPermission, perm='main.add_request')])
 def create_request(request):
-    if request.method == 'POST':
-        serializer = RequestSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    serializer = RequestSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 @permission_classes([IsAdmin])
 class ThemeDeleteAPIView(APIView):
     def delete(self, request, theme_id):
@@ -1862,6 +1890,7 @@ def update_theme_name(request, theme_id):
     theme.save()
 
     return Response({"message": "Theme name updated successfully"}, status=status.HTTP_200_OK)
+
 @permission_classes([IsAdmin])
 @api_view(['DELETE'])
 def delete_test_attempt(request, attempt_id):
