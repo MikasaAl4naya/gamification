@@ -90,7 +90,6 @@ urlpatterns = [
     path('question_errors_stat/', QuestionErrorsStatistics.as_view(), name='emp_test_stat'),
     path('question_correct_stat/', QuestionCorrectStatistics.as_view(), name='emp_test_stat'),
     path('test-stat/', get_test_statistics, name='get_statistics'),
-    path('test_statistics/', get_statistics, name='get_statistics'),
     path('user/update/', EmployeeUpdateView.as_view(), name='employee-update'),
     # path('test/<int:test_id>/top_participants/', top_test_participants, name='top_test_participants'),
     path('top_participants/', top_participants, name='top_participants'),

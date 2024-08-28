@@ -1,6 +1,6 @@
 import base64
 import math
-import os
+from django.db.models import F, ExpressionWrapper, IntegerField, CharField, Value
 import uuid
 from collections import Counter, defaultdict
 from datetime import timedelta
@@ -22,7 +22,7 @@ from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 import pytz
 from django.db.models import Max, FloatField, Avg, Count, Q, F, Sum, ExpressionWrapper, DurationField, OuterRef, \
     Subquery, Window, When, Case
-from django.db.models.functions import Coalesce, RowNumber
+from django.db.models.functions import Coalesce, RowNumber, Concat
 from django.http import HttpResponse, JsonResponse
 from django.utils.timezone import localtime
 from rest_framework.fields import IntegerField, CharField
@@ -1438,62 +1438,36 @@ def test_results(request, test_attempt_id):
         response_data["moderator"] = moderator_name
 
     return Response(response_data, status=status.HTTP_200_OK)
-
-@api_view(['GET'])
-@permission_classes([partial(HasModelPermission, perm='main.view_stat')])
-def get_statistics(request):
-    statistics = TestAttempt.objects.annotate(
-        total_score=F('score'),
-        max_score=F('test__max_score'),
-        result=Case(
-            When(is_passed=True, then=Value('Пройден')),
-            When(is_failed=True, then=Value('Провален')),
-            When(is_moderated=True, then=Value('На модерации')),
-            default=Value('Не завершен'),
-            output_field=CharField(),  # Используем CharField для строк
-        ),
-        duration_seconds=ExpressionWrapper(
-            F('end_time') - F('start_time'),
-            output_field=IntegerField()
-        ),
-    ).values(
-        'employee__full_name',
-        'test__theme__name',
-        'test__name',
-        'total_score',
-        'max_score',
-        'result',
-        'duration_seconds',
-        'end_time__date',
-    )
-    return statistics
 @api_view(['GET'])
 @permission_classes([partial(HasModelPermission, perm='contenttypes.view_stat')])
 def get_test_statistics(request):
     statistics = TestAttempt.objects.annotate(
         total_score=F('score'),
         max_score=F('test__max_score'),
-        result=Case(
-            When(is_passed=True, then=Value('Пройден')),
-            When(is_failed=True, then=Value('Провален')),
-            When(is_moderated=True, then=Value('На модерации')),
-            default=Value('Не завершен'),
-            output_field=CharField(),  # Используем CharField для строк
-        ),
-        duration_seconds=ExpressionWrapper(
-            F('end_time') - F('start_time'),
-            output_field=IntegerField()
-        ),
+        result=F('status'),
     ).values(
-        'employee__full_name',
+        'employee__first_name',
+        'employee__last_name',
         'test__theme__name',
         'test__name',
         'total_score',
         'max_score',
         'result',
-        'duration_seconds',
-        'end_time__date',
+        'start_time',
+        'end_time',
     )
+
+    # Обработка данных в Python: объединение имени и фамилии и удаление ненужных полей
+    for stat in statistics:
+        stat['full_name'] = f"{stat['employee__first_name']} {stat['employee__last_name']}"
+        if stat['start_time'] and stat['end_time']:
+            stat['duration_seconds'] = (stat['end_time'] - stat['start_time']).total_seconds()
+        else:
+            stat['duration_seconds'] = None
+
+        # Удаляем поля 'employee__first_name' и 'employee__last_name'
+        del stat['employee__first_name']
+        del stat['employee__last_name']
 
     return Response(list(statistics))
 @api_view(['GET'])
