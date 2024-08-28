@@ -1,13 +1,29 @@
 from rest_framework.permissions import BasePermission
-class HasModelPermission(BasePermission):
-    def __init__(self, perm):
+
+
+class HasPermission(BasePermission):
+    def __init__(self, perm=None):
         self.perm = perm
+
     def has_permission(self, request, view):
+        if self.perm:
+            perm = self.perm
+        else:
+            # Определяем модель из queryset и действие
+            model = view.queryset.model
+            action = 'view' if request.method in ['GET', 'HEAD', 'OPTIONS'] else \
+                     'add' if request.method == 'POST' else \
+                     'change' if request.method in ['PUT', 'PATCH'] else \
+                     'delete'
+            # Определяем полное имя разрешения
+            perm = f"{model._meta.app_label}.{action}_{model._meta.model_name}"
+
         print(f"Проверка разрешений для пользователя: {request.user.username}")
-        print(f"Требуемое разрешение: {self.perm}")
-        user_permissions = request.user.get_all_permissions()
-        print(f"Разрешения пользователя: {user_permissions}")
-        return request.user.has_perm(self.perm)
+        print(f"Требуемое разрешение: {perm}")
+        return request.user.has_perm(perm)
+
+
+
 class IsAdmin(BasePermission):
     def has_permission(self, request, view):
         print("Используется IsAdmin")
