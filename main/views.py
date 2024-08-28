@@ -1438,6 +1438,8 @@ def test_results(request, test_attempt_id):
         response_data["moderator"] = moderator_name
 
     return Response(response_data, status=status.HTTP_200_OK)
+
+
 @api_view(['GET'])
 @permission_classes([partial(HasModelPermission, perm='contenttypes.view_stat')])
 def get_test_statistics(request):
@@ -1461,7 +1463,8 @@ def get_test_statistics(request):
     for stat in statistics:
         stat['full_name'] = f"{stat['employee__first_name']} {stat['employee__last_name']}"
         if stat['start_time'] and stat['end_time']:
-            stat['duration_seconds'] = (stat['end_time'] - stat['start_time']).total_seconds()
+            # Округляем до целого числа
+            stat['duration_seconds'] = int((stat['end_time'] - stat['start_time']).total_seconds())
         else:
             stat['duration_seconds'] = None
 
