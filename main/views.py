@@ -1023,7 +1023,7 @@ def system_statistics(request):
     active_users_count = active_users.count()
 
     # 2. Общее количество зарегистрированных пользователей
-    users = Employee.objects.all().values_list('username', flat=True)
+    users = Employee.objects.all().values('username', 'date_joined')  # Используем 'date_joined' для даты регистрации
     total_users_count = Employee.objects.count()
 
     # 3. Количество деактивированных пользователей
@@ -1061,7 +1061,7 @@ def system_statistics(request):
         'active_users_count': active_users_count,
         'active_users': list(active_users),
         'total_users_count': total_users_count,
-        'users_count': list(users),
+        'users': list(users),  # Возвращаем список пользователей с их датами регистрации
         'deactivated_users_count': deactivated_users_count,
         'total_tests_count': total_tests_count,
         'tests': list(tests),
