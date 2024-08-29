@@ -78,81 +78,75 @@ def run_classification_script():
     files = [os.path.join(directory_path, fn) for fn in file_names if os.path.exists(os.path.join(directory_path, fn))]
 
     for file_path in files:
-        is_massive_file = "Массовые" in file_path
-        print(f"Processing file: {file_path}, is_massive_file: {is_massive_file}")
+        try:
+            is_massive_file = "Массовые" in file_path
+            print(f"Processing file: {file_path}, is_massive_file: {is_massive_file}")
 
-        df = pd.read_excel(file_path, sheet_name='TDSheet', skiprows=12)
+            df = pd.read_excel(file_path, sheet_name='TDSheet', skiprows=12)
 
-        if is_massive_file:
-            initiator_col = 'Unnamed: 16'
-            responsible_col = 'Unnamed: 22'
-        else:
-            initiator_col = 'Unnamed: 17'
-            responsible_col = 'Unnamed: 22'
+            if is_massive_file:
+                initiator_col = 'Unnamed: 16'
+                responsible_col = 'Unnamed: 22'
+            else:
+                initiator_col = 'Unnamed: 17'
+                responsible_col = 'Unnamed: 22'
 
-        classification = None
-        description = ''
-        support_operator = None
+            classification = None
+            description = ''
+            support_operator = None
 
-        for index, row in df.iterrows():
-            for col_index, col in enumerate(df.columns[:1]):
-                value = row[col]
-                if pd.notna(value):
-                    if is_fio(value):
-                        next_values = row[col_index + 1:col_index + 4]
-                        if next_values.isnull().all():
-                            full_name = value.strip()
-                            name_parts = full_name.split()
-                            if len(name_parts) == 3:
-                                first_name, last_name = name_parts[1], name_parts[0]
-                                print(f"Detected FIO: {first_name} {last_name}")
-                                try:
-                                    support_operator = Employee.objects.filter(first_name=first_name,
-                                                                               last_name=last_name).first()
-                                    if support_operator:
-                                        print(f"Detected FIO: {first_name} {last_name}")
-                                    else:
-                                        print(f"No matching employee found for FIO: {first_name} {last_name}")
-                                except Employee.MultipleObjectsReturned:
-                                    print(f"Multiple employees found for FIO: {first_name} {last_name}")
-                                    # Обработка если нужно выбрать конкретного сотрудника из нескольких
+            for index, row in df.iterrows():
+                for col_index, col in enumerate(df.columns[:1]):
+                    value = row[col]
+                    if pd.notna(value):
+                        if is_fio(value):
+                            next_values = row[col_index + 1:col_index + 4]
+                            if next_values.isnull().all():
+                                full_name = value.strip()
+                                name_parts = full_name.split()
+                                if len(name_parts) == 3:
+                                    first_name, last_name = name_parts[1], name_parts[0]
+                                    print(f"Detected FIO: {first_name} {last_name}")
+                                    try:
+                                        support_operator = Employee.objects.filter(first_name=first_name, last_name=last_name).first()
+                                        if support_operator is None:
+                                            print(f"No employee found for {first_name} {last_name}")
+                                    except Employee.MultipleObjectsReturned:
+                                        print(f"Multiple employees found for FIO: {first_name} {last_name}")
+                        elif is_classification(value):
+                            classification = add_classification_levels(value)
+                        elif "Обращение" in str(value):
+                            match = re.match(r"Обращение (\d+) от (\d{2}\.\d{2}\.\d{4} \d{1,2}:\d{2}:\d{2})", str(value))
+                            if match:
+                                number = match.group(1)
+                                date_str = match.group(2)
+                                date = datetime.strptime(date_str, '%d.%m.%Y %H:%M:%S')
 
-                    elif is_classification(value):
-                        classification = add_classification_levels(value)
+                                description = df.iloc[index + 1, 0] if index + 1 < len(df) else ''
 
-                    elif "Обращение" in str(value):
-                        match = re.match(r"Обращение (\d+) от (\d{2}\.\d{2}\.\d{4} \d{1,2}:\d{2}:\d{2})", str(value))
-                        if match:
-                            number = match.group(1)
-                            date_str = match.group(2)
-                            date = datetime.strptime(date_str, '%d.%m.%Y %H:%M:%S')
+                                print(f"Processing request {number} - date: {date}, description: {description}")
 
-                            description = df.iloc[index + 1, 0] if index + 1 < len(df) else ''
+                                initiator = row[initiator_col]
+                                responsible = row[responsible_col]
+                                status = row['Unnamed: 25']
 
-                            print(f"Processing request {number} - date: {date}, description: {description}")
+                                print(f"Request {number} - initiator: {initiator}, responsible: {responsible}, status: {status}, classification: {classification}")
 
-                            initiator = row[initiator_col]
-                            responsible = row[responsible_col]
-                            status = row['Unnamed: 25']
-
-                            print(
-                                f"Request {number} - initiator: {initiator}, responsible: {responsible}, status: {status}, classification: {classification}")
-
-                            if pd.notna(initiator) and pd.notna(responsible) and classification is not None:
-                                is_massive = is_massive_file
-                                add_request(number, date, description, classification, initiator, responsible,
-                                            support_operator, status, is_massive)
-                            elif is_massive_file and support_operator is not None:
-                                print(
-                                    f"Adding massive request with missing data - initiator: {initiator}, responsible: {responsible}, classification: {classification}")
-                                add_request(number, date, description, classification, '', '', support_operator, status,
-                                            True)
-                            else:
-                                print(
-                                    f"Skipping due to missing data - initiator: {initiator}, responsible: {responsible}, classification: {classification}")
+                                if pd.notna(initiator) and pd.notna(responsible) and classification is not None:
+                                    is_massive = is_massive_file
+                                    add_request(number, date, description, classification, initiator, responsible, support_operator, status, is_massive)
+                                elif is_massive_file and support_operator is not None:
+                                    print(f"Adding massive request with missing data - initiator: {initiator}, responsible: {responsible}, classification: {classification}")
+                                    add_request(number, date, description, classification, '', '', support_operator, status, True)
+                                else:
+                                    print(f"Skipping due to missing data - initiator: {initiator}, responsible: {responsible}, classification: {classification}")
+        except Exception as e:
+            print(f"Error processing file {file_path}: {e}")
+            break  # Останавливаем выполнение скрипта при ошибке
 
     file_path_entry.last_updated = datetime.now(pytz.UTC)
     file_path_entry.save()
 
 if __name__ == "__main__":
     run_classification_script()
+
