@@ -8,6 +8,7 @@ from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, A
     Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, \
     KarmaSettings, \
     FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement
+from main.names_translations import translate_permission_name
 
 
 class LoginSerializer(serializers.Serializer):
@@ -259,9 +260,15 @@ from rest_framework import serializers
 from django.contrib.auth.models import Group, Permission
 
 class PermissionSerializer(serializers.ModelSerializer):
+    translated_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Permission
-        fields = ['id', 'name', 'codename']
+        fields = ['id', 'name', 'codename', 'translated_name']
+
+    def get_translated_name(self, obj):
+        return translate_permission_name(obj.name)
+
 
 class GroupSerializer(serializers.ModelSerializer):
     permissions = serializers.PrimaryKeyRelatedField(queryset=Permission.objects.all(), many=True, write_only=True)
