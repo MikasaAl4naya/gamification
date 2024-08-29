@@ -676,7 +676,7 @@ class FileUploadAndAnalysisView(APIView):
         if not file:
             return Response({"message": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
         print(f"Received file: {file.name}")
-        # Определение директории на основе типа файла
+
         if "Тип обращений" in file.name:
             print("Detected 'Тип обращений' in file name")
             file_path_entry = FilePath.objects.get(name="Requests")
@@ -687,15 +687,18 @@ class FileUploadAndAnalysisView(APIView):
             print(f"Unknown file type or incorrect date format for file: {file.name}")
             return Response({"message": "Unknown file type or incorrect date format"},
                             status=status.HTTP_400_BAD_REQUEST)
+
         directory_path = file_path_entry.path
         if not os.path.exists(directory_path):
             return Response({"message": f"Directory does not exist: {directory_path}"},
                             status=status.HTTP_400_BAD_REQUEST)
+
         # Сохранение файла в указанную директорию
         destination_file_path = os.path.join(directory_path, file.name)
         with open(destination_file_path, 'wb+') as destination_file:
             for chunk in file.chunks():
                 destination_file.write(chunk)
+
         # Запуск соответствующего скрипта на основе имени файла
         if "Тип обращений" in file.name:
             self.run_classifications_script(destination_file_path)
@@ -710,10 +713,12 @@ class FileUploadAndAnalysisView(APIView):
     def run_classifications_script(self, file_path):
         try:
             from scripts.class_script import run_classification_script
-            run_classification_script()  # Вызов без аргументов
+            file_path_entry = FilePath.objects.get(name="Requests")
+            run_classification_script(file_path, file_path_entry)  # Передаем объект `file_path_entry`
             print(f"Classification script executed for file: {file_path}")
         except Exception as e:
             print(f"Error running classification script: {e}")
+
     def run_schedule_script(self, file_path):
         try:
             from scripts.tasks import update_employee_karma
