@@ -794,7 +794,6 @@ def get_user(request):
         complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved').count()
         praises_count = Feedback.objects.filter(target_employee=employee, type="praise", status='approved').count()
 
-        # Только approved фидбеки будут отображаться
         complaints = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved')
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
@@ -804,8 +803,20 @@ def get_user(request):
         answers_with_text = []
         answers_without_text = []
 
+        # Проверяем и заполняем вопрос "Дата рождения"
         for question in survey_questions:
             answer = survey_answers.filter(question=question).first()
+            if question.question_text.lower() == "дата рождения":
+                # Если дата рождения у сотрудника существует, заполняем ответ
+                if employee.birth_date:
+                    birth_date_str = employee.birth_date.strftime('%Y-%m-%d')
+                    answers_with_text.append({
+                        "question_id": question.id,
+                        "question_text": question.question_text,
+                        "answer_text": birth_date_str
+                    })
+                    continue
+
             if answer and answer.answer_text:
                 answers_with_text.append({
                     "question_id": question.id,
@@ -837,14 +848,15 @@ def get_user(request):
 
         return Response({
             'profile': serializer.data,
-            'level_title': employee.level_title,  # Уровень и название
+            'level_title': employee.level_title,
             'statistics': statistics,
             'answers': answers,
-            'achievements': employee_achievements_data,  # Включаем достижения
+            'achievements': employee_achievements_data,
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
