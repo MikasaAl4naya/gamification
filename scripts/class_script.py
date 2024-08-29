@@ -19,11 +19,15 @@ def add_classification_levels(classification_string):
     levels = [level.strip() for level in classification_string.split('->')]
     parent = None
     for level in levels:
-        obj, created = Classifications.objects.get_or_create(name=level, parent=parent)
+        obj, created = Classifications.objects.filter(name=level, parent=parent).first(), False
+        if not obj:
+            obj = Classifications.objects.create(name=level, parent=parent)
+            created = True
         if created:
             print(f"Добавлена новая классификация: {level}")
         parent = obj
     return parent
+
 
 def is_classification(value):
     if not isinstance(value, str):
@@ -103,9 +107,15 @@ def run_classification_script():
                                 first_name, last_name = name_parts[1], name_parts[0]
                                 print(f"Detected FIO: {first_name} {last_name}")
                                 try:
-                                    support_operator = Employee.objects.get(first_name=first_name, last_name=last_name)
-                                except Employee.DoesNotExist:
-                                    support_operator = None
+                                    support_operator = Employee.objects.filter(first_name=first_name,
+                                                                               last_name=last_name).first()
+                                    if support_operator:
+                                        print(f"Detected FIO: {first_name} {last_name}")
+                                    else:
+                                        print(f"No matching employee found for FIO: {first_name} {last_name}")
+                                except Employee.MultipleObjectsReturned:
+                                    print(f"Multiple employees found for FIO: {first_name} {last_name}")
+                                    # Обработка если нужно выбрать конкретного сотрудника из нескольких
 
                     elif is_classification(value):
                         classification = add_classification_levels(value)

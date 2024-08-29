@@ -46,28 +46,26 @@ class BasePermissionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_permissions(self):
-        """
-        Определяем нужные права на основе действия и модели.
-        """
-        # Получаем имя разрешения на основе действия и модели
         if self.action in ['create', 'update', 'destroy', 'list', 'retrieve']:
-            model = self.queryset.model
-            action = {
-                'create': 'add',
-                'update': 'change',
-                'partial_update': 'change',
-                'destroy': 'delete',
-                'list': 'view',
-                'retrieve': 'view',
-            }[self.action]
-            perm = f"{model._meta.app_label}.{action}_{model._meta.model_name}"
-            self.permission_classes = [IsAuthenticated, partial(HasPermission, perm=perm)]
+            # Проверка на None
+            if self.queryset is not None:
+                model = self.queryset.model
+                action = {
+                    'create': 'add',
+                    'update': 'change',
+                    'partial_update': 'change',
+                    'destroy': 'delete',
+                    'list': 'view',
+                    'retrieve': 'view',
+                }[self.action]
+                perm = f"{model._meta.app_label}.{action}_{model._meta.model_name}"
+                self.permission_classes = [IsAuthenticated, partial(HasPermission, perm=perm)]
 
-        # Если действие нестандартное или требует кастомных прав, определяем в extra_permission_classes
         if hasattr(self, 'extra_permission_classes') and self.action in self.extra_permission_classes:
             self.permission_classes = [IsAuthenticated] + self.extra_permission_classes[self.action]
 
         return super().get_permissions()
+
 
 class LoginAPIView(APIView):
     permission_classes = [AllowAny]
@@ -288,8 +286,6 @@ class MostIncorrectQuestionsAPIView(APIView):
 
         return Response(result)
 
-
-logger = logging.getLogger(__name__)
 @api_view(['GET'])
 def get_employee_info(request, employee_id):
     try:
@@ -1850,7 +1846,8 @@ class PasswordManagementView(APIView):
 
 
 class PasswordPolicyViewSet(BasePermissionViewSet):
-
+    queryset = PasswordPolicy.objects.all()
+    serializer_class = PasswordPolicySerializer
     def generate_password_policy_description(self, policy):
         """
         Функция для генерации краткого описания политики пароля.
