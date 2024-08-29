@@ -334,9 +334,7 @@ class DynamicPermission(BasePermission):
         required_permission = view.required_permissions.get(request.method.lower())
         if required_permission:
             has_perm = request.user.has_perm(required_permission)
-            logger.debug(f"User {request.user} has_perm {required_permission}: {has_perm}")
             return has_perm
-        logger.debug("No required permission for this method")
         return False
 class AchievementViewSet(BasePermissionViewSet):
     queryset = Achievement.objects.all()
