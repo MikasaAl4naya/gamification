@@ -693,11 +693,12 @@ class FileUploadAndAnalysisView(APIView):
             return Response({"message": f"Directory does not exist: {directory_path}"},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Сохранение файла в указанную директорию
+        # Сохранение файла в указанную директорию с использованием контекстного менеджера
         destination_file_path = os.path.join(directory_path, file.name)
         with open(destination_file_path, 'wb+') as destination_file:
             for chunk in file.chunks():
                 destination_file.write(chunk)
+        # Файл автоматически закроется здесь
 
         # Запуск соответствующего скрипта на основе имени файла
         if "Тип обращений" in file.name:
@@ -733,19 +734,6 @@ class FileUploadAndAnalysisView(APIView):
         print(
             f"Date format check for filename '{filename}': Match found: {bool(match)}, Matched text: {match.group(0) if match else 'None'}")
         return bool(match)
-class ManualRunAnalysisView(APIView):
-    def post(self, request):
-        file_path = request.data.get('file_path')
-
-        if not file_path or not os.path.exists(file_path):
-            return Response({"message": "File not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        # Вызываем нужный скрипт
-        # Например, если это график работы:
-        update_employee_karma(file_path)
-
-        return Response({"message": "Analysis completed successfully"}, status=status.HTTP_200_OK)
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -1153,6 +1141,8 @@ class SessionListView(APIView):
         return Response({"message": "Неактивные сессии удалены"}, status=status.HTTP_200_OK)
 
 class SystemSettingViewSet(BasePermissionViewSet):
+    queryset = SystemSetting.objects.all()
+    serializer_class = SystemSettingSerializer
     @action(detail=False, methods=['get'])
     def list_settings(self, request):
         settings = SystemSetting.objects.all()
