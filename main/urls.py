@@ -121,6 +121,7 @@ urlpatterns = [
     path('upload-and-analyze/', FileUploadAndAnalysisView.as_view(), name='upload-and-analyze'),
     path('select-avatar/', select_avatar, name='change-avatar'),
     path('micro-profile/', get_micro_user, name='micro-profile'),
+    path('update-karma-settings/', KarmaSettingsUpdateView.as_view(), name='update_karma_settings'),
 ]
 
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки

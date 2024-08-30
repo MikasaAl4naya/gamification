@@ -1127,7 +1127,13 @@ class FilePathViewSet(BasePermissionViewSet):
     queryset = FilePath.objects.all()
     serializer_class = FilePathSerializer
 
-
+class KarmaSettingsUpdateView(APIView):
+    def post(self, request):
+        serializer = KarmaUpdateSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Karma settings updated successfully"}, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 def delete_inactive_sessions():
     # Определяем пороговую дату для удаления сессий (например, сессии, неактивные более 30 дней)
     threshold_date = timezone.now() - timedelta(days=30)
