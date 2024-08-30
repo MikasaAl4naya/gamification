@@ -3,7 +3,7 @@ import math
 from django.db.models import F, ExpressionWrapper, IntegerField, CharField, Value, BooleanField
 import uuid
 from collections import Counter, defaultdict
-from datetime import timedelta
+from datetime import timedelta, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from functools import partial
 from multiprocessing import Value
@@ -823,6 +823,21 @@ def get_user(request):
         employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
         employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
 
+        # Получаем обращения
+        requests = Request.objects.filter(support_operator=employee)
+        total_requests = requests.count()
+        requests_this_month = requests.filter(date__month=datetime.now().month).count()
+
+        # Группируем обращения по классификации
+        classifications = requests.values('classification__name').annotate(count=models.Count('id'))
+        grouped_requests = {c['classification__name']: c['count'] for c in classifications}
+
+        request_statistics = {
+            'total_requests': total_requests,
+            'requests_this_month': requests_this_month,
+            'grouped_requests': grouped_requests,
+        }
+
         statistics = {
             'registration_date': registration_date,
             'last_login': last_login,
@@ -831,6 +846,7 @@ def get_user(request):
             'praises': praises_count,
             'complaints_details': FeedbackSerializer(complaints, many=True).data,
             'praises_details': FeedbackSerializer(praises, many=True).data,
+            'request_statistics': request_statistics,
         }
 
         return Response({
@@ -843,6 +859,7 @@ def get_user(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 
