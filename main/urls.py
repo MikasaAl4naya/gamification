@@ -122,6 +122,8 @@ urlpatterns = [
     path('select-avatar/', select_avatar, name='change-avatar'),
     path('micro-profile/', get_micro_user, name='micro-profile'),
     path('update-karma-settings/', KarmaSettingsUpdateView.as_view(), name='update_karma_settings'),
+    path('late-penalty-settings/', get_late_penalty_settings, name='get_late_penalty_settings'),
+    path('update-late-penalty-settings/', update_late_penalty_settings, name='update_late_penalty_settings'),
 ]
 
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки

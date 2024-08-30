@@ -1126,7 +1126,32 @@ class KarmaSettingsViewSet(BasePermissionViewSet):
 class FilePathViewSet(BasePermissionViewSet):
     queryset = FilePath.objects.all()
     serializer_class = FilePathSerializer
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def update_late_penalty_settings(request):
+    try:
+        late_penalty_settings = request.data.get('late_penalty_settings', [])
 
+        for setting_data in late_penalty_settings:
+            level = setting_data.get('level')
+            karma_change = setting_data.get('karma_change')
+
+            if level is not None:
+                karma_setting = KarmaSettings.objects.filter(operation_type='late_penalty', level=level).first()
+                if karma_setting:
+                    karma_setting.karma_change = karma_change
+                    karma_setting.save()
+
+        return Response({"message": "Настройки опозданий успешно обновлены."}, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_late_penalty_settings(request):
+    late_penalty_settings = KarmaSettings.objects.filter(operation_type='late_penalty').order_by('level')
+    serializer = KarmaSettingsSerializer(late_penalty_settings, many=True)
+    return Response(serializer.data)
 class KarmaSettingsUpdateView(APIView):
     def post(self, request):
         serializer = KarmaUpdateSerializer(data=request.data)
