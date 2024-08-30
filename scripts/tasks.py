@@ -24,6 +24,18 @@ def process_work_schedule(file_path):
     df = df.iloc[start_row:, start_col:].reset_index(drop=True)
     df = df.rename(columns={df.columns[0]: 'ФИО', df.columns[1]: 'Город'})
     return df
+def determine_late_penalty_level(start_diff):
+    """Определяем уровень штрафа за опоздание в зависимости от времени опоздания."""
+    if start_diff <= 5:
+        return 1  # Уровень 1 - до 5 минут
+    elif start_diff <= 10:
+        return 2  # Уровень 2 - до 10 минут
+    elif start_diff <= 20:
+        return 3  # Уровень 3 - до 20 минут
+    elif start_diff <= 30:
+        return 4  # Уровень 4 - до 30 минут
+    else:
+        return 5  # Уровень 5 - более 30 минут
 
 def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
     fmt = '%H:%M'
@@ -41,12 +53,14 @@ def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
         print(f"Start difference: {start_diff} minutes, End difference: {end_diff} minutes")
 
         if start_diff <= grace_period and end_diff >= -grace_period:
-            return True
+            return True, 0  # Время в норме, уровень опоздания 0
         else:
-            return False
+            late_level = determine_late_penalty_level(start_diff)
+            return False, late_level  # Определяем уровень штрафа
     except Exception as e:
         print(f"Error in check_work_time: {e}")
-        return False
+        return False, 0
+
 
 
 
@@ -148,8 +162,10 @@ def update_employee_karma(file_path):
                         shift_record.karma_change = 0  # сбрасываем карму для пересчета
                         shift_record.experience_change = 0  # сбрасываем опыт для пересчета
 
-                    # Расчет изменений кармы и опыта
-                    if check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
+                    # Проверка на опоздание и применение соответствующего штрафа
+                    is_on_time, late_level = check_work_time(scheduled_start, scheduled_end, actual_start, actual_end)
+
+                    if is_on_time:
                         try:
                             settings = KarmaSettings.objects.get(operation_type='shift_completion')
                             shift_record.karma_change += settings.karma_change
@@ -159,7 +175,7 @@ def update_employee_karma(file_path):
                             print("Настройки для правильного выполнения смены не найдены")
                     else:
                         try:
-                            settings = KarmaSettings.objects.get(operation_type='late_penalty')
+                            settings = KarmaSettings.objects.get(operation_type='late_penalty', level=late_level)
                             shift_record.karma_change += settings.karma_change
                             print(f"Карма уменьшена на {settings.karma_change} для {full_name} (опоздание)")
                         except KarmaSettings.DoesNotExist:
@@ -183,11 +199,6 @@ def update_employee_karma(file_path):
             print(f"Сотрудник с именем {full_name} не существует.")
         except Exception as e:
             print(f"Ошибка при обработке {full_name}: {e}")
-
-
-
-
-
 def run_update_karma(name):
     directory_path = get_file_path(name)
     if directory_path and os.path.isdir(directory_path):

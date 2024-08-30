@@ -697,29 +697,28 @@ class ExperienceMultiplier(models.Model):
     def __str__(self):
         return f"{self.name}: {self.multiplier}"
 class KarmaSettings(models.Model):
-    # Типы операций
     PRAISE = 'praise'
     COMPLAINT = 'complaint'
     TEST_MODERATION = 'test_moderation'
     SHIFT_COMPLETION = 'shift_completion'
-    FEEDBACK_MODERATION = 'feedback_moderation'
-    LATE_PENALTY = 'late_penalty'  # Добавляем новый тип операции
-    OTHER = 'other'  # Можно добавить больше типов операций
+    LATE_PENALTY = 'late_penalty'
+    OTHER = 'other'
 
     OPERATION_TYPE_CHOICES = [
         (PRAISE, 'Praise'),
         (COMPLAINT, 'Complaint'),
         (TEST_MODERATION, 'Test Moderation'),
         (SHIFT_COMPLETION, 'Shift Completion'),
-        (FEEDBACK_MODERATION, 'Feedback Moderation'),
-        (LATE_PENALTY, 'Late Penalty'),  # Добавляем новый тип операции
+        (LATE_PENALTY, 'Late Penalty'),
         (OTHER, 'Other'),
     ]
 
     LEVEL_CHOICES = [
-        (1, 'Низкий'),
-        (2, 'Средний'),
-        (3, 'Высокий'),
+        (1, 'Уровень 1'),
+        (2, 'Уровень 2'),
+        (3, 'Уровень 3'),
+        (4, 'Уровень 4'),
+        (5, 'Уровень 5'),
     ]
 
     operation_type = models.CharField(max_length=50, choices=OPERATION_TYPE_CHOICES, null=True)
@@ -735,6 +734,7 @@ class KarmaSettings(models.Model):
         level_str = f" - {self.get_level_display()}" if self.level else ""
         operation_type_str = self.get_operation_type_display() if self.operation_type else "Неизвестный тип операции"
         return f'{operation_type_str}{level_str}'
+
 
 
 
