@@ -1,3 +1,4 @@
+from django.contrib.admin.models import LogEntry
 from django.db import models
 from django.db.models.signals import post_save, pre_delete, post_delete
 from django.dispatch import receiver
@@ -108,7 +109,7 @@ def update_achievement_progress(sender, instance, **kwargs):
 @receiver(post_save)
 def log_model_save(sender, instance, created, **kwargs):
     # Исключаем отслеживание определенных моделей
-    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession]:
+    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession, LogEntry]:
         return
 
     employee = None
