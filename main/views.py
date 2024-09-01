@@ -949,6 +949,13 @@ class ClassificationsViewSet(BasePermissionViewSet):
         root_nodes = Classifications.objects.filter(parent__isnull=True)
         serializer = self.get_serializer(root_nodes, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def leaf_nodes(self, request):
+        # Фильтрация классификаций, у которых нет подкатегорий (subclassifications)
+        leaf_nodes = Classifications.objects.annotate(subclassifications_count=Count('subclassifications')).filter(subclassifications_count=0)
+        serializer = self.get_serializer(leaf_nodes, many=True)
+        return Response(serializer.data)
 class SurveyQuestionViewSet(BasePermissionViewSet):
     queryset = SurveyQuestion.objects.all()
     serializer_class = SurveyQuestionSerializer
