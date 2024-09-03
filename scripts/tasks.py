@@ -78,6 +78,7 @@ def find_start_of_table(df):
                 return i + 1, j  # Предполагается, что данные начинаются на следующей строке
     return None, None
 
+
 def update_employee_karma(file_path):
     df = pd.read_excel(file_path)
     filename = os.path.basename(file_path)
@@ -119,7 +120,8 @@ def update_employee_karma(file_path):
 
                     print(shift_info)
                     if any(x in shift_info for x in ['выходной', 'о', 'бс', 'б']):
-                        print(f"Пропуск смены для {full_name} в {file_date.year}-{file_date.month:02}-{update_day:02} (выходной)")
+                        print(
+                            f"Пропуск смены для {full_name} в {file_date.year}-{file_date.month:02}-{update_day:02} (выходной)")
                         continue
 
                     if '\n' in shift_info:
@@ -170,7 +172,19 @@ def update_employee_karma(file_path):
                             settings = KarmaSettings.objects.get(operation_type='shift_completion')
                             shift_record.karma_change += settings.karma_change
                             shift_record.experience_change += settings.experience_change
-                            print(f"Карма изменена на {settings.karma_change}, опыт изменен на {settings.experience_change} для {full_name} (правильное выполнение смены)")
+                            print(
+                                f"Карма изменена на {settings.karma_change}, опыт изменен на {settings.experience_change} для {full_name} (правильное выполнение смены)")
+
+                            # Логируем успешное завершение смены
+                            employee.log_change(
+                                change_type='karma',
+                                old_value=employee.karma,
+                                new_value=employee.karma + settings.karma_change,
+                                source='Смена',
+                                description=f'Начислено за успешное выполнение смены: {settings.karma_change} кармы'
+                            )
+                            employee.add_experience(settings.experience_change,
+                                                    source='Смена')  # Указываем источник опыта "Смена"
                         except KarmaSettings.DoesNotExist:
                             print("Настройки для правильного выполнения смены не найдены")
                     else:
@@ -178,6 +192,16 @@ def update_employee_karma(file_path):
                             settings = KarmaSettings.objects.get(operation_type='late_penalty', level=late_level)
                             shift_record.karma_change += settings.karma_change
                             print(f"Карма уменьшена на {settings.karma_change} для {full_name} (опоздание)")
+
+                            # Логируем опоздание
+                            employee.log_change(
+                                change_type='karma',
+                                old_value=employee.karma,
+                                new_value=employee.karma + settings.karma_change,
+                                source='Опоздание',
+                                description=f'Снято за опоздание уровня {late_level}: {settings.karma_change} кармы'
+                            )
+
                         except KarmaSettings.DoesNotExist:
                             print("Настройки для штрафа за опоздание не найдены")
 
@@ -185,15 +209,16 @@ def update_employee_karma(file_path):
 
                     # Применение изменений кармы и опыта
                     employee.karma += shift_record.karma_change
-                    employee.experience += shift_record.experience_change
                     employee.save()
-                    print(f"Карма и опыт сохранены для {employee.first_name} {employee.last_name}: Карма = {employee.karma}, Опыт = {employee.experience}")
+                    print(
+                        f"Карма и опыт сохранены для {employee.first_name} {employee.last_name}: Карма = {employee.karma}, Опыт = {employee.experience}")
 
                 # Обновление последней даты изменения кармы
                 employee.last_karma_update = timezone.make_aware(
                     datetime.combine(file_date, time.min))
                 employee.save()
-                print(f"Дата последнего обновления кармы обновлена для {employee.first_name} {employee.last_name}: {employee.last_karma_update}")
+                print(
+                    f"Дата последнего обновления кармы обновлена для {employee.first_name} {employee.last_name}: {employee.last_karma_update}")
 
         except Employee.DoesNotExist:
             print(f"Сотрудник с именем {full_name} не существует.")

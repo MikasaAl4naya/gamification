@@ -12,6 +12,8 @@ from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.views.decorators.http import require_POST
+from openpyxl.reader.excel import load_workbook
+
 from scripts.tasks import update_employee_karma
 from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin, HasPermission
 from django.utils.decorators import method_decorator
@@ -571,38 +573,44 @@ def moderate_feedback(request, feedback_id):
         data = request.data
         action = data.get('action')
         level = data.get('level', None)
+        karma_change = data.get('karma_change', None)
+        experience_change = data.get('experience_change', 0)  # Допустим, опыт можно передавать тоже вручную
         moderation_comment = data.get('moderation_comment', '')
 
         if action == 'approve':
             if level is not None:
+                # Используем уровень для расчета изменений кармы и опыта
                 changes = calculate_karma_change(feedback.type, level)
                 feedback.level = level
+                feedback.karma_change = changes['karma_change']
+                feedback.experience_change = changes['experience_change']
+            elif karma_change is not None:
+                # Если уровень не указан, но указано изменение кармы, используем его напрямую
+                feedback.karma_change = karma_change
+                feedback.experience_change = experience_change
             else:
-                return Response({'error': 'Level is required for approving feedback'},
+                return Response({'error': 'Either level or karma_change is required for approving feedback'},
                                 status=status.HTTP_400_BAD_REQUEST)
 
-            karma_change = changes['karma_change']
-            experience_change = changes['experience_change']
-
-            feedback.karma_change = karma_change
-            feedback.experience_change = experience_change
-            feedback.status = 'approved'
-
+            # Применяем изменения к целевому сотруднику
             target_employee = feedback.target_employee
             if feedback.type == 'praise':
-                target_employee.karma += karma_change
+                target_employee.karma += feedback.karma_change
             else:
-                target_employee.karma -= karma_change
+                target_employee.karma -= feedback.karma_change
 
             # Применяем изменения опыта, если они есть
-            if experience_change:
-                target_employee.add_experience(experience_change)
+            if feedback.experience_change:
+                target_employee.add_experience(feedback.experience_change)
 
             target_employee.save()
+            feedback.status = 'approved'
         elif action == 'reject':
             feedback.status = 'rejected'
             feedback.karma_change = 0
             feedback.experience_change = 0
+        else:
+            return Response({'error': 'Invalid action provided'}, status=status.HTTP_400_BAD_REQUEST)
 
         feedback.moderator = request.user
         feedback.moderation_comment = moderation_comment
@@ -613,6 +621,7 @@ def moderate_feedback(request, feedback_id):
         return Response(serializer.data, status=status.HTTP_200_OK)
     else:
         return Response({'error': 'Status must be pending'}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 def calculate_karma_change(operation_type, level=None):
@@ -698,7 +707,14 @@ class FileUploadAndAnalysisView(APIView):
         with open(destination_file_path, 'wb+') as destination_file:
             for chunk in file.chunks():
                 destination_file.write(chunk)
-        # Файл автоматически закроется здесь
+
+        # Проверка файла с помощью openpyxl перед запуском дальнейшего анализа
+        try:
+            wb = load_workbook(destination_file_path)
+            print(f"Файл успешно открыт с помощью openpyxl: {file.name}")
+        except Exception as e:
+            print(f"Ошибка при открытии файла с помощью openpyxl: {e}")
+            return Response({"message": f"Error processing file: {e}"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Запуск соответствующего скрипта на основе имени файла
         if "Тип обращений" in file.name:
@@ -874,7 +890,7 @@ class FeedbackDetailView(generics.RetrieveAPIView):
         return super().get_queryset()
 
 class EmployeeLogViewSet(BasePermissionViewSet):
-    queryset = EmployeeActionLog.objects.all()
+    queryset = EmployeeLog.objects.all()
     serializer_class = EmployeeLogSerializer
 
 class SurveyQuestionView(APIView):
@@ -2608,6 +2624,9 @@ class CompleteTestView(EmployeeAPIView):
 
         if total_score >= Decimal(str(test.passing_score)):
             test_attempt.status = TestAttempt.PASSED
+            # Присваиваем опыт за прохождение теста
+            employee.add_experience(Test.experience_points, source="Прохождение теста")
+            print(f"Added {Test.experience_points} experience points to {employee.username} for passing test {test_id}")
         elif has_text_questions:
             test_attempt.status = TestAttempt.MODERATION
         else:

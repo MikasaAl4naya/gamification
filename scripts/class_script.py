@@ -47,6 +47,12 @@ def add_request(number, date, description, classification, initiator, responsibl
         print(f"Skipping request {number} because support operator is None")
         return
 
+    # Проверка на наличие уже существующего запроса с таким же номером
+    existing_request = Request.objects.filter(number=number).first()
+    if existing_request:
+        print(f"Skipping request {number} because it already exists in the database")
+        return
+
     request = Request.objects.create(
         classification=classification,
         responsible=responsible,
@@ -145,7 +151,6 @@ def run_classification_script(file_path, file_path_entry=None):
     except Exception as e:
         print(f"Error processing file {file_path}: {e}")
 
-    # Обновляем `last_updated` только если `file_path_entry` был передан
     if file_path_entry:
         file_path_entry.last_updated = datetime.now(pytz.UTC)
         file_path_entry.save()
@@ -153,4 +158,3 @@ def run_classification_script(file_path, file_path_entry=None):
 
 if __name__ == "__main__":
     run_classification_script()
-

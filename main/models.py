@@ -111,12 +111,13 @@ class Employee(AbstractUser):
         self.check_level_up()
         super().save(*args, **kwargs)
 
-    def log_change(self, change_type, old_value, new_value, description=None):
+    def log_change(self, change_type, old_value, new_value, source= None, description=None):
         EmployeeLog.objects.create(
             employee=self,
             change_type=change_type,
             old_value=old_value,
             new_value=new_value,
+            source=source,
             description=description
         )
 
@@ -142,11 +143,16 @@ class Employee(AbstractUser):
 
         self.set_experience(new_experience)
 
-    def add_experience(self, experience):
+    def add_experience(self, experience, source="Изменили вручную"):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
         if experience is not None:
-            self.increase_experience(experience)
+            old_experience = self.experience
+            new_experience = self.experience + experience
+            self.experience = new_experience
+            self.log_change('experience', old_experience, new_experience, source, "Experience added")
+            self.check_level_up()
+            self.save()
 
     def check_level_up(self):
         leveled_up_or_down = False  # Флаг для отслеживания, был ли уровень изменен
@@ -190,14 +196,14 @@ class Employee(AbstractUser):
 
         return experience_required
 
-    def set_karma(self, amount):
+    def set_karma(self, amount, source="Вручную изменили"):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
         old_karma = self.karma
         self.karma = amount
         if self.karma > 100:
             self.karma = 100
-        self.log_change('karma', old_karma, self.karma, "Set karma")
+        self.log_change('karma', old_karma, self.karma, source, "Set karma")
         self.save()
 
     def add_acoins(self, acoins):
@@ -408,8 +414,12 @@ class EmployeeLog(models.Model):
     new_value = models.IntegerField()
     description = models.TextField(null=True, blank=True)
 
+    # Новое поле для хранения источника изменения
+    source = models.CharField(max_length=100, null=True, blank=True)
+
     def __str__(self):
-        return f"{self.employee} - {self.change_type} at {self.timestamp}"
+        source_info = f" - {self.source}" if self.source else ""
+        return f"{self.employee} - {self.change_type} at {self.timestamp}{source_info}"
 
 class Acoin(models.Model):
     employee = models.OneToOneField(Employee, on_delete=models.CASCADE, blank=False, null=True)

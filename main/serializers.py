@@ -7,7 +7,7 @@ from gamefication import settings
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
     Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, \
     KarmaSettings, \
-    FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement
+    FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement, EmployeeLog
 from main.names_translations import translate_permission_name
 
 
@@ -115,6 +115,12 @@ class ExperienceMultiplierSerializer(serializers.ModelSerializer):
         model = ExperienceMultiplier
         fields = ['name', 'multiplier']
 class EmployeeLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = EmployeeLog
+        fields = '__all__'
+
+            
+class EmployeeActionLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployeeActionLog
         fields = '__all__'
