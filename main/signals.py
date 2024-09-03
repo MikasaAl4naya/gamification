@@ -81,10 +81,12 @@ def award_experience(sender, instance, created, **kwargs):
             if massive_request_multiplier:
                 experience_points *= massive_request_multiplier.multiplier
                 print(f"Experience points after massive_request_multiplier: {experience_points}")
-
         support_operator = instance.support_operator
         if support_operator is not None:
-            support_operator.add_experience(experience_points)
+            if instance.is_massive:
+                support_operator.add_experience(experience_points, source="За массовую")
+            else:
+                support_operator.add_experience(experience_points, source="За обращение")
             print(f"Awarded {experience_points} experience points to {support_operator.first_name} {support_operator.last_name}")
             support_operator.save()  # Ensure the experience is saved to the database
         else:
@@ -109,7 +111,7 @@ def update_achievement_progress(sender, instance, **kwargs):
 @receiver(post_save)
 def log_model_save(sender, instance, created, **kwargs):
     # Исключаем отслеживание определенных моделей
-    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession, LogEntry]:
+    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession, LogEntry, EmployeeAchievement]:
         return
 
     employee = None

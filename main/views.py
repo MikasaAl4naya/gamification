@@ -2376,7 +2376,7 @@ def moderate_test_attempt(request, test_attempt_id):
         return Response({"message": "Test Attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
     # Получаем текущего пользователя
-    moderator = request.employee
+    moderator = request.user
 
     if 'moderated_questions' not in request.data:
         return Response({"message": "Moderated questions are required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -2451,12 +2451,21 @@ def moderate_test_attempt(request, test_attempt_id):
     moderator.add_experience(experience_awarded, source='test_moderation', description='Experience awarded for test moderation')
     moderator.save()
 
+    # Начисление опыта сотруднику за прохождение теста
+    test_employee = test_attempt.employee
+    experience_for_employee = Test.experience_points
+    if test_attempt.status == TestAttempt.PASSED:
+
+        test_employee.add_experience(experience_for_employee, source='test_completion', description='Experience awarded for passing the test')
+    test_employee.save()
+
     response_data = {
         "score": test_attempt.score,
         "message": "Test moderated successfully",
         "status": test_attempt.status,
         "moderator": f"{moderator.first_name} {moderator.last_name}",
-        "experience_awarded": experience_awarded
+        "experience_awarded_to_moderator": experience_awarded,
+        "experience_awarded_to_employee": experience_for_employee
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
