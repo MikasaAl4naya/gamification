@@ -2368,7 +2368,7 @@ def test_attempt_moderation_list(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsModeratorOrAdmin])  # Добавили новую проверку прав доступа
+@permission_classes([IsAuthenticated, IsModeratorOrAdmin])
 def moderate_test_attempt(request, test_attempt_id):
     try:
         test_attempt = TestAttempt.objects.get(id=test_attempt_id)
@@ -2376,7 +2376,7 @@ def moderate_test_attempt(request, test_attempt_id):
         return Response({"message": "Test Attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
     # Получаем текущего пользователя
-    moderator = request.user
+    moderator = request.employee
 
     if 'moderated_questions' not in request.data:
         return Response({"message": "Moderated questions are required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -2441,11 +2441,22 @@ def moderate_test_attempt(request, test_attempt_id):
     test_attempt.end_time = timezone.now()
     test_attempt.save()
 
+    # Начисление опыта модератору за модерацию теста
+    try:
+        experience_multiplier = ExperienceMultiplier.objects.get(name="moderation")
+        experience_awarded = experience_multiplier.multiplier
+    except ExperienceMultiplier.DoesNotExist:
+        experience_awarded = 10  # Дефолтное значение опыта, если множитель не найден
+
+    moderator.add_experience(experience_awarded, source='test_moderation', description='Experience awarded for test moderation')
+    moderator.save()
+
     response_data = {
         "score": test_attempt.score,
         "message": "Test moderated successfully",
         "status": test_attempt.status,
-        "moderator": f"{moderator.first_name} {moderator.last_name}"
+        "moderator": f"{moderator.first_name} {moderator.last_name}",
+        "experience_awarded": experience_awarded
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
