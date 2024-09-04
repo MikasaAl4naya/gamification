@@ -101,11 +101,14 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
         fields = ['first_name', 'last_name', 'email', 'position', 'birth_date', 'survey_answers']
 
 class ClassificationsSerializer(serializers.ModelSerializer):
-    subclassifications = RecursiveField(many=True, read_only=True)
+    parentName = serializers.SerializerMethodField()
 
     class Meta:
         model = Classifications
-        fields = ['id', 'name', 'experience_points', 'parent', 'subclassifications']
+        fields = ['id', 'name', 'experience_points', 'parent', 'parentName']
+
+    def get_parentName(self, obj):
+        return obj.parent.name if obj.parent else None
 class PasswordPolicySerializer( serializers.ModelSerializer):
     class Meta:
         model = PasswordPolicy

@@ -971,6 +971,7 @@ class ClassificationsViewSet(BasePermissionViewSet):
         # Фильтрация классификаций, у которых нет подкатегорий (subclassifications)
         leaf_nodes = Classifications.objects.annotate(subclassifications_count=Count('subclassifications')).filter(subclassifications_count=0)
         serializer = self.get_serializer(leaf_nodes, many=True)
+
         return Response(serializer.data)
 class SurveyQuestionViewSet(BasePermissionViewSet):
     queryset = SurveyQuestion.objects.all()
