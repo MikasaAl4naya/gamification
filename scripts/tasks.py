@@ -190,7 +190,7 @@ def update_employee_karma(file_path):
                     else:
                         try:
                             settings = KarmaSettings.objects.get(operation_type='late_penalty', level=late_level)
-                            shift_record.karma_change += settings.karma_change
+                            shift_record.karma_change -= settings.karma_change
                             print(f"Карма уменьшена на {settings.karma_change} для {full_name} (опоздание)")
 
                             # Логируем опоздание
