@@ -1602,6 +1602,7 @@ def get_test_statistics(request):
 
     # Обработка данных в Python: объединение имени и фамилии и добавление модератора
     statistics_list = []
+    themes_set = set()  # Для хранения уникальных тем
     for stat in statistics:
         try:
             # Извлекаем full_name
@@ -1629,13 +1630,23 @@ def get_test_statistics(request):
             del stat['employee__first_name']
             del stat['employee__last_name']
 
+            # Добавляем тему теста в set, чтобы не было дубликатов
+            themes_set.add(stat['test__theme__name'])
+
             statistics_list.append(stat)
         except ObjectDoesNotExist as e:
             print(f"Ошибка: Не удалось найти TestAttempt с id {stat['id']}")
         except Exception as e:
             print(f"Неожиданная ошибка для попытки {stat['id']}: {str(e)}")
 
-    return Response(statistics_list)
+    # Преобразуем set тем в список
+    themes_list = list(themes_set)
+
+    return Response({
+        'statistics': statistics_list,
+        'themes': themes_list  # Отдельный список уникальных тем
+    })
+
 
 @api_view(['GET'])
 def get_test_by_id(request, test_id):
