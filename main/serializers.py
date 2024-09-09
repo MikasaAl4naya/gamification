@@ -237,8 +237,8 @@ class KarmaLevelSettingsSerializer(serializers.Serializer):
 
 
 class KarmaUpdateSerializer(serializers.Serializer):
-    praise_settings = KarmaLevelSettingsSerializer(many=True)
-    complaint_settings = KarmaLevelSettingsSerializer(many=True)
+    praise_settings = KarmaLevelSettingsSerializer(many=True, required=False)  # Поле становится опциональным
+    complaint_settings = KarmaLevelSettingsSerializer(many=True, required=False)  # Поле становится опциональным
 
     def update_settings(self, operation_type, settings):
         for setting_data in settings:
@@ -259,11 +259,15 @@ class KarmaUpdateSerializer(serializers.Serializer):
                 )
 
     def save(self):
-        # Обновляем настройки для praise
-        self.update_settings('praise', self.validated_data['praise_settings'])
+        # Обновляем настройки для praise, если они есть
+        if 'praise_settings' in self.validated_data:
+            self.update_settings('praise', self.validated_data['praise_settings'])
 
-        # Обновляем настройки для complaint
-        self.update_settings('complaint', self.validated_data['complaint_settings'])
+        # Обновляем настройки для complaint, если они есть
+        if 'complaint_settings' in self.validated_data:
+            self.update_settings('complaint', self.validated_data['complaint_settings'])
+
+
 class FeedbackSerializer(serializers.ModelSerializer):
     target_employee = serializers.PrimaryKeyRelatedField(queryset=Employee.objects.all())
     moderation_comment = serializers.CharField(required=False, allow_blank=True, allow_null=True)  # Добавлено allow_null=True
