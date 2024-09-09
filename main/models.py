@@ -328,13 +328,14 @@ class Classifications(models.Model):
         # Проверка на наличие существующей классификации с таким же именем и родителем
         existing_classification = Classifications.objects.filter(name=self.name, parent=self.parent).first()
 
-        if existing_classification:
-            # Обновление опыта для уже существующей классификации
+        if existing_classification and existing_classification.id != self.id:
+            # Если такая классификация уже существует, обновляем её поле experience_points
             existing_classification.experience_points = self.experience_points
-            existing_classification.save()
+            super(Classifications, existing_classification).save(*args, **kwargs)  # сохраняем изменения
         else:
-            # Если классификация не найдена, выполняется стандартное сохранение
+            # Если классификация не найдена, или это новая запись, выполняем стандартное сохранение
             super(Classifications, self).save(*args, **kwargs)
+
 
 class Achievement(models.Model):
     TYPE_CHOICES = [
