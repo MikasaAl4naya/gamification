@@ -1098,6 +1098,7 @@ def system_statistics(request):
 
     # 3. Количество деактивированных пользователей
     deactivated_users_count = Employee.objects.filter(is_active=False).count()
+    deactivated_users = Employee.objects.filter(is_active=False).values_list('username', flat=True)
 
     # 4. Количество созданных тестов и их названия
     tests = Test.objects.all().values('name')
@@ -1133,6 +1134,7 @@ def system_statistics(request):
         'total_users_count': total_users_count,
         'users': list(users),  # Возвращаем список пользователей с их датами регистрации
         'deactivated_users_count': deactivated_users_count,
+        'deactivated_users':deactivated_users,
         'total_tests_count': total_tests_count,
         'tests': list(tests),
         'successful_tests': list(successful_tests),
