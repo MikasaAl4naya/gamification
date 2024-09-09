@@ -2392,7 +2392,7 @@ def moderate_test_attempt(request, test_attempt_id):
     except TestAttempt.DoesNotExist:
         return Response({"message": "Test Attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Получаем текущего пользователя
+    # Получаем текущего пользователя (модератора)
     moderator = request.user
 
     if 'moderated_questions' not in request.data:
@@ -2401,7 +2401,10 @@ def moderate_test_attempt(request, test_attempt_id):
     moderated_questions = request.data['moderated_questions']
 
     # Преобразуем строку test_results в словарь
-    test_results = json.loads(test_attempt.test_results)
+    try:
+        test_results = json.loads(test_attempt.test_results)
+    except json.JSONDecodeError:
+        return Response({"message": "Invalid test_results format"}, status=status.HTTP_400_BAD_REQUEST)
 
     answers_info = test_results.get('answers_info', [])
 
@@ -2470,10 +2473,10 @@ def moderate_test_attempt(request, test_attempt_id):
 
     # Начисление опыта сотруднику за прохождение теста
     test_employee = test_attempt.employee
-    experience_for_employee = Test.experience_points
+    experience_for_employee = test_attempt.test.experience_points  # Исправлено получение значения опыта
     if test_attempt.status == TestAttempt.PASSED:
-
         test_employee.add_experience(experience_for_employee, source='test_completion')
+
     test_employee.save()
 
     response_data = {
@@ -2486,6 +2489,7 @@ def moderate_test_attempt(request, test_attempt_id):
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 @api_view(['GET'])
 def required_tests_chain(request, employee_id, test_id):
     try:
