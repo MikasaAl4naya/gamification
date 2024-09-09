@@ -67,7 +67,7 @@ def award_experience(sender, instance, created, **kwargs):
         massive_request_multiplier = ExperienceMultiplier.objects.filter(name="massive_request_multiplier").first()
 
         # Базовые очки опыта
-        experience_points = instance.calculate_experience()
+        experience_points = instance.experience_points
         print(f"Initial experience points: {experience_points}")
 
         # Увеличение опыта, если оператор и ответственный - одно и то же лицо

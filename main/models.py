@@ -101,11 +101,14 @@ class Employee(AbstractUser):
         return self.survey_answers.select_related('question').all()
 
     def save(self, *args, **kwargs):
-        # Разрешаем деактивацию аккаунта
+        # Разрешаем изменения только поля is_active для деактивированных аккаунтов
         if not self.is_active and not getattr(self, 'force_save', False):
-            # Если происходит деактивация (изменение is_active с True на False), разрешаем это
-            if 'update_fields' in kwargs and 'is_active' in kwargs['update_fields']:
-                pass
+            # Проверяем, обновляется ли только поле is_active
+            if 'update_fields' in kwargs:
+                if len(kwargs['update_fields']) == 1 and 'is_active' in kwargs['update_fields']:
+                    pass  # Разрешаем изменение поля is_active
+                else:
+                    raise ValidationError("Cannot modify a deactivated account.")
             elif not self.pk or Employee.objects.filter(pk=self.pk, is_active=True).exists():
                 raise ValidationError("Cannot modify a deactivated account.")
 
@@ -415,13 +418,7 @@ class Request(models.Model):
     description = models.TextField(null=True, blank=True)
     number = models.CharField(max_length=100)
     date = models.DateTimeField()
-    is_massive = models.BooleanField(default=False)  # Новое поле для массовых обращений
-
-    def calculate_experience(self):
-        base_experience = 10  # Базовое количество опыта за обращение
-        if self.is_massive:
-            return base_experience * 2  # Увеличиваем опыт за массовое обращение
-        return base_experience
+    is_massive = models.BooleanField(default=False)  # Новое поле для массовых обращени
 
     def __str__(self):
         return f'{self.number} - {self.get_status_display()}'
