@@ -101,10 +101,16 @@ class Employee(AbstractUser):
         return self.survey_answers.select_related('question').all()
 
     def save(self, *args, **kwargs):
+        # Разрешаем деактивацию аккаунта
+        if not self.is_active and not getattr(self, 'force_save', False):
+            # Если происходит деактивация (изменение is_active с True на False), разрешаем это
+            if 'update_fields' in kwargs and 'is_active' in kwargs['update_fields']:
+                pass
+            elif not self.pk or Employee.objects.filter(pk=self.pk, is_active=True).exists():
+                raise ValidationError("Cannot modify a deactivated account.")
+
         if self.experience < 0:
             self.experience = 0
-        if not self.is_active and not getattr(self, 'force_save', False):
-            raise ValidationError("Cannot modify a deactivated account.")
         if self.karma > 100:
             self.karma = 100
         # Проверка и обновление уровня на основе текущего опыта
