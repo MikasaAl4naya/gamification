@@ -1606,7 +1606,7 @@ def get_test_statistics(request):
     statistics_list = []
     themes_set = set()  # Для хранения уникальных тем
     tests_set = set()
-    employees_set = set()
+    employees = Employee.objects.all().values('username')
     for stat in statistics:
         try:
             # Извлекаем full_name
@@ -1637,7 +1637,6 @@ def get_test_statistics(request):
             # Добавляем тему теста в set, чтобы не было дубликатов
             themes_set.add(stat['test__theme__name'])
             tests_set.add(stat['test__name'])
-            employees_set.add(stat['test__employee__first_name'] + stat['test__employee__last_name'])
             statistics_list.append(stat)
         except ObjectDoesNotExist as e:
             print(f"Ошибка: Не удалось найти TestAttempt с id {stat['id']}")
@@ -1647,11 +1646,11 @@ def get_test_statistics(request):
     # Преобразуем set тем в список
     themes_list = list(themes_set)
     tests_set = list(tests_set)
-    employees_set= list(employees_set)
     return Response({
         'statistics': statistics_list,
         'themes': themes_list,  # Отдельный список уникальных тем
-        'tests': tests_set
+        'tests': tests_set,
+        'employees': list(employees)
     })
 
 
