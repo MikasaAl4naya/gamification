@@ -2466,7 +2466,7 @@ def moderate_test_attempt(request, test_attempt_id):
     except ExperienceMultiplier.DoesNotExist:
         experience_awarded = 10  # Дефолтное значение опыта, если множитель не найден
 
-    moderator.add_experience(experience_awarded, source='test_moderation', description='Experience awarded for test moderation')
+    moderator.add_experience(experience_awarded, source='test_moderation')
     moderator.save()
 
     # Начисление опыта сотруднику за прохождение теста
@@ -2474,7 +2474,7 @@ def moderate_test_attempt(request, test_attempt_id):
     experience_for_employee = Test.experience_points
     if test_attempt.status == TestAttempt.PASSED:
 
-        test_employee.add_experience(experience_for_employee, source='test_completion', description='Experience awarded for passing the test')
+        test_employee.add_experience(experience_for_employee, source='test_completion')
     test_employee.save()
 
     response_data = {
