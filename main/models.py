@@ -157,11 +157,9 @@ class Employee(AbstractUser):
             raise ValidationError("Cannot modify a deactivated account.")
 
         if experience is not None:
-            # Принудительно загружаем данные из БД
-            self.refresh_from_db(fields=['experience'])
-
-            old_experience = self.experience
-            new_experience = old_experience + experience  # Делаем сложение числовых значений
+            # Получаем числовое значение experience через getattr
+            old_experience = getattr(self, 'experience', 0)
+            new_experience = old_experience + experience
             self.experience = new_experience
             self.log_change('experience', old_experience, new_experience, source, "Experience added")
             self.check_level_up()
