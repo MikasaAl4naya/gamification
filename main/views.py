@@ -1679,7 +1679,6 @@ def get_test_by_id(request, test_id):
             del answer['id']  # Удаляем поле "id" из каждого ответа
             del answer['question']
             del answer['file']
-            del answer['is_correct']
         block_data = {
             'type': 'question',
             'content': question_data
