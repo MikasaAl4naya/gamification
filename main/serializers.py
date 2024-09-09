@@ -110,16 +110,11 @@ class ClassificationsSerializer(serializers.ModelSerializer):
     def get_parentName(self, obj):
         return obj.parent.name if obj.parent else None
 class PasswordPolicySerializer(serializers.ModelSerializer):
-    total_required_characters = serializers.SerializerMethodField()
 
     class Meta:
         model = PasswordPolicy
-        fields = ['min_length', 'max_length', 'min_uppercase', 'min_lowercase', 'min_digits', 'min_symbols',
-                  'allowed_symbols', 'arabic_only', 'no_spaces', 'total_required_characters']
+        fields = '__all__'
 
-    def get_total_required_characters(self, obj):
-        # Возвращаем сумму минимальных требований к символам
-        return obj.min_uppercase + obj.min_lowercase + obj.min_digits + obj.min_symbols
 class ExperienceMultiplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExperienceMultiplier
