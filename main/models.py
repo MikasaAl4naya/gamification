@@ -305,9 +305,11 @@ class FilePath(models.Model):
     def __str__(self):
         return f"{self.name}: {self.path}"
 
+
 class Classifications(models.Model):
     name = models.CharField(max_length=100)
-    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subclassifications')
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True,
+                               related_name='subclassifications')
     experience_points = models.IntegerField(default=0, verbose_name="Очки опыта")
 
     class Meta:
@@ -315,6 +317,18 @@ class Classifications(models.Model):
 
     def __str__(self):
         return self.name
+
+    def save(self, *args, **kwargs):
+        # Проверка на наличие существующей классификации с таким же именем и родителем
+        existing_classification = Classifications.objects.filter(name=self.name, parent=self.parent).first()
+
+        if existing_classification:
+            # Обновление опыта для уже существующей классификации
+            existing_classification.experience_points = self.experience_points
+            existing_classification.save()
+        else:
+            # Если классификация не найдена, выполняется стандартное сохранение
+            super(Classifications, self).save(*args, **kwargs)
 
 class Achievement(models.Model):
     TYPE_CHOICES = [

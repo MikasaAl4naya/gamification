@@ -1980,6 +1980,7 @@ class PasswordPolicyViewSet(BasePermissionViewSet):
         if not policy:
             return Response({"error": "Политика паролей не найдена."}, status=404)
 
+        # Используем обновленный сериализатор для вывода
         serializer = PasswordPolicySerializer(policy)
         return Response(serializer.data)
 
