@@ -45,3 +45,9 @@ class OperationSettingsAdmin(admin.ModelAdmin):
         if any([self.get_queryset(request).filter(operation_type__in=[KarmaSettings.PRAISE, KarmaSettings.COMPLAINT]).exists()]):
             return ('operation_type', 'level')
         return ('operation_type',)
+class EmployeeAchievementAdmin(admin.ModelAdmin):
+    list_display = ('employee', 'achievement', 'progress', 'level')
+    search_fields = ('employee__first_name', 'employee__last_name', 'achievement__description')
+    list_filter = ('achievement', 'level')
+
+admin.site.register(EmployeeAchievement, EmployeeAchievementAdmin)
