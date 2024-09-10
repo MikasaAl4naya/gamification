@@ -61,7 +61,7 @@ class ActiveSessionMiddleware(MiddlewareMixin):
             user_sessions = UserSession.objects.filter(user=request.user)
             max_active_sessions= SystemSetting.objects.get(key='max_active_sessions')
             # Проверка максимального количества активных сессий
-            if user_sessions.count() >= max_active_sessions:
+            if user_sessions.count() >= int(max_active_sessions.value):
                 # Завершаем самую старую сессию
                 oldest_session = user_sessions.order_by('created_at').first()
                 oldest_session.session.delete()
