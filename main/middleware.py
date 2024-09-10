@@ -2,7 +2,7 @@ import logging
 
 from django.contrib.auth import logout
 from rest_framework.authtoken.models import Token
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.utils.deprecation import MiddlewareMixin
 
 from main.models import Employee, UserSession, SystemSetting
@@ -59,7 +59,11 @@ class ActiveSessionMiddleware(MiddlewareMixin):
         if request.user.is_authenticated:
             session_key = request.session.session_key
             user_sessions = UserSession.objects.filter(user=request.user)
-            max_active_sessions= SystemSetting.objects.get(key='max_active_sessions')
+
+            # Получение системных настроек
+            max_active_sessions = SystemSetting.objects.get(key='max_active_sessions')
+            max_session_duration = SystemSetting.objects.get(key='max_session_duration')  # Максимальная продолжительность сессии в секундах
+
             # Проверка максимального количества активных сессий
             if user_sessions.count() >= int(max_active_sessions.value):
                 # Завершаем самую старую сессию
@@ -67,12 +71,21 @@ class ActiveSessionMiddleware(MiddlewareMixin):
                 oldest_session.session.delete()
                 oldest_session.delete()
 
-            # Обновляем или создаем новую запись для сессии
+            # Проверяем продолжительность текущей сессии
             user_session, created = UserSession.objects.get_or_create(user=request.user, session_id=session_key)
+            if not created:
+                session_age = timezone.now() - user_session.last_activity
+                if session_age.total_seconds() > int(max_session_duration.value):
+                    # Завершаем сессию, если она длится дольше, чем разрешено
+                    user_session.session.delete()
+                    user_session.delete()
+                    return HttpResponse("Your session has expired due to inactivity.", status=403)
+
+            # Обновляем или создаем новую запись для сессии
             user_session.last_activity = timezone.now()
             user_session.ip_address = request.META.get('REMOTE_ADDR')
             user_session.user_agent = request.META.get('HTTP_USER_AGENT')
             user_session.save()
 
-        # Очищаем старые сессии, если они не обновлялись длительное время
+        # Очищаем старые сессии, если они не обновлялись длительное время (по умолчанию 1 час)
         UserSession.objects.filter(last_activity__lt=timezone.now() - timezone.timedelta(hours=1)).delete()

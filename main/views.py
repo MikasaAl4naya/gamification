@@ -1243,7 +1243,21 @@ class SystemSettingViewSet(BasePermissionViewSet):
         setting, created = SystemSetting.objects.get_or_create(key='max_active_sessions')
         setting.value = value
         setting.save()
-        return Response({'message': 'Max active sessions updated', 'max_active_sessions': value})
+        return Response({'message': 'Max sessions durationupdated', 'max_active_sessions': value})
+
+    @action(detail=False, methods=['get'])
+    def max_session_duration(self, request):
+        setting = SystemSetting.objects.get(key='max_session_duration')
+        serializer = SystemSettingSerializer(setting)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def update_max_session_duration(self, request):
+        value = request.data.get('value')
+        setting, created = SystemSetting.objects.get_or_create(key='max_session_duration')
+        setting.value = value
+        setting.save()
+        return Response({'message': 'Max sessions duration updated', 'max_session_duration': value})
 
 
 @api_view(['POST'])
