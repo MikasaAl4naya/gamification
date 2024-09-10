@@ -1217,47 +1217,28 @@ class SessionListView(APIView):
 class SystemSettingViewSet(BasePermissionViewSet):
     queryset = SystemSetting.objects.all()
     serializer_class = SystemSettingSerializer
+
+    # Список всех настроек
     @action(detail=False, methods=['get'])
     def list_settings(self, request):
         settings = SystemSetting.objects.all()
         serializer = SystemSettingSerializer(settings, many=True)
         return Response(serializer.data)
 
+    # Обновление или создание настройки по ключу
     @action(detail=False, methods=['post'])
     def update_setting(self, request):
         key = request.data.get('key')
         value = request.data.get('value')
+
+        if not key or not value:
+            return Response({"error": "Both 'key' and 'value' are required."}, status=status.HTTP_400_BAD_REQUEST)
+
         setting, created = SystemSetting.objects.get_or_create(key=key)
         setting.value = value
         setting.save()
-        return Response({'message': f'{key} updated', key: value})
-    @action(detail=False, methods=['get'])
-    def max_active_sessions(self, request):
-        setting = SystemSetting.objects.get(key='max_active_sessions')
-        serializer = SystemSettingSerializer(setting)
-        return Response(serializer.data)
 
-    @action(detail=False, methods=['post'])
-    def update_max_active_sessions(self, request):
-        value = request.data.get('value')
-        setting, created = SystemSetting.objects.get_or_create(key='max_active_sessions')
-        setting.value = value
-        setting.save()
-        return Response({'message': 'Max sessions durationupdated', 'max_active_sessions': value})
-
-    @action(detail=False, methods=['get'])
-    def max_session_duration(self, request):
-        setting = SystemSetting.objects.get(key='max_session_duration')
-        serializer = SystemSettingSerializer(setting)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=['post'])
-    def update_max_session_duration(self, request):
-        value = request.data.get('value')
-        setting, created = SystemSetting.objects.get_or_create(key='max_session_duration')
-        setting.value = value
-        setting.save()
-        return Response({'message': 'Max sessions duration updated', 'max_session_duration': value})
+        return Response({'message': f'Setting {key} updated', 'key': key, 'value': value})
 
 
 @api_view(['POST'])

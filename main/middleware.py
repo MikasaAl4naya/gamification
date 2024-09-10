@@ -1,6 +1,7 @@
 import logging
 
 from django.contrib.auth import logout
+from django.core.exceptions import SuspiciousOperation
 from rest_framework.authtoken.models import Token
 from django.http import JsonResponse, HttpResponse
 from django.utils.deprecation import MiddlewareMixin
@@ -89,3 +90,23 @@ class ActiveSessionMiddleware(MiddlewareMixin):
 
         # Очищаем старые сессии, если они не обновлялись длительное время (по умолчанию 1 час)
         UserSession.objects.filter(last_activity__lt=timezone.now() - timezone.timedelta(hours=1)).delete()
+class FileSizeLimitMiddleware:
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        # Если запрос содержит файлы, проверяем их размер
+        if request.method == 'POST' and request.FILES:
+            # Получаем значение max_upload_size из базы данных
+            try:
+                max_upload_size_setting = SystemSetting.objects.get(key='max_upload_size')
+                max_upload_size = int(max_upload_size_setting.value)  # Преобразуем в число
+            except SystemSetting.DoesNotExist:
+                max_upload_size = 5 * 1024 * 1024  # Если не найдено, используем значение по умолчанию (5 MB)
+
+            for file in request.FILES.values():
+                if file.size > max_upload_size:
+                    raise SuspiciousOperation(f"File size exceeds the allowed limit of {max_upload_size / (1024 * 1024)} MB")
+
+        response = self.get_response(request)
+        return response
