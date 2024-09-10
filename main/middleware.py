@@ -5,7 +5,7 @@ from rest_framework.authtoken.models import Token
 from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 
-from main.models import Employee, UserSession
+from main.models import Employee, UserSession, SystemSetting
 
 
 class CheckActiveUserMiddleware:
@@ -59,9 +59,8 @@ class ActiveSessionMiddleware(MiddlewareMixin):
         if request.user.is_authenticated:
             session_key = request.session.session_key
             user_sessions = UserSession.objects.filter(user=request.user)
-
+            max_active_sessions= SystemSetting.objects.get(key='max_active_sessions')
             # Проверка максимального количества активных сессий
-            max_active_sessions = 5  # например, 5 активных сессий на пользователя
             if user_sessions.count() >= max_active_sessions:
                 # Завершаем самую старую сессию
                 oldest_session = user_sessions.order_by('created_at').first()
