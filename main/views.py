@@ -854,6 +854,10 @@ def get_user(request):
             'grouped_requests': grouped_requests,
         }
 
+        # Получаем инвентарь сотрудника
+        employee_items = EmployeeItem.objects.filter(employee=employee)
+        employee_items_data = EmployeeItemSerializer(employee_items, many=True).data
+
         statistics = {
             'registration_date': registration_date,
             'last_login': last_login,
@@ -871,6 +875,7 @@ def get_user(request):
             'statistics': statistics,
             'answers': answers,
             'achievements': employee_achievements_data,
+            'inventory': employee_items_data,  # Добавляем инвентарь в профиль
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
@@ -1213,6 +1218,50 @@ class SessionListView(APIView):
         # Удаление всех неактивных сессий
         delete_inactive_sessions()
         return Response({"message": "Неактивные сессии удалены"}, status=status.HTTP_200_OK)
+
+# InventoryView - просмотр инвентаря сотрудника
+class InventoryView(APIView):
+    def get(self, request):
+        employee_items = EmployeeItem.objects.filter(employee=request.user)
+
+        # Проверяем срок действия предметов
+        for employee_item in employee_items:
+            employee_item.check_expiration()
+
+        serializer = EmployeeItemSerializer(employee_items, many=True)
+        return Response(serializer.data)
+
+# StoreView - покупка и просмотр доступных предметов
+class StoreView(APIView):
+    def get(self, request):
+        items = Item.objects.all()  # Все доступные предметы
+        serializer = ItemSerializer(items, many=True)
+        return Response(serializer.data)
+
+    def post(self, request):
+        item_id = request.data.get('item_id')
+        try:
+            item = Item.objects.get(id=item_id)
+        except Item.DoesNotExist:
+            return Response({"message": "Item not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        employee = request.user  # Текущий пользователь
+
+        # Проверяем, не купил ли сотрудник уже этот предмет (если такая логика нужна)
+        if EmployeeItem.objects.filter(employee=employee, item=item).exists():
+            return Response({"message": "Item already purchased"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if employee.coins >= item.price:
+            # Списываем цену предмета с баланса сотрудника
+            employee.coins -= item.price
+            employee.save()
+
+            # Добавляем предмет в инвентарь
+            EmployeeItem.objects.create(employee=employee, item=item)
+            return Response({"message": "Item purchased successfully"})
+        else:
+            return Response({"message": "Not enough coins"}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class SystemSettingViewSet(BasePermissionViewSet):
     queryset = SystemSetting.objects.all()

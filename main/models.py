@@ -397,9 +397,19 @@ class Achievement(models.Model):
             self.max_level = 3
         super().save(*args, **kwargs)
 
+# Модель предмета в магазине
 class Item(models.Model):
     description = models.CharField(max_length=100)
     price = models.IntegerField()
+    karma_bonus = models.IntegerField(default=0)  # Бонус к карме
+    experience_bonus = models.IntegerField(default=0)  # Бонус к опыту
+    duration_days = models.IntegerField(default=0)  # Срок действия предмета в днях (если есть)
+
+    def save(self, *args, **kwargs):
+        # Валидация значений
+        if self.price < 0 or self.karma_bonus < 0 or self.experience_bonus < 0 or self.duration_days < 0:
+            raise ValueError("Значения цены, бонусов и срока действия не могут быть отрицательными")
+        super(Item, self).save(*args, **kwargs)
 
 
 class Request(models.Model):
@@ -457,11 +467,27 @@ class AcoinTransaction(models.Model):
         employee.log_change('acoins', employee.acoin.amount, employee.acoin.amount + achievement.reward_currency, "Achievement reward")
         return transaction
 
-
-
+# Модель для связки сотрудника и предмета
 class EmployeeItem(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
+    acquired_at = models.DateTimeField(auto_now_add=True)  # Когда предмет был куплен
+    is_active = models.BooleanField(default=True)  # Предмет активен или его срок действия закончился
+
+    def apply_bonus(self):
+        """Применяет бонусы от предмета к сотруднику."""
+        if self.is_active:
+            self.employee.karma += self.item.karma_bonus
+            self.employee.experience += self.item.experience_bonus
+            self.employee.save()
+
+    def check_expiration(self):
+        """Проверка срока действия предмета."""
+        if self.item.duration_days > 0:
+            expiration_date = self.acquired_at + timezone.timedelta(days=self.item.duration_days)
+            if timezone.now() > expiration_date:
+                self.is_active = False
+                self.save()
 
 
 class EmployeeAchievement(models.Model):

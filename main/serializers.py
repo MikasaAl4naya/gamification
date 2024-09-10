@@ -7,7 +7,8 @@ from gamefication import settings
 from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
     Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, \
     KarmaSettings, \
-    FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement, EmployeeLog
+    FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement, EmployeeLog, \
+    Item, EmployeeItem
 from main.names_translations import translate_permission_name
 
 
@@ -491,7 +492,16 @@ class TestQuestionSerializer(serializers.ModelSerializer):
         question = TestQuestion.objects.create(test=test, **validated_data)
         return question
 
+class ItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Item
+        fields = ['id', 'description', 'price', 'karma_bonus', 'experience_bonus', 'duration_days']
+class EmployeeItemSerializer(serializers.ModelSerializer):
+    item = ItemSerializer()  # Вложенный сериализатор для отображения информации о предмете
 
+    class Meta:
+        model = EmployeeItem
+        fields = ['id', 'employee', 'item', 'acquired_at', 'is_active']
 class TestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Test
