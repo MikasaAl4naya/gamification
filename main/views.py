@@ -679,6 +679,9 @@ class LevelTitleViewSet(BasePermissionViewSet):
         return Response(data, status=status.HTTP_200_OK)
 
 
+from openpyxl import load_workbook
+import pandas as pd
+
 class FileUploadAndAnalysisView(APIView):
     def post(self, request):
         file = request.FILES.get('file')
@@ -702,19 +705,30 @@ class FileUploadAndAnalysisView(APIView):
             return Response({"message": f"Directory does not exist: {directory_path}"},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Сохранение файла в указанную директорию с использованием контекстного менеджера
         destination_file_path = os.path.join(directory_path, file.name)
         with open(destination_file_path, 'wb+') as destination_file:
             for chunk in file.chunks():
                 destination_file.write(chunk)
 
-        # Проверка файла с помощью openpyxl перед запуском дальнейшего анализа
+        # Попытка открыть файл с помощью openpyxl
         try:
             wb = load_workbook(destination_file_path)
             print(f"Файл успешно открыт с помощью openpyxl: {file.name}")
         except Exception as e:
             print(f"Ошибка при открытии файла с помощью openpyxl: {e}")
-            return Response({"message": f"Error processing file: {e}"}, status=status.HTTP_400_BAD_REQUEST)
+            # Попробуем открыть с помощью pandas и xlrd для файлов .xls
+            try:
+                df = pd.read_excel(destination_file_path, engine='xlrd')
+                print(f"Файл успешно открыт с помощью xlrd: {file.name}")
+            except Exception as e:
+                print(f"Ошибка при открытии файла с помощью xlrd: {e}")
+                # Попробуем открыть с помощью pyxlsb для .xlsb файлов
+                try:
+                    df = pd.read_excel(destination_file_path, engine='pyxlsb')
+                    print(f"Файл успешно открыт с помощью pyxlsb: {file.name}")
+                except Exception as e:
+                    print(f"Ошибка при открытии файла с помощью pyxlsb: {e}")
+                    return Response({"message": f"Error processing file: {e}"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Запуск соответствующего скрипта на основе имени файла
         if "Тип обращений" in file.name:
@@ -726,6 +740,7 @@ class FileUploadAndAnalysisView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         return Response({"message": "File processed successfully"}, status=status.HTTP_200_OK)
+
 
     def run_classifications_script(self, file_path):
         try:
