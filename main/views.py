@@ -2448,7 +2448,7 @@ def moderate_test_attempt(request, test_attempt_id):
         return Response({"message": "Test Attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
     # Получаем текущего пользователя (модератора)
-    moderator = request.user
+    moderator = request.employee
     print(f"Moderator: {moderator.username} is moderating test attempt {test_attempt_id}")
 
     if 'moderated_questions' not in request.data:
