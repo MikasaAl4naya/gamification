@@ -164,23 +164,20 @@ class Employee(AbstractUser):
             new_experience = old_experience + experience
             print(f"Old experience: {old_experience}, New experience: {new_experience}")
 
-            # Обновляем опыт пользователя
             self.experience = new_experience
-
             print(f"Logging experience change: {old_experience} -> {new_experience}, source: {source}")
             self.log_change('experience', old_experience, new_experience, source, "Experience added")
 
-            # Проверяем повышение уровня и логируем этот процесс
             print(f"Checking for level up for user: {self.username}")
             self.check_level_up()
 
             try:
-                self.save()
-                print(f"Successfully saved experience and level for user: {self.username}")
+                with transaction.atomic():  # Использование блока транзакции
+                    self.save()
+                    print(f"Successfully saved experience and level for user: {self.username}")
             except Exception as e:
                 print(f"Error saving experience for user: {self.username}, Error: {str(e)}")
 
-            # После сохранения, проверим, что изменения реально сохранились в базе данных
             updated_user = Employee.objects.get(id=self.id)
             print(f"Experience after save: {updated_user.experience}")
 
