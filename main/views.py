@@ -2523,7 +2523,6 @@ def moderate_test_attempt(request, test_attempt_id):
         print(f"Moderator experience multiplier: {experience_awarded}")
     except ExperienceMultiplier.DoesNotExist:
         experience_awarded = 10  # Дефолтное значение опыта, если множитель не найден
-        print("Experience multiplier not found, defaulting to 10 experience points")
 
     # Логируем процесс начисления опыта
     print(f"Awarding {experience_awarded} experience points to moderator {moderator.username}")

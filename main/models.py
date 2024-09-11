@@ -153,17 +153,38 @@ class Employee(AbstractUser):
         self.set_experience(new_experience)
 
     def add_experience(self, experience, source="Изменили вручную"):
+        # Логируем вход в метод и информацию о пользователе
+        print(f"Adding experience: {experience} to user: {self.username}, source: {source}")
+
         if not self.is_active:
+            print(f"Error: Attempt to modify experience of deactivated account: {self.username}")
             raise ValidationError("Cannot modify a deactivated account.")
 
         if experience is not None:
-            # Получаем числовое значение experience через getattr
+            # Получаем текущее значение опыта и рассчитываем новое
             old_experience = getattr(self, 'experience', 0)
             new_experience = old_experience + experience
+
+            # Логируем старое и новое значение опыта
+            print(f"Old experience: {old_experience}, New experience: {new_experience}")
+
+            # Обновляем опыт пользователя
             self.experience = new_experience
+
+            # Логируем информацию о журнале изменений
+            print(f"Logging experience change: {old_experience} -> {new_experience}, source: {source}")
             self.log_change('experience', old_experience, new_experience, source, "Experience added")
+
+            # Проверяем повышение уровня и логируем этот процесс
+            print(f"Checking for level up for user: {self.username}")
             self.check_level_up()
-            self.save()
+
+            # Попытка сохранить изменения в базе данных
+            try:
+                self.save()
+                print(f"Successfully saved experience and level for user: {self.username}")
+            except Exception as e:
+                print(f"Error saving experience for user: {self.username}, Error: {str(e)}")
 
     def check_level_up(self):
         leveled_up_or_down = False  # Флаг для отслеживания, был ли уровень изменен
