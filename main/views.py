@@ -2518,7 +2518,7 @@ def moderate_test_attempt(request, test_attempt_id):
 
     # Начисление опыта модератору за модерацию теста
     try:
-        experience_multiplier = ExperienceMultiplier.objects.get(name="moderation")
+        experience_multiplier = ExperienceMultiplier.objects.get(operation_type="TEST_MODERATION")
         experience_awarded = experience_multiplier.multiplier
         print(f"Moderator experience multiplier: {experience_awarded}")
     except ExperienceMultiplier.DoesNotExist:
