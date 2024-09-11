@@ -2449,6 +2449,7 @@ def moderate_test_attempt(request, test_attempt_id):
 
     # Получаем текущего пользователя (модератора)
     moderator = request.user
+    print(f"Moderator: {moderator.username} is moderating test attempt {test_attempt_id}")
 
     if 'moderated_questions' not in request.data:
         return Response({"message": "Moderated questions are required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -2490,7 +2491,6 @@ def moderate_test_attempt(request, test_attempt_id):
         question_to_moderate['question_score'] = moderation_score
         question_to_moderate['moderation_comment'] = moderation_comment
 
-        # Обновляем поле is_correct в зависимости от модерационного балла
         if moderation_score == max_question_score:
             question_to_moderate['is_correct'] = True
         elif moderation_score > 0:
@@ -2520,16 +2520,22 @@ def moderate_test_attempt(request, test_attempt_id):
     try:
         experience_multiplier = ExperienceMultiplier.objects.get(name="moderation")
         experience_awarded = experience_multiplier.multiplier
+        print(f"Moderator experience multiplier: {experience_awarded}")
     except ExperienceMultiplier.DoesNotExist:
         experience_awarded = 10  # Дефолтное значение опыта, если множитель не найден
+        print("Experience multiplier not found, defaulting to 10 experience points")
+
+    # Логируем процесс начисления опыта
+    print(f"Awarding {experience_awarded} experience points to moderator {moderator.username}")
 
     moderator.add_experience(experience_awarded, source='test_moderation')
     moderator.save()
 
     # Начисление опыта сотруднику за прохождение теста
     test_employee = test_attempt.employee
-    experience_for_employee = test_attempt.test.experience_points  # Исправлено получение значения опыта
+    experience_for_employee = test_attempt.test.experience_points
     if test_attempt.status == TestAttempt.PASSED:
+        print(f"Awarding {experience_for_employee} experience points to employee {test_employee.username}")
         test_employee.add_experience(experience_for_employee, source='test_completion')
 
     test_employee.save()
@@ -2544,6 +2550,7 @@ def moderate_test_attempt(request, test_attempt_id):
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 
 @api_view(['GET'])
 def required_tests_chain(request, employee_id, test_id):
