@@ -15,45 +15,55 @@ django.setup()
 # Import necessary models
 from main.models import Classifications, Request, Employee, FilePath
 
+# Кэш для классификаций
+classification_cache = {}
+
+
 def add_classification_levels(classification_string):
+    """Кэшируем классификации для ускорения процесса."""
     levels = [level.strip() for level in classification_string.split('->')]
     parent = None
+    cache_key = '->'.join(levels)
+
+    if cache_key in classification_cache:
+        return classification_cache[cache_key]
+
     for level in levels:
-        obj, created = Classifications.objects.filter(name=level, parent=parent).first(), False
+        obj = Classifications.objects.filter(name=level, parent=parent).first()
         if not obj:
             obj = Classifications.objects.create(name=level, parent=parent)
-            created = True
-        if created:
             print(f"Добавлена новая классификация: {level}")
         parent = obj
+
+    classification_cache[cache_key] = parent
     return parent
 
 
 def is_classification(value):
+    """Проверка, является ли значение классификацией."""
     if not isinstance(value, str):
         return False
-    if '->' not in value:
-        return False
-    if any(keyword in value for keyword in ['Укажите', 'Дополнительная информация', 'Опишите', '[']):
-        return False
-    return True
+    return '->' in value and not any(
+        keyword in value for keyword in ['Укажите', 'Дополнительная информация', 'Опишите', '['])
+
 
 def add_request(number, date, description, classification, initiator, responsible, support_operator, status,
                 is_massive=False):
+    """Добавление запроса с проверкой существующего запроса."""
     if date.tzinfo is None:
         date = pytz.UTC.localize(date)
 
-    if support_operator is None:
+    if not support_operator:
         print(f"Skipping request {number} because support operator is None")
-        return
+        return None
 
-    # Проверка на наличие уже существующего запроса с таким же номером
-    existing_request = Request.objects.filter(number=number).first()
-    if existing_request:
-        print(f"Skipping request {number} because it already exists in the database")
-        return
+    # Проверяем, существует ли запрос
+    if Request.objects.filter(number=number).exists():
+        print(f"Skipping request {number} because it already exists")
+        return None
 
-    request = Request.objects.create(
+    # Создаем новый запрос
+    return Request(
         classification=classification,
         responsible=responsible,
         support_operator=support_operator,
@@ -64,38 +74,28 @@ def add_request(number, date, description, classification, initiator, responsibl
         date=date,
         is_massive=is_massive
     )
-    print(f"Added request: {request.number}, status: {request.status}, is_massive: {request.is_massive}")
-    return request
+
 
 def is_fio(value):
-    if isinstance(value, str):
-        fio_pattern = re.compile(r'^[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+$')
-        return bool(fio_pattern.match(value))
-    return False
+    """Проверка, является ли значение ФИО."""
+    return isinstance(value, str) and bool(re.match(r'^[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+$', value))
 
 
 def run_classification_script(file_path, file_path_entry=None):
     try:
-        # Проверка существования файла
         if not os.path.exists(file_path):
             raise ValueError(f"Файл {file_path} не найден")
 
         is_massive_file = "Массовые" in file_path
         print(f"Processing file: {file_path}, is_massive_file: {is_massive_file}")
 
+        # Чтение файла Excel
         df = pd.read_excel(file_path, sheet_name='TDSheet', skiprows=12)
 
-        if is_massive_file:
-            initiator_col = 'Unnamed: 16'
-            responsible_col = 'Unnamed: 22'
-        else:
-            initiator_col = 'Unnamed: 17'
-            responsible_col = 'Unnamed: 22'
+        initiator_col = 'Unnamed: 16' if is_massive_file else 'Unnamed: 17'
+        responsible_col = 'Unnamed: 22'
 
-        classification = None
-        description = ''
-        support_operator = None
-
+        requests_to_create = []
         for index, row in df.iterrows():
             for col_index, col in enumerate(df.columns[:1]):
                 value = row[col]
@@ -104,17 +104,11 @@ def run_classification_script(file_path, file_path_entry=None):
                         next_values = row[col_index + 1:col_index + 4]
                         if next_values.isnull().all():
                             full_name = value.strip()
-                            name_parts = full_name.split()
-                            if len(name_parts) == 3:
-                                first_name, last_name = name_parts[1], name_parts[0]
-                                print(f"Detected FIO: {first_name} {last_name}")
-                                try:
-                                    support_operator = Employee.objects.filter(first_name=first_name,
-                                                                               last_name=last_name).first()
-                                    if support_operator is None:
-                                        print(f"No employee found for {first_name} {last_name}")
-                                except Employee.MultipleObjectsReturned:
-                                    print(f"Multiple employees found for FIO: {first_name} {last_name}")
+                            first_name, last_name = full_name.split()[1], full_name.split()[0]
+                            support_operator = Employee.objects.filter(first_name=first_name,
+                                                                       last_name=last_name).first()
+                            if not support_operator:
+                                print(f"No employee found for {first_name} {last_name}")
                     elif is_classification(value):
                         classification = add_classification_levels(value)
                     elif "Обращение" in str(value):
@@ -125,35 +119,32 @@ def run_classification_script(file_path, file_path_entry=None):
                             date = datetime.strptime(date_str, '%d.%m.%Y %H:%M:%S')
 
                             description = df.iloc[index + 1, 0] if index + 1 < len(df) else ''
-
-                            print(f"Processing request {number} - date: {date}, description: {description}")
-
                             initiator = row[initiator_col]
                             responsible = row[responsible_col]
                             status = row['Unnamed: 25']
 
-                            print(
-                                f"Request {number} - initiator: {initiator}, responsible: {responsible}, status: {status}, classification: {classification}")
-
-                            if pd.notna(initiator) and pd.notna(responsible) and classification is not None:
+                            if classification and pd.notna(initiator) and pd.notna(responsible):
                                 is_massive = is_massive_file
-                                add_request(number, date, description, classification, initiator, responsible,
-                                            support_operator, status, is_massive)
-                            elif is_massive_file and support_operator is not None:
-                                print(
-                                    f"Adding massive request with missing data - initiator: {initiator}, responsible: {responsible}, classification: {classification}")
-                                add_request(number, date, description, classification, '', '', support_operator, status,
-                                            True)
-                            else:
-                                print(
-                                    f"Skipping due to missing data - initiator: {initiator}, responsible: {responsible}, classification: {classification}")
+                                new_request = add_request(number, date, description, classification, initiator,
+                                                          responsible, support_operator, status, is_massive)
+                                if new_request:
+                                    requests_to_create.append(new_request)
+                            elif is_massive_file and support_operator:
+                                print(f"Adding massive request with missing data for {number}")
+                                new_request = add_request(number, date, description, classification, '', '',
+                                                          support_operator, status, True)
+                                if new_request:
+                                    requests_to_create.append(new_request)
+
+        # Массовое создание запросов
+        Request.objects.bulk_create(requests_to_create)
+
+        if file_path_entry:
+            file_path_entry.last_updated = datetime.now(pytz.UTC)
+            file_path_entry.save()
 
     except Exception as e:
         print(f"Error processing file {file_path}: {e}")
-
-    if file_path_entry:
-        file_path_entry.last_updated = datetime.now(pytz.UTC)
-        file_path_entry.save()
 
 
 if __name__ == "__main__":

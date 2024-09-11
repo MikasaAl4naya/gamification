@@ -1,5 +1,7 @@
 import base64
 import math
+import time
+
 from django.db.models import F, ExpressionWrapper, IntegerField, CharField, Value, BooleanField
 import uuid
 from collections import Counter, defaultdict
@@ -684,16 +686,17 @@ import pandas as pd
 
 class FileUploadAndAnalysisView(APIView):
     def post(self, request):
+        start_time = time.time()  # Засекаем время начала
         file = request.FILES.get('file')
         if not file:
             return Response({"message": "No file provided"}, status=status.HTTP_400_BAD_REQUEST)
-        print(f"Received file: {file.name}")
+        print(f"Received file: {file.name} at {time.time() - start_time} seconds")
 
         if "Тип обращений" in file.name:
-            print("Detected 'Тип обращений' in file name")
+            print(f"Detected 'Тип обращений' in file name at {time.time() - start_time} seconds")
             file_path_entry = FilePath.objects.get(name="Requests")
         elif self.has_date_format(file.name):
-            print(f"Detected date format in file name: {file.name}")
+            print(f"Detected date format in file name: {file.name} at {time.time() - start_time} seconds")
             file_path_entry = FilePath.objects.get(name="Work Schedule")
         else:
             print(f"Unknown file type or incorrect date format for file: {file.name}")
@@ -710,11 +713,12 @@ class FileUploadAndAnalysisView(APIView):
         with open(destination_file_path, 'wb+') as destination_file:
             for chunk in file.chunks():
                 destination_file.write(chunk)
+        print(f"File saved at {time.time() - start_time} seconds")
 
         # Проверка файла с помощью openpyxl перед запуском дальнейшего анализа
         try:
             wb = load_workbook(destination_file_path)
-            print(f"Файл успешно открыт с помощью openpyxl: {file.name}")
+            print(f"Файл успешно открыт с помощью openpyxl: {file.name} at {time.time() - start_time} seconds")
         except Exception as e:
             print(f"Ошибка при открытии файла с помощью openpyxl: {e}")
             return Response({"message": f"Error processing file: {e}"}, status=status.HTTP_400_BAD_REQUEST)
@@ -728,6 +732,7 @@ class FileUploadAndAnalysisView(APIView):
             return Response({"message": "Unknown file type or incorrect date format"},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        print(f"Completed at {time.time() - start_time} seconds")
         return Response({"message": "File processed successfully"}, status=status.HTTP_200_OK)
 
     def run_classifications_script(self, file_path):
