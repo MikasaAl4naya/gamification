@@ -2519,7 +2519,7 @@ def moderate_test_attempt(request, test_attempt_id):
     # Начисление опыта модератору за модерацию теста
     try:
         experience_multiplier = KarmaSettings.objects.get(operation_type="TEST_MODERATION")
-        experience_awarded = experience_multiplier.karma_change
+        experience_awarded = experience_multiplier.experience_change
         print(f"Moderator experience multiplier: {experience_awarded}")
     except ExperienceMultiplier.DoesNotExist:
         experience_awarded = 10  # Дефолтное значение опыта, если множитель не найден
