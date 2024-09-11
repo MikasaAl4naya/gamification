@@ -49,21 +49,18 @@ def is_classification(value):
 
 def add_request(number, date, description, classification, initiator, responsible, support_operator, status,
                 is_massive=False):
-    """Добавление запроса с проверкой существующего запроса."""
     if date.tzinfo is None:
         date = pytz.UTC.localize(date)
 
     if not support_operator:
-        print(f"Skipping request {number} because support operator is None")
         return None
 
     # Проверяем, существует ли запрос
     if Request.objects.filter(number=number).exists():
-        print(f"Skipping request {number} because it already exists")
         return None
 
     # Создаем новый запрос
-    return Request(
+    new_request = Request(
         classification=classification,
         responsible=responsible,
         support_operator=support_operator,
@@ -74,6 +71,8 @@ def add_request(number, date, description, classification, initiator, responsibl
         date=date,
         is_massive=is_massive
     )
+    new_request.save()
+    return new_request
 
 
 def is_fio(value):
@@ -87,7 +86,6 @@ def run_classification_script(file_path, file_path_entry=None):
             raise ValueError(f"Файл {file_path} не найден")
 
         is_massive_file = "Массовые" in file_path
-        print(f"Processing file: {file_path}, is_massive_file: {is_massive_file}")
 
         # Чтение файла Excel
         df = pd.read_excel(file_path, sheet_name='TDSheet', skiprows=12)
@@ -96,19 +94,15 @@ def run_classification_script(file_path, file_path_entry=None):
         responsible_col = 'Unnamed: 22'
 
         requests_to_create = []
+        total_requests = 0  # Счётчик успешных запросов
         for index, row in df.iterrows():
             for col_index, col in enumerate(df.columns[:1]):
                 value = row[col]
                 if pd.notna(value):
                     if is_fio(value):
-                        next_values = row[col_index + 1:col_index + 4]
-                        if next_values.isnull().all():
-                            full_name = value.strip()
-                            first_name, last_name = full_name.split()[1], full_name.split()[0]
-                            support_operator = Employee.objects.filter(first_name=first_name,
-                                                                       last_name=last_name).first()
-                            if not support_operator:
-                                print(f"No employee found for {first_name} {last_name}")
+                        full_name = value.strip()
+                        first_name, last_name = full_name.split()[1], full_name.split()[0]
+                        support_operator = Employee.objects.filter(first_name=first_name, last_name=last_name).first()
                     elif is_classification(value):
                         classification = add_classification_levels(value)
                     elif "Обращение" in str(value):
@@ -123,21 +117,17 @@ def run_classification_script(file_path, file_path_entry=None):
                             responsible = row[responsible_col]
                             status = row['Unnamed: 25']
 
-                            if classification and pd.notna(initiator) and pd.notna(responsible):
-                                is_massive = is_massive_file
+                            if classification and pd.notna(initiator) and pd.notna(responsible) and support_operator:
                                 new_request = add_request(number, date, description, classification, initiator,
-                                                          responsible, support_operator, status, is_massive)
+                                                          responsible, support_operator, status, is_massive_file)
                                 if new_request:
                                     requests_to_create.append(new_request)
-                            elif is_massive_file and support_operator:
-                                print(f"Adding massive request with missing data for {number}")
-                                new_request = add_request(number, date, description, classification, '', '',
-                                                          support_operator, status, True)
-                                if new_request:
-                                    requests_to_create.append(new_request)
+                                    total_requests += 1
 
         # Массовое создание запросов
         Request.objects.bulk_create(requests_to_create)
+
+        print(f"Successfully created {total_requests} requests")
 
         if file_path_entry:
             file_path_entry.last_updated = datetime.now(pytz.UTC)
