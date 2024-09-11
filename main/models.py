@@ -116,6 +116,8 @@ class Employee(AbstractUser):
             self.experience = 0
         if self.karma > 100:
             self.karma = 100
+        if self.karma < 0:
+            self.karma = 0
         # Проверка и обновление уровня на основе текущего опыта
         self.check_level_up()
         super().save(*args, **kwargs)
@@ -130,18 +132,6 @@ class Employee(AbstractUser):
             description=description
         )
 
-    def set_experience(self, amount):
-        if not self.is_active:
-            raise ValidationError("Cannot modify a deactivated account.")
-
-        if amount < 0:
-            raise ValidationError("Experience cannot be negative.")
-
-        old_experience = self.experience
-        self.experience = amount
-        self.log_change('experience', old_experience, self.experience, "Set experience")
-        self.check_level_up()
-
     def increase_experience(self, amount):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
@@ -152,7 +142,22 @@ class Employee(AbstractUser):
 
         self.set_experience(new_experience)
 
+    def set_experience(self, amount, source="Изменили вручную"):
+        """ Устанавливает опыт напрямую или увеличивает его, если это вызов для увеличения. """
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
+
+        if amount < 0:
+            raise ValidationError("Experience cannot be negative.")
+
+        old_experience = self.experience
+        self.experience = amount
+        self.log_change('experience', old_experience, self.experience, source, "Set experience")
+        self.check_level_up()
+        self.save()
+
     def add_experience(self, experience, source="Изменили вручную"):
+        """ Увеличивает опыт на указанное количество и логирует изменение. """
         print(f"Adding experience: {experience} to user: {self.username}, source: {source}")
 
         if not self.is_active:
@@ -160,26 +165,13 @@ class Employee(AbstractUser):
             raise ValidationError("Cannot modify a deactivated account.")
 
         if experience is not None:
-            old_experience = getattr(self, 'experience', 0)
+            old_experience = self.experience
             new_experience = old_experience + experience
             print(f"Old experience: {old_experience}, New experience: {new_experience}")
 
-            self.experience = new_experience
-            print(f"Logging experience change: {old_experience} -> {new_experience}, source: {source}")
-            self.log_change('experience', old_experience, new_experience, source, "Experience added")
-
-            print(f"Checking for level up for user: {self.username}")
-            self.check_level_up()
-
-            try:
-                with transaction.atomic():  # Использование блока транзакции
-                    self.save()
-                    print(f"Successfully saved experience and level for user: {self.username}")
-            except Exception as e:
-                print(f"Error saving experience for user: {self.username}, Error: {str(e)}")
-
-            updated_user = Employee.objects.get(id=self.id)
-            print(f"Experience after save: {updated_user.experience}")
+            # Используем set_experience для фактического обновления опыта
+            self.set_experience(new_experience, source)
+            print(f"Successfully updated experience for user: {self.username}")
 
     def check_level_up(self):
         leveled_up_or_down = False  # Флаг для отслеживания, был ли уровень изменен

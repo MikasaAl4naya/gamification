@@ -122,7 +122,7 @@ def update_achievement_progress(sender, instance, **kwargs):
 @receiver(post_save)
 def log_model_save(sender, instance, created, **kwargs):
     # Исключаем отслеживание определенных моделей
-    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession, LogEntry, EmployeeAchievement]:
+    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession, LogEntry]:
         return
 
     employee = None
@@ -132,10 +132,11 @@ def log_model_save(sender, instance, created, **kwargs):
         employee = instance.user
 
     if employee:
-        action = 'created' if created else 'updated'
+        action = 'создано' if created else 'обновлено'
 
         # Получаем текущие данные модели
         current_data = model_to_dict(instance)
+
         # Получаем предыдущие данные модели (если обновление)
         if not created:
             old_instance = sender.objects.get(pk=instance.pk)
@@ -147,10 +148,22 @@ def log_model_save(sender, instance, created, **kwargs):
         for field, value in current_data.items():
             old_value = old_data.get(field, None)
             if old_value != value:
-                changes.append(f"{field}: '{old_value}' -> '{value}'")
+                # Переводим поле и формируем понятную строку изменений
+                field_name = field_translation(field)  # Функция для перевода названия поля
+                changes.append(f"{field_name}: '{old_value}' -> '{value}'")
 
-        change_description = "; ".join(changes) if changes else f"{sender.__name__} was {action}"
+        # Формируем описание изменения
+        if sender.__name__ == 'EmployeeAchievement':
+            if 'progress' in current_data and 'level' in current_data:
+                progress_change = f"Прогресс по Достижению изменён с {old_data.get('progress')} до {current_data['progress']}"
+                level_change = f"Уровень изменён с {old_data.get('level')} до {current_data['level']}"
+                change_description = f"{progress_change}; {level_change}"
+            else:
+                change_description = "; ".join(changes) if changes else f"{sender.__name__} {action}"
+        else:
+            change_description = "; ".join(changes) if changes else f"{sender.__name__} {action}"
 
+        # Логируем изменения
         EmployeeActionLog.objects.create(
             employee=employee,
             action_type=action,
@@ -159,6 +172,18 @@ def log_model_save(sender, instance, created, **kwargs):
             description=change_description
         )
 
+
+# Вспомогательная функция для перевода полей в читабельный вид
+def field_translation(field):
+    field_translations = {
+        'id': 'ID',
+        'employee': 'Сотрудник',
+        'achievement': 'Достижение',
+        'progress': 'Прогресс',
+        'level': 'Уровень',
+        # Добавляем другие поля по мере необходимости
+    }
+    return field_translations.get(field, field)  # Возвращаем перевод или само поле, если перевода нет
 @receiver(post_delete)
 def log_model_delete(sender, instance, **kwargs):
     if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request]:
