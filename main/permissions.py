@@ -1,26 +1,50 @@
+from functools import partial
 from rest_framework.permissions import BasePermission
-
 
 class HasPermission(BasePermission):
     def __init__(self, perm=None):
+        """
+        perm: Строка с конкретным разрешением, если оно требуется.
+        """
         self.perm = perm
 
     def has_permission(self, request, view):
+        # Если передано конкретное разрешение, проверяем его
         if self.perm:
             perm = self.perm
-        else:
-            # Определяем модель из queryset и действие
+            print(f"Проверка конкретного разрешения для пользователя: {request.user.username}, Требуемое разрешение: {perm}")
+            return request.user.has_perm(perm)
+
+        # Если разрешение не указано, определяем действие исходя из метода запроса
+        if hasattr(view, 'queryset'):
             model = view.queryset.model
-            action = 'view' if request.method in ['GET', 'HEAD', 'OPTIONS'] else \
-                     'add' if request.method == 'POST' else \
-                     'change' if request.method in ['PUT', 'PATCH'] else \
-                     'delete'
-            # Определяем полное имя разрешения
+        else:
+            model = None
+
+        # Определяем базовое действие для модели
+        if model:
+            action = self.get_action_based_on_method(request.method)
             perm = f"{model._meta.app_label}.{action}_{model._meta.model_name}"
 
-        print(f"Проверка разрешений для пользователя: {request.user.username}")
-        print(f"Требуемое разрешение: {perm}")
-        return request.user.has_perm(perm)
+            print(f"Проверка базового разрешения для пользователя: {request.user.username}, Требуемое разрешение: {perm}")
+            return request.user.has_perm(perm)
+
+        # Если не смогли определить модель или действие, отказываем в доступе
+        return False
+
+    def get_action_based_on_method(self, method):
+        """
+        Определяет действие в зависимости от метода HTTP-запроса.
+        """
+        if method in ['GET', 'HEAD', 'OPTIONS']:
+            return 'view'
+        elif method == 'POST':
+            return 'add'
+        elif method in ['PUT', 'PATCH']:
+            return 'change'
+        elif method == 'DELETE':
+            return 'delete'
+        return None
 
 
 
