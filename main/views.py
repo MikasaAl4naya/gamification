@@ -1119,6 +1119,7 @@ class PermissionManagementViewSet(BasePermissionViewSet):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated, HasPermission(perm='main.view_system_statistics')])
 def system_statistics(request):
     # 1. Активные пользователи
     active_users = get_active_users(minutes=5).values_list('username', flat=True)
