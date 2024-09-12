@@ -1275,20 +1275,41 @@ class StoreView(APIView):
 
         employee = request.user  # Текущий пользователь
 
+        # Получаем аcoin'ы сотрудника
+        employee_acoin = employee.acoin
+
         # Проверяем, не купил ли сотрудник уже этот предмет (если такая логика нужна)
         if EmployeeItem.objects.filter(employee=employee, item=item).exists():
             return Response({"message": "Item already purchased"}, status=status.HTTP_400_BAD_REQUEST)
 
-        if employee.coins >= item.price:
-            # Списываем цену предмета с баланса сотрудника
-            employee.coins -= item.price
-            employee.save()
+        # Проверка на достаточное количество акоинов
+        if employee_acoin.amount >= item.price:
+            # Списываем цену предмета с баланса акоинов
+            old_acoin_amount = employee_acoin.amount
+            employee_acoin.amount -= item.price
+            employee_acoin.save()
+
+            # Логируем транзакцию покупки
+            AcoinTransaction.objects.create(
+                employee=employee,
+                amount=-item.price,  # Отрицательное значение указывает на трату акоинов
+                timestamp=timezone.now()
+            )
+
+            # Логируем изменения акоинов у сотрудника
+            employee.log_change(
+                'acoins',
+                old_acoin_amount,
+                employee_acoin.amount,
+                source='Item Purchase',
+                description=f"{employee.get_full_name()} приобрел {item.description} за {item.price} акоинов"
+            )
 
             # Добавляем предмет в инвентарь
             EmployeeItem.objects.create(employee=employee, item=item)
             return Response({"message": "Item purchased successfully"})
         else:
-            return Response({"message": "Not enough coins"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"message": "Not enough akoins"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class SystemSettingViewSet(BasePermissionViewSet):
