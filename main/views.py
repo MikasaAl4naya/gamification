@@ -355,7 +355,23 @@ class UpdateStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, *args, **kwargs):
-        serializer = StatusUpdateSerializer(request.user, data=request.data, partial=True)
+        # Получаем ID пользователя из параметров запроса, если он указан
+        employee_id = request.data.get('id', None)
+
+        # Если указан id, проверяем, является ли текущий пользователь администратором
+        if employee_id:
+            if not request.user.is_staff:  # Проверяем, является ли пользователь администратором
+                return Response({"detail": "У вас нет прав для изменения статуса этого пользователя."},
+                                status=status.HTTP_403_FORBIDDEN)
+
+            # Получаем сотрудника по указанному ID
+            employee = get_object_or_404(Employee, id=employee_id)
+        else:
+            # Если ID не указан, значит пользователь хочет изменить статус себе
+            employee = request.user
+
+        # Используем сериализатор для обновления статуса
+        serializer = StatusUpdateSerializer(employee, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)

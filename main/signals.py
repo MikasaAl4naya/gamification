@@ -149,7 +149,7 @@ def log_model_save(sender, instance, created, **kwargs):
             old_value = old_data.get(field, None)
             if old_value != value:
                 # Переводим поле и формируем понятную строку изменений
-                field_name = field_translation(field)  # Функция для перевода названия поля
+                field_name = field_translation(field)
                 changes.append(f"{field_name}: '{old_value}' -> '{value}'")
 
         # Специальная логика для модификации логов TestAttempt
@@ -174,14 +174,22 @@ def log_model_save(sender, instance, created, **kwargs):
             test_name = instance.name
             change_description = f"Сотрудник {employee.get_full_name()} создал тест '{test_name}'"
 
-        # Логика для достижения
+        # Логика для достижения (EmployeeAchievement)
         elif sender.__name__ == 'EmployeeAchievement':
-            if 'progress' in current_data and 'level' in current_data:
-                progress_change = f"Прогресс по Достижению изменён с {old_data.get('progress')} до {current_data['progress']}"
-                level_change = f"Уровень изменён с {old_data.get('level')} до {current_data['level']}"
-                change_description = f"{progress_change}; {level_change}"
+            achievement_name = instance.achievement.name if instance.achievement else "Неизвестное достижение"
+            progress_change = level_change = None
+
+            if old_data.get('progress') != current_data['progress']:
+                progress_change = f"Прогресс по достижению '{achievement_name}' изменён с {old_data.get('progress')} до {current_data['progress']}"
+
+            if old_data.get('level') != current_data['level']:
+                level_change = f"Уровень по достижению '{achievement_name}' изменён с {old_data.get('level')} до {current_data['level']}"
+
+            # Логируем только если прогресс или уровень реально изменились
+            if progress_change or level_change:
+                change_description = "; ".join(filter(None, [progress_change, level_change]))
             else:
-                change_description = "; ".join(changes) if changes else f"{sender.__name__} {action}"
+                change_description = f"{sender.__name__} {action}"
 
         # Общий случай для всех других моделей
         else:
@@ -195,7 +203,6 @@ def log_model_save(sender, instance, created, **kwargs):
             object_id=str(instance.pk),
             description=change_description
         )
-
 
 # Вспомогательная функция для перевода полей в читабельный вид
 def field_translation(field):
