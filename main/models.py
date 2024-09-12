@@ -104,22 +104,16 @@ class Employee(AbstractUser):
         # Разрешаем изменения только поля is_active для деактивированных аккаунтов
         if not self.is_active and not getattr(self, 'force_save', False):
             # Проверяем, обновляется ли только поле is_active
-            if 'update_fields' in kwargs:
-                if len(kwargs['update_fields']) == 1 and 'is_active' in kwargs['update_fields']:
-                    pass  # Разрешаем изменение поля is_active
-                else:
-                    raise ValidationError("Cannot modify a deactivated account.")
-            elif not self.pk or Employee.objects.filter(pk=self.pk, is_active=True).exists():
+            if 'update_fields' in kwargs and len(kwargs['update_fields']) == 1 and 'is_active' in kwargs[
+                'update_fields']:
+                pass  # Разрешаем изменение поля is_active
+            else:
                 raise ValidationError("Cannot modify a deactivated account.")
 
-        if self.experience < 0:
-            self.experience = 0
-        if self.karma > 100:
-            self.karma = 100
-        if self.karma < 0:
-            self.karma = 0
-        # Проверка и обновление уровня на основе текущего опыта
-        self.check_level_up()
+        # Признак, что поле is_active меняется через admin
+        if 'is_active' in kwargs.get('update_fields', []):
+            self.force_save = True
+
         super().save(*args, **kwargs)
 
     def log_change(self, change_type, old_value, new_value, source=None, description=None):
