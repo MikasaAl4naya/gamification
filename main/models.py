@@ -172,7 +172,7 @@ class Employee(AbstractUser):
 
         old_experience = self.experience
         self.experience = amount
-        self.log_change('experience', old_experience, self.experience, source, "Set experience")
+        self.log_change('experience', old_experience, self.experience, source, )
         self.check_level_up()
         self.save()
 
@@ -206,7 +206,7 @@ class Employee(AbstractUser):
                 old_level = self.level
                 self.level -= 1
                 self.next_level_experience = self.calculate_experience_for_level(self.level)
-                self.log_change('level', old_level, self.level, "Level down")
+                self.log_change('level', old_level, self.level, )
                 leveled_up_or_down = True
             else:
                 break
@@ -217,7 +217,7 @@ class Employee(AbstractUser):
             self.level += 1
             leveled_up_or_down = True
             self.next_level_experience = self.calculate_experience_for_level(self.level)
-            self.log_change('level', old_level, self.level, "Level up")
+            self.log_change('level', old_level, self.level, )
 
         # Убедиться, что `next_level_experience` корректен после всех изменений
         self.next_level_experience = self.calculate_experience_for_level(self.level)
@@ -242,7 +242,7 @@ class Employee(AbstractUser):
         self.karma = amount
         if self.karma > 100:
             self.karma = 100
-        self.log_change('karma', old_karma, self.karma, source, "Set karma")
+        self.log_change('karma', old_karma, self.karma, source, )
         self.save()
 
     def add_acoins(self, acoins):
@@ -250,7 +250,7 @@ class Employee(AbstractUser):
             raise ValidationError("Cannot modify a deactivated account.")
         if acoins is not None:
             AcoinTransaction.objects.create(employee=self, amount=acoins)
-            self.log_change('acoins', self.acoin.amount, self.acoin.amount + acoins, "Add acoins")
+            self.log_change('acoins', self.acoin.amount, self.acoin.amount + acoins, )
             self.acoin.amount += acoins
             self.acoin.save()
 
@@ -492,7 +492,7 @@ class AcoinTransaction(models.Model):
     def create_from_achievement(cls, employee, achievement):
         transaction = cls(employee=employee, amount=achievement.reward_currency)
         transaction.save()
-        employee.log_change('acoins', employee.acoin.amount, employee.acoin.amount + achievement.reward_currency, "Achievement reward")
+        employee.log_change('acoins', employee.acoin.amount, employee.acoin.amount + achievement.reward_currency)
         return transaction
 
 # Модель для связки сотрудника и предмета
