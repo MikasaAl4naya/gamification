@@ -603,7 +603,7 @@ def moderate_feedback(request, feedback_id):
 
             # Применяем изменения опыта, если они есть
             if feedback.experience_change:
-                target_employee.add_experience(feedback.experience_change)
+                target_employee.add_experience(feedback.experience_change, source="За модерацию аваций")
 
             target_employee.save()
             feedback.status = 'approved'
@@ -2529,7 +2529,7 @@ def moderate_test_attempt(request, test_attempt_id):
     # Логируем процесс начисления опыта
     print(f"Awarding {experience_awarded} experience points to moderator {moderator.username}")
 
-    moderator.add_experience(experience_awarded, source='test_moderation')
+    moderator.add_experience(experience_awarded, source='За модерацию теста')
     moderator.save()
 
     # Начисление опыта сотруднику за прохождение теста
@@ -2537,7 +2537,7 @@ def moderate_test_attempt(request, test_attempt_id):
     experience_for_employee = test_attempt.test.experience_points
     if test_attempt.status == TestAttempt.PASSED:
         print(f"Awarding {experience_for_employee} experience points to employee {test_employee.username}")
-        test_employee.add_experience(experience_for_employee, source='test_completion')
+        test_employee.add_experience(experience_for_employee, source='За прохождение теста')
 
     test_employee.save()
 
@@ -2729,7 +2729,7 @@ class CompleteTestView(EmployeeAPIView):
         if total_score >= Decimal(str(test.passing_score)):
             test_attempt.status = TestAttempt.PASSED
             # Присваиваем опыт за прохождение теста
-            employee.add_experience(Test.experience_points, source="Прохождение теста")
+            employee.add_experience(Test.experience_points, source="За прохождение теста")
             print(f"Added {Test.experience_points} experience points to {employee.username} for passing test {test_id}")
         elif has_text_questions:
             test_attempt.status = TestAttempt.MODERATION

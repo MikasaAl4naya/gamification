@@ -122,7 +122,27 @@ class Employee(AbstractUser):
         self.check_level_up()
         super().save(*args, **kwargs)
 
-    def log_change(self, change_type, old_value, new_value, source= None, description=None):
+    def log_change(self, change_type, old_value, new_value, source=None, description=None):
+        if description is None:
+            if change_type == 'experience':
+                if new_value > old_value:
+                    description = f"Сотрудник {self.get_full_name()} получил {new_value - old_value} очков опыта"
+                else:
+                    description = f"У сотрудника {self.get_full_name()} было отнято {old_value - new_value} очков опыта"
+            elif change_type == 'karma':
+                if new_value > old_value:
+                    description = f"Сотрудник {self.get_full_name()} получил {new_value - old_value} кармы"
+                else:
+                    description = f"У сотрудника {self.get_full_name()} было отнято {old_value - new_value} кармы"
+            elif change_type == 'acoins':
+                if new_value > old_value:
+                    description = f"Сотрудник {self.get_full_name()} получил {new_value - old_value} акоинов"
+                else:
+                    description = f"У сотрудника {self.get_full_name()} было отнято {old_value - new_value} акоинов"
+            else:
+                description = f"Сотрудник {self.get_full_name()} изменил {change_type}: {old_value} -> {new_value}"
+
+        # Создаем запись лога с изменениями
         EmployeeLog.objects.create(
             employee=self,
             change_type=change_type,
