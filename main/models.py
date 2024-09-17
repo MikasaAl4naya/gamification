@@ -368,8 +368,16 @@ class Achievement(models.Model):
     TYPE_CHOICES = [
         ('Test', 'За тест'),
         ('Requests', 'За количество обращений'),
-        # Другие типы достижений здесь
+        ('Unique', 'Уникальная награда'),  # Новый тип награды
     ]
+
+    DIFFICULTY_CHOICES = [
+        ('Easy', 'Легкая'),
+        ('Medium', 'Средняя'),
+        ('Hard', 'Сложная'),
+        ('Expert', 'Эксперт'),
+    ]
+
     name = models.CharField(max_length=100)
     description = models.TextField()
     type = models.CharField(max_length=100, choices=TYPE_CHOICES, default='Test')
@@ -379,17 +387,23 @@ class Achievement(models.Model):
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
     image = models.ImageField(upload_to='achievements/', default='default.jpg')
     max_level = models.IntegerField(default=3)
+    can_be_earned_once = models.BooleanField(default=False)  # Можно получить один раз
+    difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='Medium')  # Сложность
+    is_award = models.BooleanField(default=False)  # Это награда?
 
     def clean(self):
         if self.type == 'Requests':
             if not self.request_type:
                 raise ValidationError('Field request_type is required for achievements based on number of requests.')
             if self.required_count == 0:
-                raise ValidationError('Field required_count must be specified for achievements based on number of requests.')
+                raise ValidationError(
+                    'Field required_count must be specified for achievements based on number of requests.')
             if self.reward_experience == 0:
-                raise ValidationError('Field reward_experience must be specified for achievements based on number of requests.')
+                raise ValidationError(
+                    'Field reward_experience must be specified for achievements based on number of requests.')
             if self.reward_currency == 0:
-                raise ValidationError('Field reward_currency must be specified for achievements based on number of requests.')
+                raise ValidationError(
+                    'Field reward_currency must be specified for achievements based on number of requests.')
         elif self.type == 'Test':
             if self.request_type_id is None:
                 self.request_type_id = 0
@@ -399,25 +413,12 @@ class Achievement(models.Model):
                 self.reward_experience = 0
             if self.reward_currency is None:
                 self.reward_currency = 0
-        else:
-            pass
+        elif self.type == 'Unique':
+            if self.is_award:
+                # Обработка логики для наград
+                if not self.name or not self.description or not self.image:
+                    raise ValidationError('For an award, name, description, and image are required.')
 
-    def __str__(self):
-        return self.name
-
-    def level_up(self):
-        if self.level >= self.max_level:
-            raise ValidationError("Maximum level reached for this achievement")
-        self.required_count = int(self.required_count * 1.5)
-        self.reward_experience = int(self.reward_experience * 1.5)
-        self.save()
-
-    def save(self, *args, **kwargs):
-        if self.type == 'Test':
-            self.max_level = 1
-        else:
-            self.max_level = 3
-        super().save(*args, **kwargs)
 
 # Модель предмета в магазине
 class Item(models.Model):
@@ -517,12 +518,14 @@ class EmployeeAchievement(models.Model):
     achievement = models.ForeignKey(Achievement, on_delete=models.CASCADE)
     progress = models.IntegerField(default=0)
     level = models.IntegerField(default=0)
+    assigned_manually = models.BooleanField(default=False)  # Флаг для вручную назначенных наград
 
     def increment_progress(self):
-        self.progress += 1
-        if self.achievement.required_count is not None and self.progress >= self.achievement.required_count:
-            self.level_up()
-        self.save()  # Убедитесь, что изменения сохраняются
+        if not self.assigned_manually:
+            self.progress += 1
+            if self.achievement.required_count is not None and self.progress >= self.achievement.required_count:
+                self.level_up()
+            self.save()
 
     def level_up(self):
         if self.level >= self.achievement.max_level:
@@ -540,6 +543,7 @@ class EmployeeAchievement(models.Model):
         employee.add_experience(reward_experience)
         employee.add_acoins(reward_currency)
         self.save()
+
 
 
 class EmployeeMedal(models.Model):

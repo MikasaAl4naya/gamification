@@ -63,27 +63,37 @@ def assign_group(sender, instance, created, **kwargs):
 def award_experience(sender, instance, created, **kwargs):
     if created:
         # Получаем множители из базы данных по их названиям
-        operator_responsible_multiplier = ExperienceMultiplier.objects.filter(name="operator_responsible_multiplier").first()
+        operator_responsible_multiplier = ExperienceMultiplier.objects.filter(
+            name="operator_responsible_multiplier").first()
         massive_request_multiplier = ExperienceMultiplier.objects.filter(name="massive_request_multiplier").first()
-        operator_full_name = instance.support_operator.first_name + " " + instance.support_operator.last_name
+
+        # Проверяем наличие оператора поддержки
+        support_operator = instance.support_operator
+        if not support_operator:
+            print(f"No support operator found for request {instance.id}")
+            return
+
+        # Проверяем, существует ли опыт по классификации
+        experience_points = getattr(instance.classification, 'experience_points', None)
+        if not experience_points:
+            print(f"No experience points found for classification in request {instance.id}")
+            return
+
+        # Логика начисления опыта
+        print(f"Initial experience points from classification: {experience_points}")
+
+        # Проверяем совпадение оператора и ответственного
         responsible_full_name = instance.responsible.split()
         if len(responsible_full_name) >= 2:
             responsible_name = f"{responsible_full_name[0]} {responsible_full_name[1]}"  # Имя + Фамилия
-            if responsible_name == f"{instance.support_operator.first_name} {instance.support_operator.last_name}":
-                # Логика начисления опыта
-                experience_points = instance.classification.experience_points
-                print(f"Initial experience points from classification: {experience_points}")
-            else:
-                print(f"No experience points found for classification in request {instance.id}")
-                return  # Выходим из функции, так как нет опыта для начисления
+            operator_full_name = f"{support_operator.first_name} {support_operator.last_name}"
 
-        # Увеличение опыта, если оператор и ответственный - одно и то же лицо
-        if instance.support_operator is not None and instance.responsible == instance.support_operator.username:
-            if operator_responsible_multiplier:
-                experience_points *= operator_responsible_multiplier.multiplier
-                print(f"Experience points after operator_responsible_multiplier: {experience_points}")
-            else:
-                print("No operator_responsible_multiplier found.")
+            if responsible_name == operator_full_name:
+                if operator_responsible_multiplier:
+                    experience_points *= operator_responsible_multiplier.multiplier
+                    print(f"Experience points after operator_responsible_multiplier: {experience_points}")
+                else:
+                    print("No operator_responsible_multiplier found.")
 
         # Увеличение опыта для массовых обращений
         if instance.is_massive:
@@ -93,18 +103,15 @@ def award_experience(sender, instance, created, **kwargs):
             else:
                 print("No massive_request_multiplier found.")
 
-        # Проверяем, существует ли support_operator
-        support_operator = instance.support_operator
-        if support_operator is not None:
-            if instance.is_massive:
-                support_operator.add_experience(experience_points, source="За массовую")
-            else:
-                support_operator.add_experience(experience_points, source="За обращение")
-
-            print(f"Awarded {experience_points} experience points to {support_operator.first_name} {support_operator.last_name}")
-            support_operator.save()  # Сохраняем изменения в сотруднике
+        # Добавление опыта оператору
+        if instance.is_massive:
+            support_operator.add_experience(experience_points, source="За массовую")
         else:
-            print(f"No support operator found for request {instance.id}")
+            support_operator.add_experience(experience_points, source="За обращение")
+
+        print(
+            f"Awarded {experience_points} experience points to {support_operator.first_name} {support_operator.last_name}")
+        support_operator.save()  # Сохраняем изменения в сотруднике
 
 
 @receiver(post_save, sender=Request)

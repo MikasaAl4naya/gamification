@@ -343,6 +343,31 @@ class DynamicPermission(BasePermission):
             has_perm = request.user.has_perm(required_permission)
             return has_perm
         return False
+
+@api_view(['POST'])
+@permission_classes([IsAdmin])  # Только администратор может присваивать достижения
+def assign_achievement(request):
+    employee_id = request.data.get('employee_id')
+    achievement_id = request.data.get('achievement_id')
+
+    try:
+        employee = Employee.objects.get(id=employee_id)
+        achievement = Achievement.objects.get(id=achievement_id)
+    except Employee.DoesNotExist:
+        return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Achievement.DoesNotExist:
+        return Response({"error": "Achievement not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Проверка, если достижение уже присвоено
+    if EmployeeAchievement.objects.filter(employee=employee, achievement=achievement).exists():
+        return Response({"message": "Achievement already assigned to employee"}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Присвоение достижения
+    employee_achievement = EmployeeAchievement.objects.create(employee=employee, achievement=achievement, assigned_manually=True)
+    employee_achievement.reward_employee()
+
+    return Response({"message": "Achievement assigned successfully"}, status=status.HTTP_200_OK)
+
 class AchievementViewSet(BasePermissionViewSet):
     queryset = Achievement.objects.all()
     serializer_class = AchievementSerializer
