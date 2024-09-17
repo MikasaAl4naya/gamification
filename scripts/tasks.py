@@ -37,31 +37,31 @@ def determine_late_penalty_level(start_diff):
     else:
         return 5  # Уровень 5 - более 30 минут
 
+
 def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
-    fmt = '%H:%M'
     try:
-        scheduled_start_dt = datetime.strptime(scheduled_start, fmt)
-        scheduled_end_dt = datetime.strptime(scheduled_end, fmt)
-        actual_start_dt = datetime.strptime(actual_start, fmt)
-        actual_end_dt = datetime.strptime(actual_end, fmt)
+        # Расчет разницы в минутах между запланированным и фактическим временем начала
+        start_diff = (datetime.combine(datetime.today(), actual_start) - datetime.combine(datetime.today(),
+                                                                                          scheduled_start)).total_seconds() / 60.0
 
-        start_diff = (actual_start_dt - scheduled_start_dt).total_seconds() / 60.0
-        end_diff = (actual_end_dt - scheduled_end_dt).total_seconds() / 60.0
+        # Расчет разницы в минутах между запланированным и фактическим временем окончания
+        end_diff = (datetime.combine(datetime.today(), actual_end) - datetime.combine(datetime.today(),
+                                                                                      scheduled_end)).total_seconds() / 60.0
 
-        grace_period = 5  # Уменьшили границу до 5 минут
+        grace_period = 5  # Допустимая граница в 5 минут
 
         print(f"Start difference: {start_diff} minutes, End difference: {end_diff} minutes")
 
         if start_diff <= grace_period and end_diff >= -grace_period:
+            print("Время в пределах допустимых границ")
             return True, 0  # Время в норме, уровень опоздания 0
         else:
             late_level = determine_late_penalty_level(start_diff)
+            print(f"Опоздание уровня {late_level}")
             return False, late_level  # Определяем уровень штрафа
     except Exception as e:
         print(f"Error in check_work_time: {e}")
         return False, 0
-
-
 
 
 def extract_date_from_filename(filename):
@@ -121,7 +121,6 @@ def update_employee_karma(file_path):
                     else:
                         shift_info = str(shift_info).lower()
 
-                    print(shift_info)
                     if any(x in shift_info for x in ['выходной', 'о', 'бс', 'б']):
                         print(f"Пропуск смены для {full_name} в {file_date.year}-{file_date.month:02}-{update_day:02} (выходной)")
                         continue
@@ -159,12 +158,18 @@ def update_employee_karma(file_path):
                         )
                         print(f"Найдена существующая запись в ShiftHistory для {full_name} на {shift_date}")
 
-                        # Приведение фактического времени к одному формату и сравнение
+                        # Проверяем, изменилось ли фактическое время
                         if (shift_record.actual_start != actual_start) or (shift_record.actual_end != actual_end):
                             print(f"Изменение фактического времени для {full_name}: старое {shift_record.actual_start}-{shift_record.actual_end}, новое {actual_start}-{actual_end}")
 
+                            # Откат изменений кармы и опыта
+                            print(f"Откат предыдущих изменений кармы и опыта: Карма = {shift_record.karma_change}, Опыт = {shift_record.experience_change}")
+                            employee.karma -= shift_record.karma_change
+                            employee.experience -= shift_record.experience_change
+
                             # Проверка на опоздание и применение соответствующего штрафа
                             is_on_time, late_level = check_work_time(scheduled_start, scheduled_end, actual_start, actual_end)
+                            print(f"Проверка: is_on_time={is_on_time}, late_level={late_level}")
 
                             if is_on_time:
                                 try:
@@ -172,32 +177,17 @@ def update_employee_karma(file_path):
                                     shift_record.karma_change = settings.karma_change
                                     shift_record.experience_change = settings.experience_change
                                     print(f"Карма и опыт изменены на {settings.karma_change}, {settings.experience_change} для {full_name} (правильное выполнение смены)")
-                                    employee.add_experience(settings.experience_change, source='Смена')
-
-                                    # Логируем успешное завершение смены
-                                    employee.log_change(
-                                        change_type='karma',
-                                        old_value=employee.karma,
-                                        new_value=employee.karma + settings.karma_change,
-                                        source='Смена',
-                                        description=f'Начислено за успешное выполнение смены: {settings.karma_change} кармы'
-                                    )
+                                    employee.karma += settings.karma_change
+                                    employee.experience += settings.experience_change
                                 except KarmaSettings.DoesNotExist:
                                     print("Настройки для правильного выполнения смены не найдены")
                             else:
                                 try:
                                     settings = KarmaSettings.objects.get(operation_type='late_penalty', level=late_level)
-                                    shift_record.karma_change -= settings.karma_change
+                                    shift_record.karma_change = -settings.karma_change
+                                    shift_record.experience_change = 0  # Не добавляем опыта за опоздание
                                     print(f"Карма уменьшена на {settings.karma_change} для {full_name} (опоздание)")
-
-                                    # Логируем опоздание
-                                    employee.log_change(
-                                        change_type='karma',
-                                        old_value=employee.karma,
-                                        new_value=employee.karma - settings.karma_change,
-                                        source='Опоздание',
-                                        description=f'Снято за опоздание уровня {late_level}: {settings.karma_change} кармы'
-                                    )
+                                    employee.karma -= settings.karma_change
                                 except KarmaSettings.DoesNotExist:
                                     print("Настройки для штрафа за опоздание не найдены")
 
@@ -221,7 +211,6 @@ def update_employee_karma(file_path):
                         )
 
                     # Применение изменений кармы и опыта
-                    employee.karma += shift_record.karma_change
                     employee.save()
                     print(f"Карма и опыт сохранены для {employee.first_name} {employee.last_name}: Карма = {employee.karma}, Опыт = {employee.experience}")
 
@@ -234,6 +223,8 @@ def update_employee_karma(file_path):
             print(f"Сотрудник с именем {full_name} не существует.")
         except Exception as e:
             print(f"Ошибка при обработке {full_name}: {e}")
+
+
 
 def run_update_karma(name):
     directory_path = get_file_path(name)
