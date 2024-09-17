@@ -85,7 +85,7 @@ def award_experience(sender, instance, created, **kwargs):
         # Проверяем совпадение оператора и ответственного
         responsible_full_name = instance.responsible.split()
         if len(responsible_full_name) >= 2:
-            responsible_name = f"{responsible_full_name[0]} {responsible_full_name[1]}"  # Имя + Фамилия
+            responsible_name = f"{responsible_full_name[1]} {responsible_full_name[0]}"  # Имя + Фамилия
             operator_full_name = f"{support_operator.first_name} {support_operator.last_name}"
 
             if responsible_name == operator_full_name:
