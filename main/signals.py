@@ -65,13 +65,17 @@ def award_experience(sender, instance, created, **kwargs):
         # Получаем множители из базы данных по их названиям
         operator_responsible_multiplier = ExperienceMultiplier.objects.filter(name="operator_responsible_multiplier").first()
         massive_request_multiplier = ExperienceMultiplier.objects.filter(name="massive_request_multiplier").first()
-
-        if instance.classification and instance.classification.experience_points:
-            experience_points = instance.classification.experience_points
-            print(f"Initial experience points from classification: {experience_points}")
-        else:
-            print(f"No experience points found for classification in request {instance.id}")
-            return  # Выходим из функции, так как нет опыта для начисления
+        operator_full_name = instance.support_operator.first_name + " " + instance.support_operator.last_name
+        responsible_full_name = instance.responsible.split()
+        if len(responsible_full_name) >= 2:
+            responsible_name = f"{responsible_full_name[0]} {responsible_full_name[1]}"  # Имя + Фамилия
+            if responsible_name == f"{instance.support_operator.first_name} {instance.support_operator.last_name}":
+                # Логика начисления опыта
+                experience_points = instance.classification.experience_points
+                print(f"Initial experience points from classification: {experience_points}")
+            else:
+                print(f"No experience points found for classification in request {instance.id}")
+                return  # Выходим из функции, так как нет опыта для начисления
 
         # Увеличение опыта, если оператор и ответственный - одно и то же лицо
         if instance.support_operator is not None and instance.responsible == instance.support_operator.username:

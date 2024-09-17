@@ -17,6 +17,7 @@ admin.site.register(LevelTitle)
 admin.site.register(PasswordPolicy)
 admin.site.register(EmployeeActionLog)
 admin.site.register(Item)
+admin.site.register(ShiftHistory)
 
 
 
