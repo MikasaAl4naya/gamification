@@ -109,7 +109,10 @@ class Employee(AbstractUser):
                 pass  # Разрешаем изменение поля is_active
             else:
                 raise ValidationError("Cannot modify a deactivated account.")
-
+        if self.karma > 100:
+            self.karma = 100
+        if self.karma<0:
+            self.karma = 100
         # Признак, что поле is_active меняется через admin
         if 'is_active' in kwargs.get('update_fields', []):
             self.force_save = True
@@ -228,16 +231,6 @@ class Employee(AbstractUser):
             experience_required += int(base_experience * (i - 1) * 0.2)  # более плавный рост опыта
 
         return experience_required
-
-    def set_karma(self, amount, source="Вручную изменили"):
-        if not self.is_active:
-            raise ValidationError("Cannot modify a deactivated account.")
-        old_karma = self.karma
-        self.karma = amount
-        if self.karma > 100:
-            self.karma = 100
-        self.log_change('karma', old_karma, self.karma, source, )
-        self.save()
 
     def add_acoins(self, acoins):
         if not self.is_active:
@@ -386,7 +379,6 @@ class Achievement(models.Model):
     reward_experience = models.IntegerField(null=True, blank=True, default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
     image = models.ImageField(upload_to='achievements/', default='default.jpg')
-    max_level = models.IntegerField(default=3)
     can_be_earned_once = models.BooleanField(default=False)  # Можно получить один раз
     difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='Medium')  # Сложность
     is_award = models.BooleanField(default=False)  # Это награда?
