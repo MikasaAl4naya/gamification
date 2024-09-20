@@ -126,6 +126,7 @@ urlpatterns = [
     path('update-late-penalty-settings/', update_late_penalty_settings, name='update_late_penalty_settings'),
     path('store/', StoreView.as_view(), name='store'),
     path('assign-achievement/', assign_achievement, name='assign_achievement'),
+    path('get_complaints/<int:employee_id>/', get_employee_complaints, name='get_employee_complaints'),
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
 if settings.DEBUG:
