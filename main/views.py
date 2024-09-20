@@ -863,8 +863,11 @@ def get_user(request):
         last_login = employee.last_login.strftime('%Y-%m-%d %H:%M:%S') if employee.last_login else 'Never'
         completed_tests_count = TestAttempt.objects.filter(employee=employee, status=TestAttempt.PASSED).count()
 
-        # Отображаем только approved похвалы (жалобы убрали)
+        # Отображаем только approved жалобы и похвалы
+        complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved').count()
         praises_count = Feedback.objects.filter(target_employee=employee, type="praise", status='approved').count()
+
+        complaints = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved')
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
         survey_questions = SurveyQuestion.objects.all()
@@ -877,6 +880,7 @@ def get_user(request):
         for question in survey_questions:
             answer = survey_answers.filter(question=question).first()
             if question.question_text.lower() == "дата рождения":
+                # Если дата рождения у сотрудника существует, заполняем ответ
                 if employee.birth_date:
                     birth_date_str = employee.birth_date.strftime('%Y-%m-%d')
                     answers_with_text.append({
@@ -910,6 +914,7 @@ def get_user(request):
         total_requests = requests.count()
         requests_this_month = requests.filter(date__month=datetime.now().month).count()
 
+        # Группируем обращения по классификации
         classifications = requests.values('classification__name').annotate(count=models.Count('id'))
         grouped_requests = {c['classification__name']: c['count'] for c in classifications}
 
@@ -927,7 +932,9 @@ def get_user(request):
             'registration_date': registration_date,
             'last_login': last_login,
             'completed_tests': completed_tests_count,
+            'complaints': complaints_count,
             'praises': praises_count,
+            'complaints_details': FeedbackSerializer(complaints, many=True).data,
             'praises_details': FeedbackSerializer(praises, many=True).data,
             'request_statistics': request_statistics,
         }
