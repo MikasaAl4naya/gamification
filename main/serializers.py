@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User, Permission, Group
 from django.utils.crypto import get_random_string
+from pytz import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAdminUser
 
@@ -121,9 +122,20 @@ class ExperienceMultiplierSerializer(serializers.ModelSerializer):
         model = ExperienceMultiplier
         fields = ['name', 'multiplier']
 class EmployeeLogSerializer(serializers.ModelSerializer):
+    # Переопределяем поля для вывода на русском
+    старое_значение = serializers.IntegerField(source='old_value')
+    новое_значение = serializers.IntegerField(source='new_value')
+    время = serializers.SerializerMethodField()
+
     class Meta:
         model = EmployeeLog
-        fields = '__all__'
+        fields = ['старое_значение', 'новое_значение', 'change_type', 'description', 'source', 'время', 'employee']
+
+    def get_время(self, obj):
+        # Преобразуем время в часовой пояс Иркутска и форматируем
+        irkutsk_tz = timezone('Asia/Irkutsk')
+        localized_time = obj.timestamp.astimezone(irkutsk_tz)
+        return localized_time.strftime("%d %B %Y года, %H:%M:%S")
 
             
 class EmployeeActionLogSerializer(serializers.ModelSerializer):
@@ -335,23 +347,39 @@ class EmployeeActionLogSerializer(serializers.ModelSerializer):
         model = EmployeeActionLog
         fields = ['employee', 'action_type', 'model_name', 'object_id', 'description', 'created_at', 'readable_description']
 
-    def get_readable_description(self, obj):
-        """
-        Преобразует лог в более читабельный вид.
-        """
-        if obj.model_name == 'TestAttempt':
-            if 'status' in obj.description:
-                if "status: '' -> 'PASSED'" in obj.description:
-                    return f"{obj.employee} успешно завершил тест."
-                elif "status: '' -> 'FAILED'" in obj.description:
-                    return f"{obj.employee} не прошел тест."
-                else:
-                    return f"{obj.employee} начал прохождение теста."
-        elif obj.model_name == 'AnotherModel':  # Пример для другой модели
-            return f"{obj.employee} сделал действие: {obj.description}"
+    class EmployeeActionLogSerializer(serializers.ModelSerializer):
+        readable_description = serializers.SerializerMethodField()
 
-        # Общий случай
-        return f"{obj.employee} {obj.action_type} {obj.model_name} (ID: {obj.object_id}). {obj.description}"
+        class Meta:
+            model = EmployeeActionLog
+            fields = ['employee', 'action_type', 'model_name', 'object_id', 'description', 'created_at',
+                      'readable_description']
+
+        def get_readable_description(self, obj):
+            """
+            Преобразует лог в более читабельный вид.
+            """
+            # Получаем полное имя сотрудника
+            employee_name = f"{obj.employee.first_name} {obj.employee.last_name}"
+
+            # Специальная логика для обработки попыток тестов
+            if obj.model_name == 'TestAttempt':
+                # Обрабатываем поле description в зависимости от того, что в нем содержится
+                if "провалил тест" in obj.description:
+                    return f"{employee_name} провалил тест."
+                elif "успешно прошел тест" in obj.description:
+                    return f"{employee_name} успешно прошел тест."
+                elif "отправлен на модерацию" in obj.description:
+                    return f"{employee_name} завершил тест, и он отправлен на модерацию."
+                elif "начал проходить тест" in obj.description:
+                    return f"{employee_name} начал прохождение теста."
+                else:
+                    # Если описание неполное или нестандартное, вернем его как есть
+                    return f"{employee_name} {obj.action_type} тест. {obj.description}"
+
+            # Общий случай для всех других моделей
+            return f"{employee_name} {obj.action_type} {obj.model_name} (ID: {obj.object_id}). {obj.description}"
+
 
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()

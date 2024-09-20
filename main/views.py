@@ -1886,7 +1886,6 @@ def get_test_by_id(request, test_id):
 
 @permission_classes([IsAuthenticated])
 class ThemesWithTestsView(APIView):
-
     def get(self, request, *args, **kwargs):
         employee = getattr(request, 'employee', request.user)
         employee_karma = getattr(employee, 'karma', 0)
