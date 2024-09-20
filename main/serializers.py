@@ -1,6 +1,5 @@
 from django.contrib.auth.models import User, Permission, Group
 from django.utils.crypto import get_random_string
-from pytz import timezone
 from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAdminUser
 
@@ -122,20 +121,9 @@ class ExperienceMultiplierSerializer(serializers.ModelSerializer):
         model = ExperienceMultiplier
         fields = ['name', 'multiplier']
 class EmployeeLogSerializer(serializers.ModelSerializer):
-    # Переопределяем поля для вывода на русском
-    старое_значение = serializers.IntegerField(source='old_value')
-    новое_значение = serializers.IntegerField(source='new_value')
-    время = serializers.SerializerMethodField()
-
     class Meta:
         model = EmployeeLog
-        fields = ['старое_значение', 'новое_значение', 'change_type', 'description', 'source', 'время', 'employee']
-
-    def get_время(self, obj):
-        # Преобразуем время в часовой пояс Иркутска и форматируем
-        irkutsk_tz = timezone('Asia/Irkutsk')
-        localized_time = obj.timestamp.astimezone(irkutsk_tz)
-        return localized_time.strftime("%d %B %Y года, %H:%M:%S")
+        fields = '__all__'
 
             
 class EmployeeActionLogSerializer(serializers.ModelSerializer):
