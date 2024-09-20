@@ -946,7 +946,7 @@ def get_user(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated, partial(HasPermission, perm='view_complaints')])
+@permission_classes([IsAuthenticated, partial(HasPermission, perm='can_view_complaints')])
 def get_employee_complaints(request, employee_id):
     try:
         # Получаем сотрудника, жалобы на которого нужно показать
