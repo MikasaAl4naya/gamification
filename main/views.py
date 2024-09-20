@@ -2624,16 +2624,10 @@ def moderate_test_attempt(request, test_attempt_id):
 
     # Начисление опыта модератору за модерацию теста
     try:
-        # Пытаемся получить настройку для модерации тестов
         experience_multiplier = KarmaSettings.objects.get(operation_type="TEST_MODERATION")
         experience_awarded = experience_multiplier.experience_change
-        print(f"Moderator experience multiplier: {experience_awarded}")
-    except KarmaSettings.DoesNotExist:  # Исправлено исключение
+    except KarmaSettings.DoesNotExist:
         experience_awarded = 10  # Дефолтное значение опыта, если настройка не найдена
-        print("KarmaSettings for TEST_MODERATION not found, defaulting to 10 experience points")
-
-    # Логируем процесс начисления опыта
-    print(f"Awarding {experience_awarded} experience points to moderator {moderator.username}")
 
     moderator.add_experience(experience_awarded, source='За модерацию теста')
     moderator.save()
@@ -2642,7 +2636,6 @@ def moderate_test_attempt(request, test_attempt_id):
     test_employee = test_attempt.employee
     experience_for_employee = test_attempt.test.experience_points
     if test_attempt.status == TestAttempt.PASSED:
-        print(f"Awarding {experience_for_employee} experience points to employee {test_employee.username}")
         test_employee.add_experience(experience_for_employee, source='За прохождение теста')
 
     test_employee.save()
@@ -2657,6 +2650,7 @@ def moderate_test_attempt(request, test_attempt_id):
     }
 
     return Response(response_data, status=status.HTTP_200_OK)
+
 
 
 @api_view(['GET'])
