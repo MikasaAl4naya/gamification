@@ -78,7 +78,7 @@ def find_start_of_table(df):
     for i in range(len(df)):
         for j in range(len(df.columns)):
             if str(df.iloc[i, j]).lower() == 'фио':  # Находим строку с заголовком "ФИО"
-                return i+1, j  # Возвращаем строку без +1, чтобы начать с этой строки
+                return i, j  # Возвращаем строку без +1, чтобы начать с этой строки
     return None, None
 
 
@@ -120,14 +120,19 @@ def update_employee_karma(file_path):
             for employee in employees:
                 print(f"Сотрудник: {employee.id}, Имя: {employee.first_name} {employee.last_name}")
 
-                # Проходим по каждому дню месяца
-                for update_day in range(0, calendar.monthrange(file_date.year, file_date.month)[1] + 1):
-                    # Извлекаем данные по дню
-                    print(calendar.monthrange(file_date.year, file_date.month))
+                # Проходим по каждому дню месяца начиная с первого столбца
+                for update_day in range(1, calendar.monthrange(file_date.year, file_date.month)[1] + 1):
                     shift_info = row.get(f'Unnamed: {update_day}', '')
 
-                    # Проверка на наличие выходных или специальных пометок
-                    if any(x in shift_info for x in ['выходной', 'о', 'бс', 'б']) and not re.search(r'\d{1,2}:\d{2}', shift_info):
+                    # Проверка типа данных
+                    if isinstance(shift_info, int):
+                        print(f"Ошибка в данных для дня {update_day}: целое число {shift_info}")
+                        continue
+
+                    print(f"Данные для дня {update_day}: {shift_info}")
+
+                    # Проверка на выходные или специальные пометки
+                    if isinstance(shift_info, str) and any(x in shift_info for x in ['выходной', 'о', 'бс', 'б']) and not re.search(r'\d{1,2}:\d{2}', shift_info):
                         print(f"Пропуск смены для {full_name} в {file_date.year}-{file_date.month:02}-{update_day:02} (выходной)")
                         continue
 
@@ -137,7 +142,6 @@ def update_employee_karma(file_path):
 
                     parts = re.split(r'\n|;', shift_info)
 
-                    # Если shift_info имеет менее 4 частей, логируем это и продолжаем
                     if len(parts) < 4:
                         print(f"Неполные данные для {file_date.year}-{file_date.month:02}-{update_day:02}: {parts}")
                         continue

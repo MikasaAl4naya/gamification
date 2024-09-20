@@ -1718,6 +1718,8 @@ def get_test_statistics(request):
         total_score=F('score'),
         max_score=F('test__max_score'),
         result=F('status'),
+        experience=F('test__experience_points'),  # Добавляем опыт
+        acoin=F('test__acoin_reward'),  # Добавляем Acoin
         is_last_attempt=Case(
             When(id=Subquery(last_attempt_subquery), then=True),
             default=False,
@@ -1733,6 +1735,8 @@ def get_test_statistics(request):
         'total_score',
         'max_score',
         'result',
+        'experience',  # Добавляем поле опыта
+        'acoin',  # Добавляем поле Acoin
         'start_time',
         'end_time',
         'is_last_attempt'
@@ -1790,6 +1794,7 @@ def get_test_statistics(request):
         'tests': tests_set,
         'employees': employees_set
     })
+
 
 
 @api_view(['GET'])
