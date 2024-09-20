@@ -192,21 +192,7 @@ class Employee(AbstractUser):
 
     def check_level_up(self):
         leveled_up_or_down = False  # Флаг для отслеживания, был ли уровень изменен
-
-        # Максимальное количество уровней
         max_level = 50
-
-        # Проверка на понижение уровня
-        while self.level > 1:
-            previous_level_experience = self.calculate_experience_for_level(self.level - 1)
-            if self.experience < previous_level_experience:
-                old_level = self.level
-                self.level -= 1
-                self.next_level_experience = self.calculate_experience_for_level(self.level)
-                self.log_change('level', old_level, self.level, )
-                leveled_up_or_down = True
-            else:
-                break
 
         # Проверка на повышение уровня
         while self.experience >= self.next_level_experience and self.level < max_level:
@@ -214,21 +200,34 @@ class Employee(AbstractUser):
             self.level += 1
             leveled_up_or_down = True
             self.next_level_experience = self.calculate_experience_for_level(self.level)
-            self.log_change('level', old_level, self.level, )
+            self.log_change('level', old_level, self.level)
 
         # Убедиться, что `next_level_experience` корректен после всех изменений
         self.next_level_experience = self.calculate_experience_for_level(self.level)
 
+        # Корректно посчитать оставшийся опыт
+        self.remaining_experience = self.next_level_experience - self.experience
+
+        # Корректный расчет прогресса опыта (в процентах)
+        previous_level_experience = self.calculate_experience_for_level(self.level - 1)
+        experience_for_current_level = self.next_level_experience - previous_level_experience
+        self.experience_progress = int(
+            ((self.experience - previous_level_experience) / experience_for_current_level) * 100)
+
         # Сохранение изменений только если уровень был изменен
         if leveled_up_or_down:
-            super(Employee, self).save(update_fields=['level', 'experience', 'next_level_experience'])
+            super(Employee, self).save(
+                update_fields=['level', 'experience', 'next_level_experience', 'experience_progress'])
+        else:
+            super(Employee, self).save(update_fields=['experience', 'next_level_experience', 'experience_progress'])
 
     def calculate_experience_for_level(self, level):
-        base_experience = 100  # базовый опыт, необходимый для первого уровня
+        base_experience = 100  # базовый опыт для первого уровня
         experience_required = base_experience
 
         for i in range(2, level + 1):
-            experience_required += int(base_experience * (i - 1) * 0.2)  # более плавный рост опыта
+            # Увеличение опыта на каждый следующий уровень
+            experience_required += int(base_experience * (i - 1) * 0.2)  # Плавный рост сложности
 
         return experience_required
 
