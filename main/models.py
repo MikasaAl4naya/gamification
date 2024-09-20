@@ -217,9 +217,9 @@ class Employee(AbstractUser):
         # Сохранение изменений только если уровень был изменен
         if leveled_up_or_down:
             super(Employee, self).save(
-                update_fields=['level', 'experience', 'next_level_experience', 'experience_progress'])
+                update_fields=['level', 'experience', 'next_level_experience'])
         else:
-            super(Employee, self).save(update_fields=['experience', 'next_level_experience', 'experience_progress'])
+            super(Employee, self).save(update_fields=['experience', 'next_level_experience'])
 
     def calculate_experience_for_level(self, level):
         base_experience = 100  # базовый опыт для первого уровня
