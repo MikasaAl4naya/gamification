@@ -383,6 +383,10 @@ class Achievement(models.Model):
     difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='Medium')  # Сложность
     is_award = models.BooleanField(default=False)  # Это награда?
 
+    # Поля для цвета и фоновой картинки на основе сложности
+    background_color = models.CharField(max_length=7, default='#FFFFFF')  # Цвет фона (в формате HEX)
+    background_image = models.ImageField(upload_to='achievement_backgrounds/', null=True, blank=True)  # Фоновое изображение
+
     def clean(self):
         if self.type == 'Requests':
             if not self.request_type:
@@ -511,6 +515,7 @@ class EmployeeAchievement(models.Model):
     progress = models.IntegerField(default=0)
     level = models.IntegerField(default=0)
     assigned_manually = models.BooleanField(default=False)  # Флаг для вручную назначенных наград
+    date_awarded = models.DateTimeField(null=True, blank=True)  # Дата получения достижения
 
     def increment_progress(self):
         if not self.assigned_manually:
@@ -519,21 +524,13 @@ class EmployeeAchievement(models.Model):
                 self.level_up()
             self.save()
 
-    def level_up(self):
-        if self.level >= self.achievement.max_level:
-            return
-        else:
-            self.level += 1
-            self.progress = 0  # Сбрасываем прогресс после повышения уровня
-            self.achievement.required_count = int(self.achievement.required_count * 1.5)
-            self.reward_employee()
-
     def reward_employee(self):
         employee = self.employee
         reward_currency = self.achievement.reward_currency
         reward_experience = self.achievement.reward_experience
         employee.add_experience(reward_experience)
         employee.add_acoins(reward_currency)
+        self.date_awarded = timezone.now()  # Устанавливаем дату получения
         self.save()
 
 

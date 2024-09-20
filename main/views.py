@@ -358,27 +358,46 @@ def assign_achievement(request):
     except Achievement.DoesNotExist:
         return Response({"error": "Achievement not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Проверка, если достижение уже присвоено
-    if EmployeeAchievement.objects.filter(employee=employee, achievement=achievement).exists():
-        return Response({"message": "Achievement already assigned to employee"}, status=status.HTTP_400_BAD_REQUEST)
+    # Проверка, если достижение можно получить только один раз и уже было присвоено
+    if achievement.can_be_earned_once and EmployeeAchievement.objects.filter(employee=employee, achievement=achievement).exists():
+        return Response({"message": "This achievement can only be earned once and has already been assigned."},
+                        status=status.HTTP_400_BAD_REQUEST)
 
     # Присвоение достижения
-    employee_achievement = EmployeeAchievement.objects.create(employee=employee, achievement=achievement, assigned_manually=True)
+    employee_achievement = EmployeeAchievement.objects.create(
+        employee=employee,
+        achievement=achievement,
+        assigned_manually=True
+    )
     employee_achievement.reward_employee()
 
     return Response({"message": "Achievement assigned successfully"}, status=status.HTTP_200_OK)
 
+
 class AchievementViewSet(BasePermissionViewSet):
     queryset = Achievement.objects.all()
     serializer_class = AchievementSerializer
-    permission_classes = [IsAuthenticated]  # Только аутентифицированные пользователи могут создавать или изменять записи
+    permission_classes = [
+        IsAuthenticated]  # Только аутентифицированные пользователи могут создавать или изменять записи
     parser_classes = [MultiPartParser, FormParser]  # Поддержка загрузки файлов
 
     def perform_create(self, serializer):
-        serializer.save()
+        achievement = serializer.save()
+
+        # Логика для уникальных наград или более сложных действий при создании
+        if achievement.is_award:
+            print(f"A unique award has been created: {achievement.name}")
+        else:
+            print(f"A standard achievement has been created: {achievement.name}")
 
     def perform_update(self, serializer):
-        serializer.save()
+        achievement = serializer.save()
+
+        # Логика для уникальных наград или более сложных действий при обновлении
+        if achievement.is_award:
+            print(f"A unique award has been updated: {achievement.name}")
+        else:
+            print(f"An achievement has been updated: {achievement.name}")
 class UpdateStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -472,7 +491,6 @@ class EmployeeDetails(APIView):
         except Employee.DoesNotExist:
             return Response({"message": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
 @authentication_classes([TokenAuthentication])
-@permission_classes([IsAdmin])
 class RegisterAPIView(APIView):
     @transaction.atomic
     def post(self, request):
