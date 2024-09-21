@@ -328,45 +328,39 @@ class GroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Group
         fields = ['id', 'name', 'permissions', 'permissions_info']
+
 class EmployeeActionLogSerializer(serializers.ModelSerializer):
     readable_description = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeActionLog
-        fields = ['employee', 'action_type', 'model_name', 'object_id', 'description', 'created_at', 'readable_description']
+        fields = ['employee', 'action_type', 'model_name', 'object_id', 'description', 'created_at',
+                  'readable_description']
 
-    class EmployeeActionLogSerializer(serializers.ModelSerializer):
-        readable_description = serializers.SerializerMethodField()
+    def get_readable_description(self, obj):
+        """
+        Преобразует лог в более читабельный вид.
+        """
+        # Получаем полное имя сотрудника
+        employee_name = f"{obj.employee.first_name} {obj.employee.last_name}"
 
-        class Meta:
-            model = EmployeeActionLog
-            fields = ['employee', 'action_type', 'model_name', 'object_id', 'description', 'created_at',
-                      'readable_description']
+        # Специальная логика для обработки попыток тестов
+        if obj.model_name == 'TestAttempt':
+            # Обрабатываем поле description в зависимости от того, что в нем содержится
+            if "провалил тест" in obj.description:
+                return f"{employee_name} провалил тест."
+            elif "успешно прошел тест" in obj.description:
+                return f"{employee_name} успешно прошел тест."
+            elif "отправлен на модерацию" in obj.description:
+                return f"{employee_name} завершил тест, и он отправлен на модерацию."
+            elif "начал проходить тест" in obj.description:
+                return f"{employee_name} начал прохождение теста."
+            else:
+                # Если описание неполное или нестандартное, вернем его как есть
+                return f"{employee_name} {obj.action_type} тест. {obj.description}"
 
-        def get_readable_description(self, obj):
-            """
-            Преобразует лог в более читабельный вид.
-            """
-            # Получаем полное имя сотрудника
-            employee_name = f"{obj.employee.first_name} {obj.employee.last_name}"
-
-            # Специальная логика для обработки попыток тестов
-            if obj.model_name == 'TestAttempt':
-                # Обрабатываем поле description в зависимости от того, что в нем содержится
-                if "провалил тест" in obj.description:
-                    return f"{employee_name} провалил тест."
-                elif "успешно прошел тест" in obj.description:
-                    return f"{employee_name} успешно прошел тест."
-                elif "отправлен на модерацию" in obj.description:
-                    return f"{employee_name} завершил тест, и он отправлен на модерацию."
-                elif "начал проходить тест" in obj.description:
-                    return f"{employee_name} начал прохождение теста."
-                else:
-                    # Если описание неполное или нестандартное, вернем его как есть
-                    return f"{employee_name} {obj.action_type} тест. {obj.description}"
-
-            # Общий случай для всех других моделей
-            return f"{employee_name} {obj.action_type} {obj.model_name} (ID: {obj.object_id}). {obj.description}"
+        # Общий случай для всех других моделей
+        return f"{employee_name} {obj.action_type} {obj.model_name} (ID: {obj.object_id}). {obj.description}"
 
 
 class GroupViewSet(viewsets.ModelViewSet):
