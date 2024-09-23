@@ -18,7 +18,6 @@ from main.models import Classifications, Request, Employee, FilePath
 # Кэш для классификаций
 classification_cache = {}
 
-
 def add_classification_levels(classification_string):
     """Кэшируем классификации для ускорения процесса."""
     levels = [level.strip() for level in classification_string.split('->')]
@@ -38,14 +37,12 @@ def add_classification_levels(classification_string):
     classification_cache[cache_key] = parent
     return parent
 
-
 def is_classification(value):
     """Проверка, является ли значение классификацией."""
     if not isinstance(value, str):
         return False
     return '->' in value and not any(
         keyword in value for keyword in ['Укажите', 'Дополнительная информация', 'Опишите', '['])
-
 
 def add_request(number, date, description, classification, initiator, responsible, support_operator, status,
                 is_massive=False):
@@ -74,11 +71,9 @@ def add_request(number, date, description, classification, initiator, responsibl
     new_request.save()
     return new_request
 
-
 def is_fio(value):
     """Проверка, является ли значение ФИО."""
     return isinstance(value, str) and bool(re.match(r'^[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+$', value))
-
 
 def run_classification_script(file_path, file_path_entry=None):
     try:
@@ -90,11 +85,14 @@ def run_classification_script(file_path, file_path_entry=None):
         # Чтение файла Excel
         df = pd.read_excel(file_path, sheet_name='TDSheet', skiprows=12)
 
-        initiator_col = 'Unnamed: 16' if is_massive_file else 'Unnamed: 17'
+        initiator_col = 'Unnamed: 17' if is_massive_file else 'Unnamed: 17'
         responsible_col = 'Unnamed: 22'
 
         requests_to_create = []
         total_requests = 0  # Счётчик успешных запросов
+        support_operator = None  # Инициализация переменной
+        classification = None  # Инициализация переменной
+
         for index, row in df.iterrows():
             for col_index, col in enumerate(df.columns[:1]):
                 value = row[col]
@@ -135,7 +133,6 @@ def run_classification_script(file_path, file_path_entry=None):
 
     except Exception as e:
         print(f"Error processing file {file_path}: {e}")
-
 
 if __name__ == "__main__":
     run_classification_script()
