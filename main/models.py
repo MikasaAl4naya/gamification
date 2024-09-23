@@ -116,7 +116,6 @@ class Employee(AbstractUser):
         # Признак, что поле is_active меняется через admin
         if 'is_active' in kwargs.get('update_fields', []):
             self.force_save = True
-        self.check_level_up()
         super().save(*args, **kwargs)
 
     def log_change(self, change_type, old_value, new_value, source=None, description=None):
