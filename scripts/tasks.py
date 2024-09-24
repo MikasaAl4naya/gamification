@@ -18,13 +18,22 @@ def get_file_path(name):
 
 def process_work_schedule(file_path):
     df = pd.read_excel(file_path)
+
+    # Находим начало таблицы (где находится заголовок "ФИО")
     start_row, start_col = find_start_of_table(df)
 
-    # Убедитесь, что стартовая колонка корректна
-    df = df.iloc[start_row:, start_col:].reset_index(drop=True)
+    if start_row is None or start_col is None:
+        print("Не удалось найти заголовок 'ФИО'.")
+        return None, None  # Возвращаем также start_col
 
-    df = df.rename(columns={df.columns[0]: 'ФИО'})
-    return df
+    # Обрезаем строки, начиная с заголовка, оставляем все столбцы
+    df = df.iloc[start_row:].reset_index(drop=True)
+
+    # Переименовываем колонку, где находится ФИО
+    df = df.rename(columns={df.columns[start_col]: 'ФИО'})
+
+    return df, start_col  # Возвращаем start_col
+
 
 
 def determine_late_penalty_level(start_diff):
@@ -53,17 +62,17 @@ def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
 
         grace_period = 5  # Допустимая граница в 5 минут
 
-        print(f"Start difference: {start_diff} minutes, End difference: {end_diff} minutes")
+        # print(f"Start difference: {start_diff} minutes, End difference: {end_diff} minutes")
 
         if start_diff <= grace_period and end_diff >= -grace_period:
             print("Время в пределах допустимых границ")
             return True, 0  # Время в норме, уровень опоздания 0
         else:
             late_level = determine_late_penalty_level(start_diff)
-            print(f"Опоздание уровня {late_level}")
+            # print(f"Опоздание уровня {late_level}")
             return False, late_level  # Определяем уровень штрафа
     except Exception as e:
-        print(f"Error in check_work_time: {e}")
+        # print(f"Error in check_work_time: {e}")
         return False, 0
 
 
@@ -77,9 +86,13 @@ def extract_date_from_filename(filename):
 def find_start_of_table(df):
     for i in range(len(df)):
         for j in range(len(df.columns)):
-            if str(df.iloc[i, j]).lower() == 'фио':  # Находим строку с заголовком "ФИО"
-                return i, j  # Возвращаем строку без +1, чтобы начать с этой строки
+            cell_value = str(df.iloc[i, j]).strip().lower()
+            if 'фио' in cell_value:  # Ищем "ФИО" в любой форме
+                # print(f"Найдено 'ФИО' в строке {i}, столбец {j}")
+                return i, j
     return None, None
+
+
 
 
 
@@ -96,10 +109,21 @@ def update_employee_karma(file_path):
         print(f"Не удалось извлечь дату из названия файла: {filename}")
         return
 
-    df = process_work_schedule(file_path)
+    df, start_col = process_work_schedule(file_path)
     if df is None:
         print(f"Не удалось обработать файл: {file_path}")
         return
+
+    # Определяем имена столбцов, соответствующие дням месяца
+    day_columns = []
+    number_of_days = calendar.monthrange(file_date.year, file_date.month)[1]
+    for day in range(1, number_of_days + 1):
+        column_index = start_col + day  # Предполагаем, что дни идут подряд после 'ФИО'
+        if column_index < len(df.columns):
+            column_name = df.columns[column_index]
+            day_columns.append((day, column_name))
+        else:
+            day_columns.append((day, None))  # Если столбца нет
 
     for index, row in df.iterrows():
         try:
@@ -120,30 +144,33 @@ def update_employee_karma(file_path):
             for employee in employees:
                 print(f"Сотрудник: {employee.id}, Имя: {employee.first_name} {employee.last_name}")
 
-                # Проходим по каждому дню месяца начиная с первого столбца
-                for update_day in range(1, calendar.monthrange(file_date.year, file_date.month)[1] + 1):
-                    shift_info = row.get(f'Unnamed: {update_day}', '')
+                for day, column_name in day_columns:
+                    if column_name is None:
+                        print(f"Нет данных для дня {day}")
+                        continue
+
+                    shift_info = row.get(column_name, '')
 
                     # Проверка типа данных
                     if isinstance(shift_info, int):
-                        print(f"Ошибка в данных для дня {update_day}: целое число {shift_info}")
+                        print(f"Ошибка в данных для дня {day}: целое число {shift_info}")
                         continue
 
-                    print(f"Данные для дня {update_day}: {shift_info}")
+                    print(f"Данные для дня {day}: {shift_info}")
 
                     # Проверка на выходные или специальные пометки
-                    if isinstance(shift_info, str) and any(x in shift_info for x in ['выходной', 'о', 'бс', 'б']) and not re.search(r'\d{1,2}:\d{2}', shift_info):
-                        print(f"Пропуск смены для {full_name} в {file_date.year}-{file_date.month:02}-{update_day:02} (выходной)")
+                    if isinstance(shift_info, str) and any(x in shift_info.lower() for x in ['выходной', 'о', 'бс', 'б']) and not re.search(r'\d{1,2}:\d{2}', shift_info):
+                        print(f"Пропуск смены для {full_name} в {file_date.year}-{file_date.month:02}-{day:02} (выходной)")
                         continue
 
                     if not shift_info or shift_info == '':
-                        print(f"Пустые данные для {file_date.year}-{file_date.month:02}-{update_day:02}: '{shift_info}'")
+                        print(f"Пустые данные для {file_date.year}-{file_date.month:02}-{day:02}: '{shift_info}'")
                         continue
 
                     parts = re.split(r'\n|;', shift_info)
 
                     if len(parts) < 4:
-                        print(f"Неполные данные для {file_date.year}-{file_date.month:02}-{update_day:02}: {parts}")
+                        print(f"Неполные данные для {file_date.year}-{file_date.month:02}-{day:02}: {parts}")
                         continue
 
                     scheduled_time = parts[1]
@@ -155,11 +182,11 @@ def update_employee_karma(file_path):
                         scheduled_start, scheduled_end = map(time_str_to_time_obj, scheduled_time.split('-'))
                         actual_start, actual_end = map(time_str_to_time_obj, actual_time.split('-'))
                     except ValueError as e:
-                        print(f"Ошибка преобразования времени для {file_date.year}-{file_date.month:02}-{update_day:02}: {e}")
+                        print(f"Ошибка преобразования времени для {file_date.year}-{file_date.month:02}-{day:02}: {e}")
                         continue
 
                     # Проверка, есть ли уже запись в ShiftHistory
-                    shift_date = datetime(file_date.year, file_date.month, update_day).date()
+                    shift_date = datetime(file_date.year, file_date.month, day).date()
                     try:
                         shift_record = ShiftHistory.objects.get(
                             employee=employee,
