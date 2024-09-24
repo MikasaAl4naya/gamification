@@ -359,7 +359,7 @@ def assign_achievement(request):
         return Response({"error": "Achievement not found"}, status=status.HTTP_404_NOT_FOUND)
 
     # Проверка, если достижение можно получить только один раз и уже было присвоено
-    if achievement.can_be_earned_once and EmployeeAchievement.objects.filter(employee=employee, achievement=achievement).exists():
+    if  EmployeeAchievement.objects.filter(employee=employee, achievement=achievement).exists():
         return Response({"message": "This achievement can only be earned once and has already been assigned."},
                         status=status.HTTP_400_BAD_REQUEST)
 

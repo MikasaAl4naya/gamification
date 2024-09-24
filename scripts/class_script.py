@@ -79,21 +79,36 @@ def is_fio(value):
     return isinstance(value, str) and bool(re.match(r'^[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+\s[А-ЯЁ][а-яё]+$', value))
 
 
+def find_column_positions(df):
+    """Функция для динамического поиска нужных столбцов по заголовкам."""
+    initiator_col = None
+    responsible_col = None
+    status_col = None
+
+    for col in df.columns:
+        if "Обращение.Инициатор" in str(col):
+            initiator_col = col
+        elif "Обращение.Ответственный" in str(col):
+            responsible_col = col
+        elif "Обращение.Состояние" in str(col) or "Статус" in str(col):
+            status_col = col
+
+    if not initiator_col or not responsible_col or not status_col:
+        raise ValueError("Не удалось найти все необходимые столбцы: инициатор, ответственный, состояние")
+
+    return initiator_col, responsible_col, status_col
+
+
 def run_classification_script(file_path, file_path_entry=None):
     try:
         if not os.path.exists(file_path):
             raise ValueError(f"Файл {file_path} не найден")
 
         is_massive_file = "Массовые" in file_path
-        if is_massive_file:
-            print("ОБРАБАТЫВАЕТСЯ ФАЙЛ С МАССОВЫМИ")
+        df = pd.read_excel(file_path, sheet_name='TDSheet', skiprows=8)
+        # Найти динамические позиции для столбцов инициатора, ответственного и статуса
+        initiator_col, responsible_col, status_col = find_column_positions(df)
         support_operator = None
-        # Чтение файла Excel
-        df = pd.read_excel(file_path, sheet_name='TDSheet', skiprows=12)
-
-        initiator_col = 'Unnamed: 16' if is_massive_file else 'Unnamed: 17'
-        responsible_col = 'Unnamed: 22'
-
         requests_to_create = []
         total_requests = 0  # Счётчик успешных запросов
         for index, row in df.iterrows():
@@ -116,7 +131,7 @@ def run_classification_script(file_path, file_path_entry=None):
                             description = df.iloc[index + 1, 0] if index + 1 < len(df) else ''
                             initiator = row[initiator_col]
                             responsible = row[responsible_col]
-                            status = row['Unnamed: 25']
+                            status = row[status_col]
 
                             if classification and pd.notna(initiator) and pd.notna(responsible) and support_operator:
                                 new_request = add_request(number, date, description, classification, initiator,

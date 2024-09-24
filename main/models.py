@@ -379,7 +379,6 @@ class Achievement(models.Model):
     reward_experience = models.IntegerField(null=True, blank=True, default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
     image = models.ImageField(upload_to='achievements/', default='default.jpg')
-    # Удаляем поле can_be_earned_once
     difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='Medium')  # Сложность
     is_award = models.BooleanField(default=False)  # Это награда?
 
