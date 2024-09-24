@@ -863,24 +863,23 @@ def get_user(request):
         last_login = employee.last_login.strftime('%Y-%m-%d %H:%M:%S') if employee.last_login else 'Never'
         completed_tests_count = TestAttempt.objects.filter(employee=employee, status=TestAttempt.PASSED).count()
 
-        # Отображаем только approved жалобы и похвалы
+        # Жалобы и похвалы
         complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved').count()
         praises_count = Feedback.objects.filter(target_employee=employee, type="praise", status='approved').count()
 
         complaints = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved')
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
+        # Вопросы и ответы опроса
         survey_questions = SurveyQuestion.objects.all()
         survey_answers = SurveyAnswer.objects.filter(employee=employee)
 
         answers_with_text = []
         answers_without_text = []
 
-        # Проверяем и заполняем вопрос "Дата рождения"
         for question in survey_questions:
             answer = survey_answers.filter(question=question).first()
             if question.question_text.lower() == "дата рождения":
-                # Если дата рождения у сотрудника существует, заполняем ответ
                 if employee.birth_date:
                     birth_date_str = employee.birth_date.strftime('%Y-%m-%d')
                     answers_with_text.append({
@@ -905,26 +904,57 @@ def get_user(request):
 
         answers = answers_with_text + answers_without_text
 
-        # Получаем достижения сотрудника
+        # Достижения сотрудника
         employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
         employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
 
-        # Получаем обращения
+        # Обращения
         requests = Request.objects.filter(support_operator=employee)
         total_requests = requests.count()
         requests_this_month = requests.filter(date__month=datetime.now().month).count()
+        requests_this_week = requests.filter(date__gte=datetime.now() - timedelta(days=7)).count()
 
-        # Группируем обращения по классификации
+        # Группировка по классификациям
         classifications = requests.values('classification__name').annotate(count=models.Count('id'))
         grouped_requests = {c['classification__name']: c['count'] for c in classifications}
 
         request_statistics = {
             'total_requests': total_requests,
             'requests_this_month': requests_this_month,
+            'requests_this_week': requests_this_week,
             'grouped_requests': grouped_requests,
         }
 
-        # Получаем инвентарь сотрудника
+        # Количество отработанных дней
+        worked_days = ShiftHistory.objects.filter(employee=employee).values('date').distinct().count()
+
+        # Количество заработанных A-коинов
+        acoin_amount = AcoinTransaction.objects.filter(employee=employee).aggregate(total=models.Sum('amount'))['total'] or 0
+
+        # Количество опозданий
+        total_lates = ShiftHistory.objects.filter(
+            employee=employee,
+            actual_start__gt=models.F('scheduled_start')  # Фильтр на опоздания
+        ).count()
+
+        # Наибольшее количество дней без опозданий
+        shift_history = ShiftHistory.objects.filter(employee=employee).order_by('date')
+        max_days_without_late = 0
+        current_streak = 0
+        last_date = None
+
+        for shift in shift_history:
+            if shift.actual_start <= shift.scheduled_start:
+                if last_date and (shift.date - last_date).days == 1:
+                    current_streak += 1
+                else:
+                    current_streak = 1
+                max_days_without_late = max(max_days_without_late, current_streak)
+            else:
+                current_streak = 0
+            last_date = shift.date
+
+        # Инвентарь
         employee_items = EmployeeItem.objects.filter(employee=employee)
         employee_items_data = EmployeeItemSerializer(employee_items, many=True).data
 
@@ -937,6 +967,11 @@ def get_user(request):
             'complaints_details': FeedbackSerializer(complaints, many=True).data,
             'praises_details': FeedbackSerializer(praises, many=True).data,
             'request_statistics': request_statistics,
+            'worked_days': worked_days,
+            'acoin_amount': acoin_amount,
+            'experience': employee.experience,
+            'total_lates': total_lates,
+            'max_days_without_late': max_days_without_late,
         }
 
         return Response({
@@ -945,11 +980,12 @@ def get_user(request):
             'statistics': statistics,
             'answers': answers,
             'achievements': employee_achievements_data,
-            'inventory': employee_items_data,  # Добавляем инвентарь в профиль
+            'inventory': employee_items_data,
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 
 @api_view(['GET'])

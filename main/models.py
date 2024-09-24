@@ -287,6 +287,7 @@ class ShiftHistory(models.Model):
     karma_change = models.IntegerField()
     experience_change = models.IntegerField()
     updated_at = models.DateTimeField(auto_now=True)
+    late = models.BooleanField(default=False)  # Добавляем поле для опозданий
 
     class Meta:
         unique_together = ('employee', 'date', 'scheduled_start', 'scheduled_end')
@@ -295,6 +296,7 @@ class ShiftHistory(models.Model):
 
     def __str__(self):
         return f"{self.employee} - {self.date} - {self.scheduled_start}-{self.scheduled_end}"
+
 class SystemSetting(models.Model):
     key = models.CharField(max_length=100, unique=True)
     value = models.CharField(max_length=255)
@@ -377,7 +379,7 @@ class Achievement(models.Model):
     reward_experience = models.IntegerField(null=True, blank=True, default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
     image = models.ImageField(upload_to='achievements/', default='default.jpg')
-    can_be_earned_once = models.BooleanField(default=False)  # Можно получить один раз
+    # Удаляем поле can_be_earned_once
     difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='Medium')  # Сложность
     is_award = models.BooleanField(default=False)  # Это награда?
 
@@ -412,7 +414,6 @@ class Achievement(models.Model):
                 # Обработка логики для наград
                 if not self.name or not self.description or not self.image:
                     raise ValidationError('For an award, name, description, and image are required.')
-
 
 # Модель предмета в магазине
 class Item(models.Model):
@@ -515,20 +516,46 @@ class EmployeeAchievement(models.Model):
     assigned_manually = models.BooleanField(default=False)  # Флаг для вручную назначенных наград
     date_awarded = models.DateTimeField(null=True, blank=True)  # Дата получения достижения
 
+    class Meta:
+        unique_together = ('employee', 'achievement')  # Гарантирует уникальность для каждого сочетания сотрудник-достижение
+
     def increment_progress(self):
-        if not self.assigned_manually:
-            self.progress += 1
-            if self.achievement.required_count is not None and self.progress >= self.achievement.required_count:
-                self.level_up()
-            self.save()
+        """
+        Увеличивает прогресс достижения. Если достижение уже выдано и это уникальное достижение,
+        дальнейшее увеличение прогресса не производится.
+        """
+        if self.assigned_manually:
+            # Не увеличиваем прогресс для вручную назначенных достижений
+            return
+
+        if self.date_awarded:
+            # Достижение уже выдано, дальнейший прогресс не отслеживается
+            return
+
+        self.progress += 1
+
+        if (self.achievement.required_count is not None and
+            self.progress >= self.achievement.required_count):
+            self.reward_employee()
+
+        self.save()
 
     def reward_employee(self):
+        """
+        Награждает сотрудника за достижение, добавляет опыт и валюту, устанавливает дату получения.
+        """
         employee = self.employee
         reward_currency = self.achievement.reward_currency
         reward_experience = self.achievement.reward_experience
+
+        # Добавление опыта и валюты сотруднику
         employee.add_experience(reward_experience)
         employee.add_acoins(reward_currency)
-        self.date_awarded = timezone.now()  # Устанавливаем дату получения
+
+        # Устанавливаем дату получения достижения
+        self.date_awarded = timezone.now()
+
+        # Сохраняем изменения
         self.save()
 
 
