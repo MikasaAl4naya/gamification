@@ -916,7 +916,7 @@ def get_user(request):
         requests_this_week = requests.filter(date__gte=datetime.now() - timedelta(days=7)).count()
 
         # Группировка по классификациям
-        classifications = requests.values('classification__name').annotate(count=models.Count('id'))
+        classifications = requests.values('classification__name').annotate(count=models.Count('number'))
         grouped_requests = {c['classification__name']: c['count'] for c in classifications}
 
         request_statistics = {
