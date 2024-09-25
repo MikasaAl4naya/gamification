@@ -721,6 +721,7 @@ class TestAttempt(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=NOT_STARTED)
     test_results = models.JSONField(null=True, blank=True, default=dict)
     free_response = models.TextField(null=True, blank=True)
+    description = models.TextField(null=True, blank=True)  # Добавляем поле description
     def __str__(self):
         return f'{self.test.name} - {self.employee.username}'
 

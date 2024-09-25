@@ -188,25 +188,29 @@ def log_model_save(sender, instance, created, **kwargs):
         description=change_description
     )
 
+
 def _handle_test_attempt_log(instance, created, changes, employee, sender, action):
     """
     Обрабатывает логи для модели TestAttempt.
     """
     test_name = instance.test.name if hasattr(instance, 'test') and instance.test else _('Неизвестный тест')
+
     if created:
         return f"{employee.get_full_name()} начал проходить тест '{test_name}'"
     else:
-        description_lower = instance.description.lower()
-        if "провалил тест" in description_lower:
+        status_lower = instance.status.lower()
+
+        if instance.status == TestAttempt.PASSED:
+            return f"{employee.get_full_name()} успешно прошёл тест '{test_name}'"
+        elif instance.status == TestAttempt.FAILED:
             return f"{employee.get_full_name()} провалил тест '{test_name}'"
-        elif "успешно прошел тест" in description_lower:
-            return f"{employee.get_full_name()} успешно прошел тест '{test_name}'"
-        elif "отправлен на модерацию" in description_lower:
+        elif instance.status == TestAttempt.MODERATION:
             return f"{employee.get_full_name()} завершил тест '{test_name}', и он отправлен на модерацию"
-        elif "начал проходить тест" in description_lower:
+        elif instance.status == TestAttempt.IN_PROGRESS:
             return f"{employee.get_full_name()} начал прохождение теста '{test_name}'"
         else:
             return "; ".join(changes) if changes else f"{sender.__name__} {action}"
+
 
 def _handle_test_log(instance, created, employee, sender, action):
     """
