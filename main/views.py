@@ -2668,14 +2668,14 @@ def moderate_test_attempt(request, test_attempt_id):
     except KarmaSettings.DoesNotExist:
         experience_awarded = 10  # Дефолтное значение опыта, если настройка не найдена
 
-    moderator.add_experience(experience_awarded, source=f'За модерацию теста{test_attempt.test.name}')
+    moderator.add_experience(experience_awarded, source=f'За модерацию теста {test_attempt.test.name}')
     moderator.save()
 
     # Начисление опыта сотруднику за прохождение теста
     test_employee = test_attempt.employee
     experience_for_employee = test_attempt.test.experience_points
     if test_attempt.status == TestAttempt.PASSED:
-        test_employee.add_experience(experience_for_employee, source='За прохождение теста')
+        test_employee.add_experience(experience_for_employee, source=f'За прохождение теста {test_attempt.test.name}')
 
     test_employee.save()
 
@@ -2868,7 +2868,7 @@ class CompleteTestView(EmployeeAPIView):
         if total_score >= Decimal(str(test.passing_score)):
             test_attempt.status = TestAttempt.PASSED
             # Присваиваем опыт за прохождение теста
-            employee.add_experience(Test.experience_points, source="За прохождение теста")
+            employee.add_experience(Test.experience_points, source=f"За прохождение теста {test.name}")
             print(f"Added {Test.experience_points} experience points to {employee.username} for passing test {test_id}")
         elif has_text_questions:
             test_attempt.status = TestAttempt.MODERATION
