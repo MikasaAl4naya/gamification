@@ -122,21 +122,21 @@ class Employee(AbstractUser):
         if description is None:
             if change_type == 'experience':
                 if new_value > old_value:
-                    description = f"Сотрудник {self.get_full_name()} получил {new_value - old_value} очков опыта"
+                    description = f"Сотрудник {self.get_full_name()} получил {new_value - old_value} очков опыта."
                 else:
-                    description = f"У сотрудника {self.get_full_name()} было отнято {old_value - new_value} очков опыта"
+                    description = f"У сотрудника {self.get_full_name()} было отнято {old_value - new_value} очков опыта."
             elif change_type == 'karma':
                 if new_value > old_value:
-                    description = f"Сотрудник {self.get_full_name()} получил {new_value - old_value} кармы"
+                    description = f"Сотрудник {self.get_full_name()} получил {new_value - old_value} кармы."
                 else:
-                    description = f"У сотрудника {self.get_full_name()} было отнято {old_value - new_value} кармы"
+                    description = f"У сотрудника {self.get_full_name()} было отнято {old_value - new_value} кармы."
             elif change_type == 'acoins':
                 if new_value > old_value:
-                    description = f"Сотрудник {self.get_full_name()} получил {new_value - old_value} акоинов"
+                    description = f"Сотрудник {self.get_full_name()} получил {new_value - old_value} акоинов."
                 else:
-                    description = f"У сотрудника {self.get_full_name()} было отнято {old_value - new_value} акоинов"
+                    description = f"У сотрудника {self.get_full_name()} было отнято {old_value - new_value} акоинов."
             else:
-                description = f"Сотрудник {self.get_full_name()} изменил {change_type}: {old_value} -> {new_value}"
+                description = f"Сотрудник {self.get_full_name()} изменил {change_type}: {old_value} -> {new_value}."
 
         # Создаем запись лога с изменениями
         EmployeeLog.objects.create(
@@ -148,16 +148,35 @@ class Employee(AbstractUser):
             description=description
         )
 
-    def increase_experience(self, amount):
+    def set_karma(self, amount, source="Изменили вручную"):
+        """ Устанавливает карму напрямую """
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
 
-        new_experience = self.experience + amount
-        if new_experience < 0:
-            raise ValidationError("Experience cannot be negative.")
+        if amount < 0:
+            raise ValidationError("Karma cannot be negative.")
 
-        self.set_experience(new_experience)
+        old_karma = self.karma
+        self.karma = amount
+        self.log_change('karma', old_karma, self.karma, source=source)
+        self.save()
 
+    def add_karma(self, amount, source="Изменили вручную"):
+        """ Увеличивает карму на указанное количество и логирует изменение """
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
+
+        old_karma = self.karma
+        new_karma = old_karma + amount
+
+        if new_karma < 0:
+            raise ValidationError("Karma cannot be negative.")
+
+        self.karma = new_karma
+        self.log_change('karma', old_karma, self.karma, source=source)
+        self.save()
+
+    # Уже существующие методы для experience
     def set_experience(self, amount, source="Изменили вручную"):
         """ Устанавливает опыт напрямую или увеличивает его, если это вызов для увеличения. """
         if not self.is_active:
@@ -168,26 +187,26 @@ class Employee(AbstractUser):
 
         old_experience = self.experience
         self.experience = amount
-        self.log_change('experience', old_experience, self.experience, source, )
+        self.log_change('experience', old_experience, self.experience, source=source)
         self.check_level_up()
         self.save()
 
     def add_experience(self, experience, source="Изменили вручную"):
         """ Увеличивает опыт на указанное количество и логирует изменение. """
-        print(f"Adding experience: {experience} to user: {self.username}, source: {source}")
-
         if not self.is_active:
-            print(f"Error: Attempt to modify experience of deactivated account: {self.username}")
             raise ValidationError("Cannot modify a deactivated account.")
 
         if experience is not None:
             old_experience = self.experience
             new_experience = old_experience + experience
-            print(f"Old experience: {old_experience}, New experience: {new_experience}")
 
-            # Используем set_experience для фактического обновления опыта
-            self.set_experience(new_experience, source)
-            print(f"Successfully updated experience for user: {self.username}")
+            if new_experience < 0:
+                raise ValidationError("Experience cannot be negative.")
+
+            self.experience = new_experience
+            self.log_change('experience', old_experience, self.experience, source=source)
+            self.check_level_up()
+            self.save()
 
     def check_level_up(self):
         leveled_up_or_down = False  # Флаг для отслеживания, был ли уровень изменен
@@ -439,18 +458,25 @@ class Request(models.Model):
         ('Completed', 'Завершено'),
     ]
 
+    number = models.CharField(max_length=100, primary_key=True, unique=True)  # Сделать первичным ключом
     classification = models.ForeignKey(Classifications, on_delete=models.CASCADE)
     responsible = models.CharField(max_length=255)
     support_operator = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='registered_requests', null=True)
     initiator = models.CharField(max_length=255)
     status = models.CharField(max_length=100, choices=STATUS_CHOICES)
     description = models.TextField(null=True, blank=True)
-    number = models.CharField(max_length=100)
     date = models.DateTimeField()
-    is_massive = models.BooleanField(default=False)  # Новое поле для массовых обращени
+    is_massive = models.BooleanField(default=False)  # Новое поле для массовых обращений
 
     def __str__(self):
         return f'{self.number} - {self.get_status_display()}'
+
+CHANGE_TYPE_CHOICES = [
+    ('experience', 'Опыт'),
+    ('karma', 'Карма'),
+    ('acoins', 'Acoins'),
+    ('other', 'Другое'),
+]
 
 
 class EmployeeLog(models.Model):
@@ -467,6 +493,11 @@ class EmployeeLog(models.Model):
     def __str__(self):
         source_info = f" - {self.source}" if self.source else ""
         return f"{self.employee} - {self.change_type} at {self.timestamp}{source_info}"
+
+    def value_change(self):
+        """Возвращает разницу между новым и старым значением."""
+        return self.new_value - self.old_value
+
 
 class Acoin(models.Model):
     employee = models.OneToOneField(Employee, on_delete=models.CASCADE, blank=False, null=True)

@@ -1,9 +1,10 @@
 from django.contrib.admin.models import LogEntry
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.db.models.signals import post_save, pre_delete, post_delete
 from django.dispatch import receiver
 from django.forms import model_to_dict
-
+from django.utils.translation import gettext as _
 from .models import TestAttempt, AcoinTransaction, Employee, create_acoin_transaction, TestQuestion, Test, Acoin, \
     Request, Achievement, EmployeeAchievement, ExperienceMultiplier, EmployeeActionLog, ShiftHistory, EmployeeLog, \
     UserSession
@@ -70,13 +71,13 @@ def award_experience(sender, instance, created, **kwargs):
         # Проверяем наличие оператора поддержки
         support_operator = instance.support_operator
         if not support_operator:
-            print(f"No support operator found for request {instance.id}")
+            print(f"No support operator found for request {instance.number}")
             return
 
         # Проверяем, существует ли опыт по классификации
         experience_points = getattr(instance.classification, 'experience_points', None)
         if not experience_points:
-            print(f"No experience points found for classification in request {instance.id}")
+            print(f"No experience points found for classification in request {instance.number}")
             return
 
         # Логика начисления опыта
@@ -133,7 +134,8 @@ def update_achievement_progress(sender, instance, **kwargs):
 @receiver(post_save)
 def log_model_save(sender, instance, created, **kwargs):
     # Исключаем отслеживание определенных моделей
-    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession, LogEntry]:
+    excluded_models = [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession, LogEntry]
+    if sender in excluded_models:
         return
 
     employee = None
@@ -142,79 +144,139 @@ def log_model_save(sender, instance, created, **kwargs):
     elif hasattr(instance, 'user'):
         employee = instance.user
 
-    if employee:
-        action = 'создано' if created else 'обновлено'
+    if not employee:
+        return  # Если нет связанного сотрудника, не логируем
 
-        # Получаем текущие данные модели
-        current_data = model_to_dict(instance)
+    action = 'создано' if created else 'обновлено'
 
-        # Получаем предыдущие данные модели (если обновление)
-        if not created:
+    # Получаем текущие данные модели
+    current_data = model_to_dict(instance)
+
+    # Получаем предыдущие данные модели (если обновление)
+    old_data = {}
+    if not created:
+        try:
             old_instance = sender.objects.get(pk=instance.pk)
             old_data = model_to_dict(old_instance)
+        except ObjectDoesNotExist:
+            pass  # В редких случаях объект может быть удален до сигнала
+
+    changes = []
+    for field, value in current_data.items():
+        old_value = old_data.get(field, None)
+        if old_value != value:
+            # Переводим поле и формируем понятную строку изменений
+            field_name = field_translation(field)
+            changes.append(f"{field_name}: '{old_value}' -> '{value}'")
+
+    # Специальная логика для различных моделей
+    if sender.__name__ == 'TestAttempt':
+        change_description = _handle_test_attempt_log(instance, created, changes, employee, sender, action)
+    elif sender.__name__ == 'Test' and created:
+        change_description = _handle_test_log(instance, created, employee, sender, action)
+    elif sender.__name__ == 'EmployeeAchievement':
+        change_description = _handle_employee_achievement_log(instance, old_data, current_data, employee, sender, action)
+    else:
+        change_description = "; ".join(changes) if changes else f"{sender.__name__} {action}"
+
+    # Логируем изменения
+    EmployeeActionLog.objects.create(
+        employee=employee,
+        action_type=action,
+        model_name=sender.__name__,
+        object_id=str(instance.pk),
+        description=change_description
+    )
+
+def _handle_test_attempt_log(instance, created, changes, employee, sender, action):
+    """
+    Обрабатывает логи для модели TestAttempt.
+    """
+    test_name = instance.test.name if hasattr(instance, 'test') and instance.test else _('Неизвестный тест')
+    if created:
+        return f"{employee.get_full_name()} начал проходить тест '{test_name}'"
+    else:
+        description_lower = instance.description.lower()
+        if "провалил тест" in description_lower:
+            return f"{employee.get_full_name()} провалил тест '{test_name}'"
+        elif "успешно прошел тест" in description_lower:
+            return f"{employee.get_full_name()} успешно прошел тест '{test_name}'"
+        elif "отправлен на модерацию" in description_lower:
+            return f"{employee.get_full_name()} завершил тест '{test_name}', и он отправлен на модерацию"
+        elif "начал проходить тест" in description_lower:
+            return f"{employee.get_full_name()} начал прохождение теста '{test_name}'"
         else:
-            old_data = {}
+            return "; ".join(changes) if changes else f"{sender.__name__} {action}"
 
-        changes = []
-        for field, value in current_data.items():
-            old_value = old_data.get(field, None)
-            if old_value != value:
-                # Переводим поле и формируем понятную строку изменений
-                field_name = field_translation(field)
-                changes.append(f"{field_name}: '{old_value}' -> '{value}'")
+def _handle_test_log(instance, created, employee, sender, action):
+    """
+    Обрабатывает логи для модели Test.
+    """
+    test_name = instance.name
+    if created:
+        return f"{employee.get_full_name()} создал тест '{test_name}'"
+    else:
+        return f"{employee.get_full_name()} обновил тест '{test_name}'"
 
-        # Специальная логика для модификации логов TestAttempt
-        if sender.__name__ == 'TestAttempt':
-            test_name = instance.test.name if instance.test else 'Неизвестный тест'
-            if created:
-                change_description = f"Сотрудник {employee.get_full_name()} начал проходить тест '{test_name}'"
-            elif 'status' in old_data:
-                if current_data['status'] == 'On Moderation':
-                    change_description = f"Сотрудник {employee.get_full_name()} завершил тест '{test_name}' и он отправлен на модерацию"
-                elif current_data['status'] == 'Passed':
-                    change_description = f"Сотрудник {employee.get_full_name()} успешно прошел тест '{test_name}'"
-                elif current_data['status'] == 'Failed':
-                    change_description = f"Сотрудник {employee.get_full_name()} провалил тест '{test_name}'"
-                else:
-                    change_description = "; ".join(changes) if changes else f"{sender.__name__} {action}"
-            else:
-                change_description = "; ".join(changes) if changes else f"{sender.__name__} {action}"
+def _handle_employee_achievement_log(instance, old_data, current_data, employee, sender, action):
+    """
+    Обрабатывает логи для модели EmployeeAchievement.
+    """
+    achievement_name = instance.achievement.name if hasattr(instance, 'achievement') and instance.achievement else _("Неизвестное достижение")
+    changes = []
 
-        # Специальная логика для создания теста
-        elif sender.__name__ == 'Test' and created:
-            test_name = instance.name
-            change_description = f"Сотрудник {employee.get_full_name()} создал тест '{test_name}'"
+    if old_data.get('progress') != current_data.get('progress'):
+        changes.append(_(
+            f"Прогресс по достижению '{achievement_name}' изменён с {old_data.get('progress')} до {current_data.get('progress')}"
+        ))
 
-        # Логика для достижения (EmployeeAchievement)
-        elif sender.__name__ == 'EmployeeAchievement':
-            achievement_name = instance.achievement.name if instance.achievement else "Неизвестное достижение"
-            progress_change = level_change = None
+    if old_data.get('level') != current_data.get('level'):
+        changes.append(_(
+            f"Уровень по достижению '{achievement_name}' изменён с {old_data.get('level')} до {current_data.get('level')}"
+        ))
 
-            if old_data.get('progress') != current_data['progress']:
-                progress_change = f"Прогресс по достижению '{achievement_name}' изменён с {old_data.get('progress')} до {current_data['progress']}"
+    return "; ".join(changes) if changes else f"{sender.__name__} {action}"
 
-            if old_data.get('level') != current_data['level']:
-                level_change = f"Уровень по достижению '{achievement_name}' изменён с {old_data.get('level')} до {current_data['level']}"
+# Вспомогательная функция для перевода полей в читабельный вид
+def field_translation(field):
+    field_translations = {
+        'id': 'ID',
+        'employee': 'Сотрудник',
+        'achievement': 'Достижение',
+        'progress': 'Прогресс',
+        'level': 'Уровень',
+        'status': 'Статус',
+        'test': 'Тест',
+        'start_time': 'Время начала',
+        'end_time': 'Время окончания',
+        'attempts': 'Попытки',
+        'test_results': 'Результаты теста',
+        # Добавьте другие переводы полей по необходимости
+    }
+    return field_translations.get(field, field)  # Возвращаем перевод или само поле, если перевода нет
 
-            # Логируем только если прогресс или уровень реально изменились
-            if progress_change or level_change:
-                change_description = "; ".join(filter(None, [progress_change, level_change]))
-            else:
-                change_description = f"{sender.__name__} {action}"
+@receiver(post_delete)
+def log_model_delete(sender, instance, **kwargs):
+    excluded_models = [EmployeeActionLog, ShiftHistory, EmployeeLog, Request]
+    if sender in excluded_models:
+        return
 
-        # Общий случай для всех других моделей
-        else:
-            change_description = "; ".join(changes) if changes else f"{sender.__name__} {action}"
+    employee = None
+    if hasattr(instance, 'employee'):
+        employee = instance.employee
+    elif hasattr(instance, 'user'):
+        employee = instance.user
 
-        # Логируем изменения
-        EmployeeActionLog.objects.create(
-            employee=employee,
-            action_type=action,
-            model_name=sender.__name__,
-            object_id=str(instance.pk),
-            description=change_description
-        )
+    if not employee:
+        return
 
+    EmployeeActionLog.objects.create(
+        employee=employee,
+        action_type='deleted',
+        model_name=sender.__name__,
+        object_id=str(instance.pk),
+        description=f"{sender.__name__} был удален"
+    )
 # Вспомогательная функция для перевода полей в читабельный вид
 def field_translation(field):
     field_translations = {
@@ -231,28 +293,6 @@ def field_translation(field):
         'test_results': 'Результаты теста',
     }
     return field_translations.get(field, field)  # Возвращаем перевод или само поле, если перевода нет
-
-
-@receiver(post_delete)
-def log_model_delete(sender, instance, **kwargs):
-    if sender in [EmployeeActionLog, ShiftHistory, EmployeeLog, Request]:
-        return
-
-    employee = None
-    if hasattr(instance, 'employee'):
-        employee = instance.employee
-    elif hasattr(instance, 'user'):
-        employee = instance.user
-
-    if employee:
-        EmployeeActionLog.objects.create(
-            employee=employee,
-            action_type='deleted',
-            model_name=sender.__name__,
-            object_id=str(instance.pk),
-            description=f"{sender.__name__} был удален"
-        )
-
 
 
 @receiver(post_save, sender=Request)

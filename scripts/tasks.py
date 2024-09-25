@@ -93,13 +93,12 @@ def find_start_of_table(df):
     return None, None
 
 
-
-
-
 def time_str_to_time_obj(time_str):
     """ Преобразование строкового времени в объект datetime.time. """
     return datetime.strptime(time_str, '%H:%M').time()
 
+
+# Ваш скрипт для обновления кармы и опыта
 
 def update_employee_karma(file_path):
     df = pd.read_excel(file_path)
@@ -214,46 +213,48 @@ def update_employee_karma(file_path):
 
                     if (shift_record.actual_start != actual_start) or (shift_record.actual_end != actual_end):
                         # Обратное применение предыдущих изменений
-                        employee.karma -= shift_record.karma_change
-                        employee.experience -= shift_record.experience_change
+                        if shift_record.karma_change != 0:
+                            employee.set_karma(employee.karma - shift_record.karma_change, source=f"Обновление смены {shift_date}")
+                        if shift_record.experience_change != 0:
+                            employee.set_experience(employee.experience - shift_record.experience_change, source=f"Обновление смены {shift_date}")
 
                         # Установка новых фактических времен
                         shift_record.actual_start = actual_start
                         shift_record.actual_end = actual_end
 
-                        if is_on_time:
-                            try:
-                                settings = KarmaSettings.objects.get(operation_type='shift_completion')
-                                shift_record.karma_change = settings.karma_change
-                                shift_record.experience_change = settings.experience_change
-                                employee.karma += settings.karma_change
-                                employee.experience += settings.experience_change
-                                print(f"Карма и опыт начислены: Карма = {settings.karma_change}, Опыт = {settings.experience_change}")
-                            except KarmaSettings.DoesNotExist:
-                                print("Настройки для правильного выполнения смены не найдены")
-                                shift_record.karma_change = 0
-                                shift_record.experience_change = 0
-                        else:
-                            try:
-                                settings = KarmaSettings.objects.get(operation_type='late_penalty', level=late_level)
-                                shift_record.karma_change = -settings.karma_change
-                                shift_record.experience_change = 0  # Устанавливаем опыт в 0 при опоздании
-                                employee.karma -= settings.karma_change
-                                print(f"Штраф за опоздание: Карма уменьшена на {settings.karma_change}")
-                            except KarmaSettings.DoesNotExist:
-                                print("Настройки для штрафа за опоздание не найдены")
-                                shift_record.karma_change = 0
+                    if is_on_time:
+                        try:
+                            settings = KarmaSettings.objects.get(operation_type='shift_completion')
+                            shift_record.karma_change = settings.karma_change
+                            shift_record.experience_change = settings.experience_change
+                            employee.add_karma(settings.karma_change, source=f"Смена {shift_date}, Опоздание: Нет")
+                            employee.add_experience(settings.experience_change, source=f"Смена {shift_date}, Опоздание: Нет")
+                            print(f"Карма и опыт начислены: Карма = {settings.karma_change}, Опыт = {settings.experience_change}")
+                        except KarmaSettings.DoesNotExist:
+                            print("Настройки для правильного выполнения смены не найдены")
+                            shift_record.karma_change = 0
+                            shift_record.experience_change = 0
+                    else:
+                        try:
+                            settings = KarmaSettings.objects.get(operation_type='late_penalty', level=late_level)
+                            shift_record.karma_change = -settings.karma_change
+                            shift_record.experience_change = 0  # Устанавливаем опыт в 0 при опоздании
+                            employee.add_karma(-settings.karma_change, source=f"Смена {shift_date}, Опоздание уровень {late_level}")
+                            print(f"Штраф за опоздание: Карма уменьшена на {settings.karma_change}")
+                        except KarmaSettings.DoesNotExist:
+                            print("Настройки для штрафа за опоздание не найдены")
+                            shift_record.karma_change = 0
 
-                        # Сохраняем изменения в ShiftHistory и сотруднике
-                        shift_record.save()
-                        employee.save()
+                    # Сохраняем изменения в ShiftHistory и сотруднике
+                    shift_record.save()
+                    employee.save()
 
-                        print(f"Карма и опыт сохранены для {employee.first_name} {employee.last_name}: Карма = {employee.karma}, Опыт = {employee.experience}")
+                    print(f"Карма и опыт сохранены для {employee.first_name} {employee.last_name}: Карма = {employee.karma}, Опыт = {employee.experience}")
 
-                # Обновление последней даты изменения кармы
-                employee.last_karma_update = timezone.make_aware(datetime.combine(file_date, time.min))
-                employee.save()
-                print(f"Дата последнего обновления кармы обновлена для {employee.first_name} {employee.last_name}: {employee.last_karma_update}")
+            # Обновление последней даты изменения кармы
+            employee.last_karma_update = timezone.make_aware(datetime.combine(file_date, time.min))
+            employee.save()
+            print(f"Дата последнего обновления кармы обновлена для {employee.first_name} {employee.last_name}: {employee.last_karma_update}")
 
         except Employee.DoesNotExist:
             print(f"Сотрудник с именем {full_name} не существует.")

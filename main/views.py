@@ -17,6 +17,7 @@ from django.views.decorators.http import require_POST
 from openpyxl.reader.excel import load_workbook
 
 from scripts.tasks import update_employee_karma
+from . import permissions
 from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin, HasPermission
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
@@ -1017,8 +1018,11 @@ class FeedbackDetailView(generics.RetrieveAPIView):
         # Дополнительные фильтры или логика, если потребуется
         return super().get_queryset()
 
-class EmployeeLogViewSet(BasePermissionViewSet):
-    queryset = EmployeeLog.objects.all()
+class EmployeeLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API endpoint для просмотра логов изменений сотрудников.
+    """
+    queryset = EmployeeLog.objects.all().order_by('-timestamp')
     serializer_class = EmployeeLogSerializer
 
 class SurveyQuestionView(APIView):
@@ -1397,7 +1401,7 @@ class StoreView(APIView):
                 'acoins',
                 old_acoin_amount,
                 employee_acoin.amount,
-                source='Item Purchase',
+                source='Покупка предмета',
                 description=f"{employee.get_full_name()} приобрел {item.description} за {item.price} акоинов"
             )
 
