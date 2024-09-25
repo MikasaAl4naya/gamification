@@ -2668,7 +2668,7 @@ def moderate_test_attempt(request, test_attempt_id):
     except KarmaSettings.DoesNotExist:
         experience_awarded = 10  # Дефолтное значение опыта, если настройка не найдена
 
-    moderator.add_experience(experience_awarded, source='За модерацию теста')
+    moderator.add_experience(experience_awarded, source=f'За модерацию теста{test_attempt.test.name}')
     moderator.save()
 
     # Начисление опыта сотруднику за прохождение теста

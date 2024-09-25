@@ -1,3 +1,5 @@
+import re
+
 from django.contrib.auth.models import User, Permission, Group
 from django.utils.crypto import get_random_string
 from rest_framework import serializers, viewsets
@@ -121,11 +123,48 @@ class ExperienceMultiplierSerializer(serializers.ModelSerializer):
         model = ExperienceMultiplier
         fields = ['name', 'multiplier']
 class EmployeeLogSerializer(serializers.ModelSerializer):
+    readable_description = serializers.SerializerMethodField()
+
     class Meta:
         model = EmployeeLog
-        fields = '__all__'
+        fields = [
+            'employee',
+            'change_type',
+            'old_value',
+            'new_value',
+            'description',
+            'source',
+            'timestamp',
+            'readable_description'
+        ]
 
-            
+    def get_readable_description(self, obj):
+        """
+        Генерирует более читаемое описание изменений.
+        """
+        employee_name = f"{obj.employee.first_name} {obj.employee.last_name}"
+        change = obj.new_value - obj.old_value  # Вычисляем изменение напрямую
+
+        if obj.change_type == 'experience':
+            if change > 0:
+                return f"{employee_name} получил {change} очков опыта."
+            else:
+                return f"{employee_name} потерял {abs(change)} очков опыта."
+        elif obj.change_type == 'karma':
+            if change > 0:
+                return f"{employee_name} получил {change} кармы."
+            else:
+                return f"{employee_name} потерял {abs(change)} кармы."
+        elif obj.change_type == 'acoins':
+            if change > 0:
+                return f"{employee_name} получил {change} акоинов."
+            else:
+                return f"{employee_name} потерял {abs(change)} акоинов."
+        else:
+            # Обработка других типов изменений
+            return obj.description if obj.description else f"{employee_name} изменил {obj.change_type}: {obj.old_value} -> {obj.new_value}."
+
+
 class EmployeeActionLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployeeActionLog
@@ -329,13 +368,24 @@ class GroupSerializer(serializers.ModelSerializer):
         model = Group
         fields = ['id', 'name', 'permissions', 'permissions_info']
 
+from rest_framework import serializers
+from .models import EmployeeActionLog
+
+
 class EmployeeActionLogSerializer(serializers.ModelSerializer):
     readable_description = serializers.SerializerMethodField()
 
     class Meta:
         model = EmployeeActionLog
-        fields = ['employee', 'action_type', 'model_name', 'object_id', 'description', 'created_at',
-                  'readable_description']
+        fields = [
+            'employee',
+            'action_type',
+            'model_name',
+            'object_id',
+            'description',
+            'created_at',
+            'readable_description'
+        ]
 
     def get_readable_description(self, obj):
         """
@@ -344,25 +394,124 @@ class EmployeeActionLogSerializer(serializers.ModelSerializer):
         # Получаем полное имя сотрудника
         employee_name = f"{obj.employee.first_name} {obj.employee.last_name}"
 
-        # Специальная логика для обработки попыток тестов
+        # Определяем шаблоны для различных моделей и типов действий
         if obj.model_name == 'TestAttempt':
-            # Обрабатываем поле description в зависимости от того, что в нем содержится
-            if "провалил тест" in obj.description:
-                return f"{employee_name} провалил тест."
-            elif "успешно прошел тест" in obj.description:
-                return f"{employee_name} успешно прошел тест."
-            elif "отправлен на модерацию" in obj.description:
-                return f"{employee_name} завершил тест, и он отправлен на модерацию."
-            elif "начал проходить тест" in obj.description:
-                return f"{employee_name} начал прохождение теста."
+            return self._handle_test_attempt(obj, employee_name)
+        elif obj.model_name == 'Test':
+            return self._handle_test(obj, employee_name)
+        elif obj.model_name == 'EmployeeAchievement':
+            return self._handle_employee_achievement(obj, employee_name)
+        else:
+            return self._handle_general(obj, employee_name)
+
+    def _handle_test_attempt(self, obj, employee_name):
+        """
+        Обрабатывает логи для модели TestAttempt.
+        """
+        test_name = self._extract_field_from_description(obj.description, "тест '", "'")
+        if "провалил тест" in obj.description.lower():
+            return f"{employee_name} провалил тест '{test_name}'."
+        elif "успешно прошел тест" in obj.description.lower():
+            return f"{employee_name} успешно прошёл тест '{test_name}'."
+        elif "отправлен на модерацию" in obj.description.lower():
+            return f"{employee_name} завершил тест '{test_name}', и он отправлен на модерацию."
+        elif "начал проходить тест" in obj.description.lower():
+            return f"{employee_name} начал прохождение теста '{test_name}'."
+        else:
+            return f"{employee_name} обновил TestAttempt (ID: {obj.object_id}). {obj.description}"
+
+    def _handle_test(self, obj, employee_name):
+        """
+        Обрабатывает логи для модели Test.
+        """
+        test_name = self._extract_field_from_description(obj.description, "тест '", "'")
+        if obj.action_type == 'создано':
+            return f"{employee_name} создал тест '{test_name}'."
+        else:
+            return f"{employee_name} обновил тест '{test_name}'."
+
+    def _handle_employee_achievement(self, obj, employee_name):
+        """
+        Обрабатывает логи для модели EmployeeAchievement.
+        """
+        # Предполагаем, что описание содержит информацию о прогрессе и уровне
+        # Пример описания:
+        # "Прогресс по достижению 'Мастер обращений' изменён с 10 до 20; Уровень по достижению 'Мастер обращений' изменён с 1 до 2"
+
+        # Разделяем описание на части
+        parts = obj.description.split('; ')
+        readable_parts = []
+
+        for part in parts:
+            if "Прогресс по достижению" in part:
+                # Извлекаем название достижения и значения прогресса
+                achievement_name, from_val, to_val = self._parse_progress_change(part)
+                readable_parts.append(
+                    f"Прогресс по достижению '{achievement_name}' изменён с {from_val} до {to_val}"
+                )
+            elif "Уровень по достижению" in part:
+                # Извлекаем название достижения и значения уровня
+                achievement_name, from_val, to_val = self._parse_level_change(part)
+                readable_parts.append(
+                    f"Уровень по достижению '{achievement_name}' изменён с {from_val} до {to_val}"
+                )
             else:
-                # Если описание неполное или нестандартное, вернем его как есть
-                return f"{employee_name} {obj.action_type} тест. {obj.description}"
+                # Другие изменения, если есть
+                readable_parts.append(part)
 
-        # Общий случай для всех других моделей
-        return f"{employee_name} {obj.action_type} {obj.model_name} (ID: {obj.object_id}). {obj.description}"
+        # Объединяем все изменения в одно предложение
+        change_description = "; ".join(readable_parts)
+        return f"{employee_name} обновил EmployeeAchievement (ID: {obj.object_id}). {change_description}"
 
+    def _handle_general(self, obj, employee_name):
+        """
+        Обрабатывает логи для всех остальных моделей.
+        """
+        if obj.action_type == 'deleted':
+            return f"{employee_name} удалил {obj.model_name} (ID: {obj.object_id}). {obj.description}"
+        elif obj.action_type == 'создано':
+            return f"{employee_name} создал {obj.model_name} (ID: {obj.object_id}). {obj.description}"
+        elif obj.action_type == 'обновлено':
+            return f"{employee_name} обновил {obj.model_name} (ID: {obj.object_id}). {obj.description}"
+        else:
+            return f"{employee_name} {obj.action_type} {obj.model_name} (ID: {obj.object_id}). {obj.description}"
 
+    def _extract_field_from_description(self, description, start_marker, end_marker):
+        """
+        Вспомогательная функция для извлечения подстроки между двумя маркерами.
+        """
+        try:
+            start = description.index(start_marker) + len(start_marker)
+            end = description.index(end_marker, start)
+            return description[start:end]
+        except ValueError:
+            return "Неизвестный"
+
+    def _parse_progress_change(self, description):
+        """
+        Парсит изменение прогресса из описания.
+        Пример: "Прогресс по достижению 'Мастер обращений' изменён с 10 до 20"
+        Возвращает (achievement_name, from_val, to_val)
+        """
+        pattern = r"Прогресс по достижению '(.+)' изменён с (\d+) до (\d+)"
+        match = re.match(pattern, description)
+        if match:
+            achievement_name, from_val, to_val = match.groups()
+            return achievement_name, from_val, to_val
+        return "Неизвестное достижение", "0", "0"
+
+    def _parse_level_change(self, description):
+        """
+        Парсит изменение уровня из описания.
+        Пример: "Уровень по достижению 'Мастер обращений' изменён с 1 до 2"
+        Возвращает (achievement_name, from_val, to_val)
+        """
+        pattern = r"Уровень по достижению '(.+)' изменён с (\d+) до (\d+)"
+        match = re.match(pattern, description)
+        if match:
+            achievement_name, from_val, to_val = match.groups()
+            return achievement_name, from_val, to_val
+        return "Неизвестное достижение", "0", "0"
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
