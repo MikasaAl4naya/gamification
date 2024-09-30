@@ -700,57 +700,6 @@ class ThemeWithTestsSerializer(serializers.ModelSerializer):
         model = Test
         fields = ['theme', 'tests']
 
-
-class StyleCardSerializer(serializers.Serializer):
-    background_color = serializers.CharField(max_length=7, default='#FFFFFF')
-    background_image = serializers.ImageField(required=False, allow_null=True)
-    border_style = serializers.CharField(default='solid')
-    border_width = serializers.IntegerField(default=0, required=False)
-    border_color = serializers.CharField(max_length=7, default='#000000')
-    use_border = serializers.BooleanField(default=False)
-
-    def to_representation(self, instance):
-        request = self.context.get('request')
-        return {
-            "background_color": instance.background_color,
-            "background_image": request.build_absolute_uri(
-                instance.background_image.url) if instance.background_image else None,
-            "border_style": instance.border_style,
-            "border_width": instance.border_width,
-            "border_color": instance.border_color,
-            "use_border": instance.use_border,
-        }
-
-
-class TypeAchContentSerializer(serializers.Serializer):
-    type = serializers.ChoiceField(choices=Achievement.TYPE_CHOICES)
-    difficulty = serializers.ChoiceField(choices=Achievement.DIFFICULTY_CHOICES)
-    is_award = serializers.BooleanField()
-    request_type = serializers.PrimaryKeyRelatedField(queryset=Classifications.objects.all(), allow_null=True,
-                                                      required=False)
-    required_count = serializers.IntegerField(default=0, required=False)
-    reward_experience = serializers.IntegerField(default=0, required=False)
-    reward_currency = serializers.IntegerField(default=0, required=False)
-    type_specific_data = serializers.JSONField(required=False)
-
-    def to_representation(self, instance):
-        representation = {
-            "type": instance.type,
-            "difficulty": instance.difficulty,
-            "is_award": instance.is_award,
-            "request_type": instance.request_type.id if instance.request_type else None,
-            "required_count": instance.required_count,
-            "reward_experience": instance.reward_experience,
-            "reward_currency": instance.reward_currency,
-        }
-
-        # Добавляем дополнительные данные из type_specific_data
-        if instance.type_specific_data:
-            representation.update(instance.type_specific_data)
-
-        return representation
-
-
 class StyleCardSerializer(serializers.Serializer):
     background_color = serializers.CharField(max_length=7, default='#FFFFFF')
     border_style = serializers.CharField(default='solid')
@@ -760,34 +709,28 @@ class StyleCardSerializer(serializers.Serializer):
 
     def validate_border_width(self, value):
         if value < 0:
-            raise serializers.ValidationError("Border width cannot be negative.")
+            raise serializers.ValidationError("Толщина рамки не может быть отрицательной.")
         return value
 
     def validate_border_color(self, value):
         if not re.match(r'^#(?:[0-9a-fA-F]{3}){1,2}$', value):
-            raise serializers.ValidationError("Border color must be a valid HEX code.")
+            raise serializers.ValidationError("Цвет рамки должен быть валидным HEX кодом.")
         return value
-
 
 class TypeAchContentSerializer(serializers.Serializer):
     type = serializers.ChoiceField(choices=Achievement.TYPE_CHOICES)
     difficulty = serializers.ChoiceField(choices=Achievement.DIFFICULTY_CHOICES)
-    is_award = serializers.BooleanField()
-    request_type = serializers.PrimaryKeyRelatedField(queryset=Classifications.objects.all(), allow_null=True,
-                                                      required=False)
+    request_type = serializers.PrimaryKeyRelatedField(queryset=Classifications.objects.all(), allow_null=True, required=False)
     required_count = serializers.IntegerField(default=0, required=False)
-    reward_experience = serializers.IntegerField(default=0, required=False)
-    reward_currency = serializers.IntegerField(default=0, required=False)
     type_specific_data = serializers.JSONField(required=False)
 
     def validate(self, data):
         # Добавьте дополнительные проверки, если необходимо
         return data
 
-
 class AchievementSerializer(serializers.ModelSerializer):
-    styleCard = serializers.CharField(write_only=True)
-    typeAchContent = serializers.CharField(write_only=True)
+    styleCard = StyleCardSerializer(required=False)
+    typeAchContent = TypeAchContentSerializer(required=False)
     image = serializers.ImageField(required=False)
     background_image = serializers.ImageField(required=False)
 
@@ -797,33 +740,32 @@ class AchievementSerializer(serializers.ModelSerializer):
             'id',
             'name',
             'description',
-            'type',
-            'request_type',
-            'required_count',
             'reward_experience',
             'reward_currency',
-            'difficulty',
-            'is_award',
             'image',
+            'is_award',
             'background_image',
             'styleCard',
-            'typeAchContent'
+            'typeAchContent',
         ]
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         request = self.context.get('request')
+
+        # Обработка основного изображения
         if instance.image and hasattr(instance.image, 'url'):
             representation['image'] = request.build_absolute_uri(instance.image.url)
         else:
             representation['image'] = request.build_absolute_uri('/media/default.jpg')
 
+        # Обработка фонового изображения
         if instance.background_image and hasattr(instance.background_image, 'url'):
             representation['background_image'] = request.build_absolute_uri(instance.background_image.url)
         else:
             representation['background_image'] = None
 
-        # Добавляем структурированные объекты
+        # Формирование объекта styleCard
         representation['styleCard'] = {
             "background_color": instance.background_color,
             "background_image": representation['background_image'],
@@ -833,33 +775,24 @@ class AchievementSerializer(serializers.ModelSerializer):
             "use_border": instance.use_border,
         }
 
+        # Формирование объекта typeAchContent с только необходимой информацией для типа
         representation['typeAchContent'] = {
             "type": instance.type,
             "difficulty": instance.difficulty,
-            "is_award": instance.is_award,
             "request_type": instance.request_type.id if instance.request_type else None,
             "required_count": instance.required_count,
-            "reward_experience": instance.reward_experience,
-            "reward_currency": instance.reward_currency,
             "type_specific_data": instance.type_specific_data,
         }
+
+        # Удаление дублирующейся информации из основного объекта
+        representation.pop('type', None)
+        representation.pop('required_count', None)
 
         return representation
 
     def create(self, validated_data):
-        style_data = validated_data.pop('styleCard', '{}')
-        type_content_data = validated_data.pop('typeAchContent', '{}')
-
-        # Парсим JSON-строки
-        try:
-            style_data = json.loads(style_data)
-        except json.JSONDecodeError:
-            raise serializers.ValidationError({"styleCard": "Invalid JSON format."})
-
-        try:
-            type_content_data = json.loads(type_content_data)
-        except json.JSONDecodeError:
-            raise serializers.ValidationError({"typeAchContent": "Invalid JSON format."})
+        style_data = validated_data.pop('styleCard', {})
+        type_content_data = validated_data.pop('typeAchContent', {})
 
         type_specific_data = type_content_data.pop('type_specific_data', {})
 
@@ -877,19 +810,8 @@ class AchievementSerializer(serializers.ModelSerializer):
         return achievement
 
     def update(self, instance, validated_data):
-        style_data = validated_data.pop('styleCard', '{}')
-        type_content_data = validated_data.pop('typeAchContent', '{}')
-
-        # Парсим JSON-строки
-        try:
-            style_data = json.loads(style_data)
-        except json.JSONDecodeError:
-            raise serializers.ValidationError({"styleCard": "Invalid JSON format."})
-
-        try:
-            type_content_data = json.loads(type_content_data)
-        except json.JSONDecodeError:
-            raise serializers.ValidationError({"typeAchContent": "Invalid JSON format."})
+        style_data = validated_data.pop('styleCard', {})
+        type_content_data = validated_data.pop('typeAchContent', {})
 
         type_specific_data = type_content_data.pop('type_specific_data', {})
 
