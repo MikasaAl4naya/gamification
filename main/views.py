@@ -863,8 +863,12 @@ def get_user(request):
         registration_date = employee.date_joined.strftime('%Y-%m-%d')
         last_login = employee.last_login.strftime('%Y-%m-%d %H:%M:%S') if employee.last_login else 'Never'
         completed_tests_count = TestAttempt.objects.filter(employee=employee, status=TestAttempt.PASSED).count()
+
+        # Жалобы и похвалы
+        complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved').count()
         praises_count = Feedback.objects.filter(target_employee=employee, type="praise", status='approved').count()
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
+
         # Вопросы и ответы опроса
         survey_questions = SurveyQuestion.objects.all()
         survey_answers = SurveyAnswer.objects.filter(employee=employee)
@@ -957,6 +961,7 @@ def get_user(request):
             'registration_date': registration_date,
             'last_login': last_login,
             'completed_tests': completed_tests_count,
+            'complaints': complaints_count,
             'praises': praises_count,
             'praises_details': FeedbackSerializer(praises, many=True).data,
             'request_statistics': request_statistics,
