@@ -375,17 +375,14 @@ def assign_achievement(request):
     return Response({"message": "Achievement assigned successfully"}, status=status.HTTP_200_OK)
 
 
-class AchievementViewSet(BasePermissionViewSet):
+class AchievementViewSet(viewsets.ModelViewSet):
     queryset = Achievement.objects.all()
     serializer_class = AchievementSerializer
-    permission_classes = [
-        IsAuthenticated]  # Только аутентифицированные пользователи могут создавать или изменять записи
-    parser_classes = [MultiPartParser, FormParser]  # Поддержка загрузки файлов
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def perform_create(self, serializer):
         achievement = serializer.save()
-
-        # Логика для уникальных наград или более сложных действий при создании
         if achievement.is_award:
             print(f"A unique award has been created: {achievement.name}")
         else:
@@ -393,8 +390,6 @@ class AchievementViewSet(BasePermissionViewSet):
 
     def perform_update(self, serializer):
         achievement = serializer.save()
-
-        # Логика для уникальных наград или более сложных действий при обновлении
         if achievement.is_award:
             print(f"A unique award has been updated: {achievement.name}")
         else:

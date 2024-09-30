@@ -9,6 +9,7 @@ from django.core.validators import EmailValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 import re
 
+from django.db.models import JSONField
 from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
@@ -376,6 +377,7 @@ class Classifications(models.Model):
             super(Classifications, self).save(*args, **kwargs)
 
 
+
 class Achievement(models.Model):
     TYPE_CHOICES = [
         ('Test', 'За тест'),
@@ -393,7 +395,7 @@ class Achievement(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField()
     type = models.CharField(max_length=100, choices=TYPE_CHOICES, default='Test')
-    request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, default=1, blank=True)
+    request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, default=1, blank=True, null=True)
     required_count = models.IntegerField(null=True, blank=True, default=0)
     reward_experience = models.IntegerField(null=True, blank=True, default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
@@ -404,6 +406,18 @@ class Achievement(models.Model):
     # Поля для цвета и фоновой картинки на основе сложности
     background_color = models.CharField(max_length=7, default='#FFFFFF')  # Цвет фона (в формате HEX)
     background_image = models.ImageField(upload_to='achievement_backgrounds/', null=True, blank=True)  # Фоновое изображение
+
+    # Поля для рамки
+    border_style = models.CharField(max_length=20, default='solid')
+    border_width = models.IntegerField(null=True, blank=True, default=0)  # Толщина рамки в пикселях
+    border_color = models.CharField(max_length=7, default='#000000')  # Цвет рамки (в формате HEX)
+    use_border = models.BooleanField(default=False)  # Использовать ли рамку
+
+    # Поле для типизированных данных
+    type_specific_data = JSONField(null=True, blank=True)
+
+    def __str__(self):
+        return self.name
 
     def clean(self):
         if self.type == 'Requests':
