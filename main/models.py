@@ -379,10 +379,22 @@ class Classifications(models.Model):
 
 
 class Achievement(models.Model):
+    # Сопоставление номера и типа
     TYPE_CHOICES = [
-        ('Test', 'За тест'),
-        ('Requests', 'За количество обращений'),
-        ('Unique', 'Уникальная награда'),  # Новый тип награды
+        (1, 'Appeals'),
+        (2, 'Tasks'),
+        (3, 'NewLvl'),
+        (4, 'Chart'),
+        (5, 'Tests'),
+        (6, 'Indicators'),
+        (7, 'Avations'),
+        (8, 'Profile'),
+        (9, 'Store'),
+        (10, 'Background'),
+        (11, 'Rating'),
+        (12, 'News'),
+        (13, 'KPI'),
+        (14, 'Other'),
     ]
 
     DIFFICULTY_CHOICES = [
@@ -394,27 +406,22 @@ class Achievement(models.Model):
 
     name = models.CharField(max_length=100)
     description = models.TextField()
-    type = models.CharField(max_length=100, choices=TYPE_CHOICES, default='Test')
+    type = models.IntegerField(choices=TYPE_CHOICES)  # Поле для выбора типа по номеру
     request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, default=1, blank=True, null=True)
     required_count = models.IntegerField(null=True, blank=True, default=0)
     reward_experience = models.IntegerField(null=True, blank=True, default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
     image = models.ImageField(upload_to='achievements/', default='default.jpg')
-    difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='Medium')  # Сложность
-    is_award = models.BooleanField(default=False)  # Это награда?
-
-    # Поля для цвета и фоновой картинки на основе сложности
-    background_color = models.CharField(max_length=7, default='#FFFFFF')  # Цвет фона (в формате HEX)
-    background_image = models.ImageField(upload_to='achievement_backgrounds/', null=True, blank=True)  # Фоновое изображение
-
-    # Поля для рамки
+    difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='Medium')
+    is_award = models.BooleanField(default=False)
+    background_color = models.CharField(max_length=7, default='#FFFFFF')
+    background_image = models.ImageField(upload_to='achievement_backgrounds/', null=True, blank=True)
     border_style = models.CharField(max_length=20, default='solid')
-    border_width = models.IntegerField(null=True, blank=True, default=0)  # Толщина рамки в пикселях
-    border_color = models.CharField(max_length=7, default='#000000')  # Цвет рамки (в формате HEX)
-    use_border = models.BooleanField(default=False)  # Использовать ли рамку
-
-    # Поле для типизированных данных
+    border_width = models.IntegerField(null=True, blank=True, default=0)
+    border_color = models.CharField(max_length=7, default='#000000')
+    use_border = models.BooleanField(default=False)
     type_specific_data = JSONField(null=True, blank=True)
+
 
     def __str__(self):
         return self.name

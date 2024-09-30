@@ -744,6 +744,7 @@ class AchievementSerializer(serializers.ModelSerializer):
             'reward_currency',
             'image',
             'is_award',
+            'type',  # Номер типа
             'background_image',
             'styleCard',
             'typeAchContent',
@@ -777,16 +778,17 @@ class AchievementSerializer(serializers.ModelSerializer):
 
         # Формирование объекта typeAchContent с только необходимой информацией для типа
         representation['typeAchContent'] = {
-            "type": instance.type,
             "difficulty": instance.difficulty,
             "request_type": instance.request_type.id if instance.request_type else None,
             "required_count": instance.required_count,
             "type_specific_data": instance.type_specific_data,
         }
 
-        # Удаление дублирующейся информации из основного объекта
-        representation.pop('type', None)
-        representation.pop('required_count', None)
+        # Добавление текстового названия типа достижения на основе номера типа
+        representation['type'] = {
+            "id": instance.type,
+            "name": dict(Achievement.TYPE_CHOICES).get(instance.type, "Unknown")  # Преобразование номера в название
+        }
 
         return representation
 
@@ -815,6 +817,7 @@ class AchievementSerializer(serializers.ModelSerializer):
 
         type_specific_data = type_content_data.pop('type_specific_data', {})
 
+        # Обновляем основные поля
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
