@@ -306,7 +306,8 @@ def track_request_classification(sender, instance, created, **kwargs):
             employee = instance.support_operator
             request_classification = instance.classification
 
-            request_achievements = Achievement.objects.filter(type='Requests')
+            # Измените фильтрацию по числовому значению, а не строке
+            request_achievements = Achievement.objects.filter(type=1)  # Замените 1 на нужное числовое значение
 
             for achievement in request_achievements:
                 if achievement_matches_classification(achievement, request_classification):
@@ -318,6 +319,7 @@ def track_request_classification(sender, instance, created, **kwargs):
 
         except Exception as e:
             print(f"Ошибка при обновлении прогресса ачивки: {e}")
+
 
 @receiver(pre_delete, sender=Employee)
 def delete_related_logs(sender, instance, **kwargs):
