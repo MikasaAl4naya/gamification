@@ -8,18 +8,12 @@ from collections import Counter, defaultdict
 from datetime import timedelta, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from functools import partial
-from multiprocessing import Value
 from django.contrib.auth.hashers import make_password, check_password
 from django.core.exceptions import ValidationError, ObjectDoesNotExist
 from django.core.files.base import ContentFile
 from django.core.mail import EmailMessage
 from django.views.decorators.http import require_POST
-from openpyxl.reader.excel import load_workbook
-
-from scripts.tasks import update_employee_karma
-from . import permissions
 from .permissions import IsAdmin, IsModerator, IsUser, IsModeratorOrAdmin, HasPermission
-from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.authtoken.models import Token
@@ -30,7 +24,6 @@ from django.db.models import Max, FloatField, Avg, Count, Q, F, Sum, ExpressionW
 from django.db.models.functions import Coalesce, RowNumber, Concat
 from django.http import HttpResponse, JsonResponse
 from django.utils.timezone import localtime
-from rest_framework.fields import IntegerField, CharField
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import  BasePermission, IsAuthenticated, AllowAny
 from rest_framework.utils import json
@@ -71,6 +64,43 @@ class BasePermissionViewSet(viewsets.ModelViewSet):
 
         return super().get_permissions()
 
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_logs(request):
+    # Получаем параметры из запроса
+    employee_id = request.query_params.get('employee_id', None)
+    log_type = request.query_params.get('log_type', 'both')  # Значение по умолчанию - удалить оба типа логов
+
+    # Если employee_id не передан, будем удалять логи по всем сотрудникам
+    if employee_id:
+        employee = get_object_or_404(Employee, id=employee_id)
+    else:
+        employee = None
+
+    # Инициализируем счётчики удалённых логов
+    employee_logs_deleted = 0
+    employee_action_logs_deleted = 0
+
+    # Логика для удаления логов в зависимости от переданного типа
+    if log_type in ['both', 'employee_log']:
+        if employee:
+            # Удаляем логи из EmployeeLog для конкретного сотрудника
+            employee_logs_deleted, _ = EmployeeLog.objects.filter(employee=employee).delete()
+        else:
+            # Удаляем все логи из EmployeeLog
+            employee_logs_deleted, _ = EmployeeLog.objects.all().delete()
+
+    if log_type in ['both', 'employee_action_log']:
+        if employee:
+            # Удаляем логи из EmployeeActionLog для конкретного сотрудника
+            employee_action_logs_deleted, _ = EmployeeActionLog.objects.filter(employee=employee).delete()
+        else:
+            # Удаляем все логи из EmployeeActionLog
+            employee_action_logs_deleted, _ = EmployeeActionLog.objects.all().delete()
+
+    return Response({
+        "message": f"Deleted {employee_logs_deleted} logs from EmployeeLog and {employee_action_logs_deleted} logs from EmployeeActionLog"
+    }, status=status.HTTP_200_OK)
 
 class LoginAPIView(APIView):
     permission_classes = [AllowAny]
@@ -305,6 +335,9 @@ def get_employee_info(request, employee_id):
 
     serializer = EmployeeSerializer(employee)
     return Response(serializer.data, status=status.HTTP_200_OK)
+class TemplateViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Template.objects.all()
+    serializer_class = TemplateSerializer
 class EmployeeAchievementsView(generics.ListAPIView):
     serializer_class = AchievementSerializer
     permission_classes = [IsAuthenticated]
@@ -855,22 +888,52 @@ def get_user(request):
 
         serializer = EmployeeSerializer(employee, context={'request': request})
 
+        # Вычисление периода времени (месяц и неделя)
+        today = datetime.now()
+        start_of_week = today - timedelta(days=today.weekday())
+        start_of_month = today.replace(day=1)
+
+        # Подсчёт заработанного опыта за месяц и неделю
+        total_experience_month = EmployeeLog.objects.filter(
+            employee=employee,
+            change_type='experience',
+            timestamp__gte=start_of_month
+        ).aggregate(total=Sum('new_value') - Sum('old_value'))['total'] or 0
+
+        total_experience_week = EmployeeLog.objects.filter(
+            employee=employee,
+            change_type='experience',
+            timestamp__gte=start_of_week
+        ).aggregate(total=Sum('new_value') - Sum('old_value'))['total'] or 0
+
+        # Подсчёт заработанных A-коинов за месяц и неделю
+        total_acoins_month = AcoinTransaction.objects.filter(
+            employee=employee,
+            timestamp__gte=start_of_month
+        ).aggregate(total=Sum('amount'))['total'] or 0
+
+        total_acoins_week = AcoinTransaction.objects.filter(
+            employee=employee,
+            timestamp__gte=start_of_week
+        ).aggregate(total=Sum('amount'))['total'] or 0
+
+        # Общий подсчёт A-коинов
+        total_acoins = AcoinTransaction.objects.filter(employee=employee).aggregate(total=Sum('amount'))['total'] or 0
+
+        # Остальные данные профиля, статистика
         registration_date = employee.date_joined.strftime('%Y-%m-%d')
         last_login = employee.last_login.strftime('%Y-%m-%d %H:%M:%S') if employee.last_login else 'Never'
         completed_tests_count = TestAttempt.objects.filter(employee=employee, status=TestAttempt.PASSED).count()
 
-        # Жалобы и похвалы
         complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved').count()
         praises_count = Feedback.objects.filter(target_employee=employee, type="praise", status='approved').count()
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
-        # Вопросы и ответы опроса
-        survey_questions = SurveyQuestion.objects.all()
-        survey_answers = SurveyAnswer.objects.filter(employee=employee)
-
         answers_with_text = []
         answers_without_text = []
 
+        survey_questions = SurveyQuestion.objects.all()
+        survey_answers = SurveyAnswer.objects.filter(employee=employee)
         for question in survey_questions:
             answer = survey_answers.filter(question=question).first()
             if question.question_text.lower() == "дата рождения":
@@ -882,7 +945,6 @@ def get_user(request):
                         "answer_text": birth_date_str
                     })
                     continue
-
             if answer and answer.answer_text:
                 answers_with_text.append({
                     "question_id": question.id,
@@ -895,20 +957,16 @@ def get_user(request):
                     "question_text": question.question_text,
                     "answer_text": ""
                 })
-
         answers = answers_with_text + answers_without_text
 
-        # Достижения сотрудника
         employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
         employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
 
-        # Обращения
         requests = Request.objects.filter(support_operator=employee)
         total_requests = requests.count()
         requests_this_month = requests.filter(date__month=datetime.now().month).count()
         requests_this_week = requests.filter(date__gte=datetime.now() - timedelta(days=7)).count()
 
-        # Группировка по классификациям
         classifications = requests.values('classification__name').annotate(count=models.Count('number'))
         grouped_requests = {c['classification__name']: c['count'] for c in classifications}
 
@@ -919,11 +977,7 @@ def get_user(request):
             'grouped_requests': grouped_requests,
         }
 
-        # Количество отработанных дней
         worked_days = ShiftHistory.objects.filter(employee=employee).values('date').distinct().count()
-
-        # Количество заработанных A-коинов
-        acoin_amount = AcoinTransaction.objects.filter(employee=employee).aggregate(total=models.Sum('amount'))['total'] or 0
 
         # Количество опозданий
         total_lates = ShiftHistory.objects.filter(
@@ -936,7 +990,6 @@ def get_user(request):
         max_days_without_late = 0
         current_streak = 0
         last_date = None
-
         for shift in shift_history:
             if shift.actual_start <= shift.scheduled_start:
                 if last_date and (shift.date - last_date).days == 1:
@@ -948,7 +1001,6 @@ def get_user(request):
                 current_streak = 0
             last_date = shift.date
 
-        # Инвентарь
         employee_items = EmployeeItem.objects.filter(employee=employee)
         employee_items_data = EmployeeItemSerializer(employee_items, many=True).data
 
@@ -961,8 +1013,12 @@ def get_user(request):
             'praises_details': FeedbackSerializer(praises, many=True).data,
             'request_statistics': request_statistics,
             'worked_days': worked_days,
-            'acoin_amount': acoin_amount,
+            'acoin_amount': total_acoins,
+            'total_acoins_month': total_acoins_month,
+            'total_acoins_week': total_acoins_week,
             'experience': employee.experience,
+            'total_experience_month': total_experience_month,
+            'total_experience_week': total_experience_week,
             'total_lates': total_lates,
             'max_days_without_late': max_days_without_late,
         }
@@ -978,8 +1034,6 @@ def get_user(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, partial(HasPermission, perm='main.can_view_complaints')])

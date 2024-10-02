@@ -11,7 +11,7 @@ from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, A
     Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, \
     KarmaSettings, \
     FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement, EmployeeLog, \
-    Item, EmployeeItem
+    Item, EmployeeItem, Template
 from main.names_translations import translate_permission_name
 
 
@@ -727,7 +727,17 @@ class TypeAchContentSerializer(serializers.Serializer):
     def validate(self, data):
         # Добавьте дополнительные проверки, если необходимо
         return data
+class TemplateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Template
+        fields = ['id', 'name', 'image']
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        if instance.image and hasattr(instance.image, 'url'):
+            representation['image'] = request.build_absolute_uri(instance.image.url)
+        return representation
 class AchievementSerializer(serializers.ModelSerializer):
     styleCard = StyleCardSerializer(required=False)
     typeAchContent = TypeAchContentSerializer(required=False)
