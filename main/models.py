@@ -76,6 +76,8 @@ class Employee(AbstractUser):
     status = models.CharField(max_length=100, null=True, blank=True)
     last_karma_update = models.DateTimeField(null=True, blank=True)
     last_activity = models.DateTimeField(null=True, blank=True)
+    remaining_experience = models.IntegerField(blank=True)
+    experience_progress = models.IntegerField(blank=True)
 
 
     def deactivate(self):
@@ -212,6 +214,7 @@ class Employee(AbstractUser):
     def check_level_up(self):
         leveled_up_or_down = False  # Флаг для отслеживания, был ли уровень изменен
         max_level = 50
+        min_level = 1
 
         # Проверка на повышение уровня
         while self.experience >= self.next_level_experience and self.level < max_level:
@@ -221,24 +224,35 @@ class Employee(AbstractUser):
             self.next_level_experience = self.calculate_experience_for_level(self.level)
             self.log_change('level', old_level, self.level)
 
-        # Убедиться, что `next_level_experience` корректен после всех изменений
-        self.next_level_experience = self.calculate_experience_for_level(self.level)
+        # Проверка на понижение уровня
+        while self.level > min_level and self.experience < self.calculate_experience_for_level(self.level - 1):
+            old_level = self.level
+            self.level -= 1
+            leveled_up_or_down = True
+            self.next_level_experience = self.calculate_experience_for_level(self.level)
+            self.log_change('level', old_level, self.level)
 
-        # Корректно посчитать оставшийся опыт
+        # Обновление оставшегося опыта
+        previous_level_experience = self.calculate_experience_for_level(self.level - 1)
         self.remaining_experience = self.next_level_experience - self.experience
 
         # Корректный расчет прогресса опыта (в процентах)
-        previous_level_experience = self.calculate_experience_for_level(self.level - 1)
         experience_for_current_level = self.next_level_experience - previous_level_experience
-        self.experience_progress = int(
-            ((self.experience - previous_level_experience) / experience_for_current_level) * 100)
+        if experience_for_current_level > 0:
+            self.experience_progress = int(
+                ((self.experience - previous_level_experience) / experience_for_current_level) * 100
+            )
+        else:
+            self.experience_progress = 0
 
         # Сохранение изменений только если уровень был изменен
         if leveled_up_or_down:
             super(Employee, self).save(
-                update_fields=['level', 'experience', 'next_level_experience'])
+                update_fields=['level', 'experience', 'next_level_experience', 'remaining_experience',
+                               'experience_progress'])
         else:
-            super(Employee, self).save(update_fields=['experience', 'next_level_experience'])
+            super(Employee, self).save(
+                update_fields=['experience', 'next_level_experience', 'remaining_experience', 'experience_progress'])
 
     def calculate_experience_for_level(self, level):
         base_experience = 100  # базовый опыт для первого уровня
@@ -376,7 +390,12 @@ class Classifications(models.Model):
             # Если классификация не найдена, или это новая запись, выполняем стандартное сохранение
             super(Classifications, self).save(*args, **kwargs)
 
+class Template(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    image = models.ImageField(upload_to='templates/')
 
+    def __str__(self):
+        return self.name
 
 class Achievement(models.Model):
     # Сопоставление номера и типа
@@ -421,7 +440,6 @@ class Achievement(models.Model):
     border_color = models.CharField(max_length=7, default='#000000')
     use_border = models.BooleanField(default=False)
     type_specific_data = JSONField(null=True, blank=True)
-
 
     def __str__(self):
         return self.name
