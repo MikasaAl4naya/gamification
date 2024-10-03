@@ -892,19 +892,26 @@ def get_user(request):
         today = datetime.now()
         start_of_week = today - timedelta(days=today.weekday())
         start_of_month = today.replace(day=1)
-
-        # Подсчёт заработанного опыта за месяц и неделю
-        total_experience_month = EmployeeLog.objects.filter(
+        total_experience_earned = EmployeeLog.objects.filter(
             employee=employee,
             change_type='experience',
-            timestamp__gte=start_of_month
-        ).aggregate(total=Sum('new_value') - Sum('old_value'))['total'] or 0
+            new_value__gt=F('old_value')  # Только положительные изменения
+        ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
 
-        total_experience_week = EmployeeLog.objects.filter(
+        total_experience_earned_month = EmployeeLog.objects.filter(
             employee=employee,
             change_type='experience',
-            timestamp__gte=start_of_week
-        ).aggregate(total=Sum('new_value') - Sum('old_value'))['total'] or 0
+            timestamp__year=today.year,
+            timestamp__month=today.month,
+            new_value__gt=F('old_value')  # Только положительные изменения
+        ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
+
+        total_experience_earned_week = EmployeeLog.objects.filter(
+            employee=employee,
+            change_type='experience',
+            timestamp__gte=start_of_week,
+            new_value__gt=F('old_value')  # Только положительные изменения
+        ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
 
         # Подсчёт заработанных A-коинов за месяц и неделю
         total_acoins_month = AcoinTransaction.objects.filter(
@@ -964,17 +971,19 @@ def get_user(request):
         employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
         employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
         achievements_count = employee_achievements.count()
-
+        today = timezone.now()
+        start_of_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end_of_month = (start_of_month + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
         # Обращения
         requests_qs = Request.objects.filter(support_operator=employee).select_related('classification')
         requests_massive_qs = requests_qs.filter(is_massive=True)
 
         total_requests = requests_qs.count()
-        requests_this_month = requests_qs.filter(date__month=today.month).count()
+        requests_this_month = requests_qs.filter(date__gte=start_of_month, date__lte=end_of_month).count()
         requests_this_week = requests_qs.filter(date__gte=start_of_week).count()
 
         total_requests_massive = requests_massive_qs.count()
-        requests_massive_this_month = requests_massive_qs.filter(date__month=today.month).count()
+        requests_massive_this_month = requests_massive_qs.filter(date__gte=start_of_month, date__lte=end_of_month).count()
         requests_massive_this_week = requests_massive_qs.filter(date__gte=start_of_week).count()
 
         # Группировка по классификациям с подсчетом за месяц и неделю
@@ -1073,9 +1082,9 @@ def get_user(request):
                 {
                     "titleName": "Заработанный опыт",
                     "contentPoint": [
-                        f"Всего: {employee.experience}",
-                        f"За месяц: {total_experience_month}",
-                        f"За неделю: {total_experience_week}"
+                        f"Всего: {total_experience_earned}",
+                        f"За месяц: {total_experience_earned_month}",
+                        f"За неделю: {total_experience_earned_week}"
                     ]
                 }
             ],
