@@ -977,7 +977,7 @@ def get_user(request):
         requests_massive_this_month = requests_massive_qs.filter(date__month=today.month).count()
         requests_massive_this_week = requests_massive_qs.filter(date__gte=start_of_week).count()
 
-        # Группировка по классификациям
+        # Группировка по классификациям с подсчетом за месяц и неделю
         classifications = requests_qs.values('classification__name').annotate(
             total=Count('number'),
             month=Count('number', filter=Q(date__month=today.month)),
@@ -993,31 +993,35 @@ def get_user(request):
             for c in classifications
         ]
 
-        # Массивы для вывода данных по обращениям
+        # Массивы для вывода данных по обращениям (вложенные массивы)
         request_statistics = [
-            {
-                'titleName': 'Общие обращения',
-                'contentPoint': [
-                    f'Всего: {total_requests}',
-                    f'За месяц: {requests_this_month}',
-                    f'За неделю: {requests_this_week}'
-                ],
-            },
-            {
-                'titleName': 'Массовые обращения',
-                'contentPoint': [
-                    f'Всего массовых обращений: {total_requests_massive}',
-                    f'За месяц: {requests_massive_this_month}',
-                    f'За неделю: {requests_massive_this_week}'
-                ]
-            },
-            {
-                'titleName': 'Обращения по классификациям',
-                'contentPoint': [
-                    f'{item["classification_name"]}: {item["total"]} обращений'
-                    for item in grouped_requests
-                ]
-            }
+            [
+                {
+                    'titleName': 'Общие обращения',
+                    'contentPoint': [
+                        f'Всего: {total_requests}',
+                        f'За месяц: {requests_this_month}',
+                        f'За неделю: {requests_this_week}'
+                    ],
+                },
+                {
+                    'titleName': 'Массовые обращения',
+                    'contentPoint': [
+                        f'Всего массовых обращений: {total_requests_massive}',
+                        f'За месяц: {requests_massive_this_month}',
+                        f'За неделю: {requests_massive_this_week}'
+                    ]
+                }
+            ],
+            [
+                {
+                    'titleName': 'Обращения по классификациям',
+                    'contentPoint': [
+                        f'{item["classification_name"]}: {item["total"]} обращений (Месяц: {item["month"]}, Неделя: {item["week"]})'
+                        for item in grouped_requests
+                    ]
+                }
+            ]
         ]
 
         # Количество отработанных дней
@@ -1051,25 +1055,40 @@ def get_user(request):
 
         # Собираем основную информацию для профиля
         profile_statistics = {
-            "basic_info": {
-                "Дата регистрации": registration_date,
-                "Отработанные дни": worked_days,
-                "Опоздания": total_lates,
-                "Максимум дней без опозданий": max_days_without_late,
-                "Заработано тестов": completed_tests_count,
-                "Жалоб": complaints_count,
-                "Похвал": praises_count
-            },
-            "experience": {
-                "Всего": employee.experience,
-                "За месяц": total_experience_month,
-                "За неделю": total_experience_week
-            },
-            "acoins": {
-                "Всего": total_acoins,
-                "За месяц": total_acoins_month,
-                "За неделю": total_acoins_week
-            },
+            "basic_info": [
+                {
+                    "titleName": "Основная информация",
+                    "contentPoint": [
+                        f"Дата регистрации профиля: {registration_date}",
+                        f"Кол-во отработанных дней: {worked_days}",
+                        f"Опозданий всего: {total_lates}",
+                        f"Максимум дней без опозданий: {max_days_without_late}",
+                        f"Заработано тестов: {completed_tests_count}",
+                        f"Жалоб: {complaints_count}",
+                        f"Похвал: {praises_count}"
+                    ]
+                }
+            ],
+            "experience": [
+                {
+                    "titleName": "Заработанный опыт",
+                    "contentPoint": [
+                        f"Всего: {employee.experience}",
+                        f"За месяц: {total_experience_month}",
+                        f"За неделю: {total_experience_week}"
+                    ]
+                }
+            ],
+            "acoins": [
+                {
+                    "titleName": "Заработанные A-Коины",
+                    "contentPoint": [
+                        f"Всего: {total_acoins}",
+                        f"За месяц: {total_acoins_month}",
+                        f"За неделю: {total_acoins_week}"
+                    ]
+                }
+            ],
             "praises_details": FeedbackSerializer(praises, many=True).data
         }
 
