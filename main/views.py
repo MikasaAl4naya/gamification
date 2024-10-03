@@ -1000,21 +1000,21 @@ def get_user(request):
         # Собираем основную информацию для профиля
         profile_statistics = {
             "basic_info": {
-                "registration_date": registration_date,
-                "worked_days": worked_days,
-                "total_lates": total_lates,
-                "max_days_without_late": max_days_without_late,
-                "achievements_earned": EmployeeAchievement.objects.filter(employee=employee).count()
+                "Дата регистрации": registration_date,
+                "Отработанные дни": worked_days,
+                "Опоздания": total_lates,
+                "Максимум дней без опозданий": max_days_without_late,
+                "Достижений заработано": EmployeeAchievement.objects.filter(employee=employee).count()
             },
             "experience": {
-                "total": employee.experience,
-                "month": total_experience_month,
-                "week": total_experience_week
+                "Всего": employee.experience,
+                "За месяц": total_experience_month,
+                "За неделю": total_experience_week
             },
             "acoins": {
-                "total": total_acoins,
-                "month": total_acoins_month,
-                "week": total_acoins_week
+                "Всего": total_acoins,
+                "За месяц": total_acoins_month,
+                "За неделю": total_acoins_week
             }
         }
 
@@ -1062,12 +1062,12 @@ def get_user(request):
         achievements_count = employee_achievements.count()
 
         statistics = {
-            "basic_info": profile_statistics["basic_info"],
-            "experience": profile_statistics["experience"],
-            "acoins": profile_statistics["acoins"],
-            "requests": request_statistics,
-            "achievements_earned": achievements_count,
-            "max_days_without_late": max_days_without_late,
+            "Общая статистика": profile_statistics["basic_info"],
+            "Опыт": profile_statistics["experience"],
+            "Акоины": profile_statistics["acoins"],
+            "Обращения": request_statistics,
+            "Достижений заработано": achievements_count,
+            "Максимум дней без опозданий": max_days_without_late,
             "total_lates": total_lates,
             "worked_days": worked_days
         }
