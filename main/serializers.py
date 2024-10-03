@@ -754,6 +754,7 @@ class AchievementSerializer(serializers.ModelSerializer):
             'reward_currency',
             'image',
             'is_award',
+            'is_double',
             'type',  # Номер типа
             'background_image',
             'styleCard',
