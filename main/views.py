@@ -889,15 +889,11 @@ def get_user(request):
         serializer = EmployeeSerializer(employee, context={'request': request})
 
         # Вычисление периодов времени
-        today = datetime.now()
-        start_of_week = today - timedelta(days=today.weekday())
-        start_of_month = today.replace(day=1)
-        total_experience_earned = EmployeeLog.objects.filter(
-            employee=employee,
-            change_type='experience',
-            new_value__gt=F('old_value')  # Только положительные изменения
-        ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
+        today = timezone.now()
+        start_of_week = today - timedelta(days=today.weekday())  # Начало недели (понедельник)
+        start_of_month = today.replace(day=1)  # Начало месяца
 
+        # Подсчёт заработанного опыта за месяц и неделю (только положительные изменения)
         total_experience_earned_month = EmployeeLog.objects.filter(
             employee=employee,
             change_type='experience',
@@ -910,6 +906,13 @@ def get_user(request):
             employee=employee,
             change_type='experience',
             timestamp__gte=start_of_week,
+            new_value__gt=F('old_value')  # Только положительные изменения
+        ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
+
+        # Подсчёт общего заработанного опыта (все положительные изменения)
+        total_experience_earned = EmployeeLog.objects.filter(
+            employee=employee,
+            change_type='experience',
             new_value__gt=F('old_value')  # Только положительные изменения
         ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
 
@@ -971,25 +974,23 @@ def get_user(request):
         employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
         employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
         achievements_count = employee_achievements.count()
-        today = timezone.now()
-        start_of_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end_of_month = (start_of_month + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
+
         # Обращения
         requests_qs = Request.objects.filter(support_operator=employee).select_related('classification')
         requests_massive_qs = requests_qs.filter(is_massive=True)
 
         total_requests = requests_qs.count()
-        requests_this_month = requests_qs.filter(date__gte=start_of_month, date__lte=end_of_month).count()
+        requests_this_month = requests_qs.filter(date__year=today.year, date__month=today.month).count()
         requests_this_week = requests_qs.filter(date__gte=start_of_week).count()
 
         total_requests_massive = requests_massive_qs.count()
-        requests_massive_this_month = requests_massive_qs.filter(date__gte=start_of_month, date__lte=end_of_month).count()
+        requests_massive_this_month = requests_massive_qs.filter(date__year=today.year, date__month=today.month).count()
         requests_massive_this_week = requests_massive_qs.filter(date__gte=start_of_week).count()
 
         # Группировка по классификациям с подсчетом за месяц и неделю
         classifications = requests_qs.values('classification__name').annotate(
             total=Count('number'),
-            month=Count('number', filter=Q(date__month=today.month)),
+            month=Count('number', filter=Q(date__year=today.year, date__month=today.month)),
             week=Count('number', filter=Q(date__gte=start_of_week))
         )
         grouped_requests = [
@@ -1063,57 +1064,54 @@ def get_user(request):
         employee_items_data = EmployeeItemSerializer(employee_items, many=True).data
 
         # Собираем основную информацию для профиля
-        profile_statistics = {
-            "basic_info": [
-                {
-                    "titleName": "Основная информация",
-                    "contentPoint": [
-                        f"Дата регистрации профиля: {registration_date}",
-                        f"Кол-во отработанных дней: {worked_days}",
-                        f"Опозданий всего: {total_lates}",
-                        f"Максимум дней без опозданий: {max_days_without_late}",
-                        f"Заработано тестов: {completed_tests_count}",
-                        f"Жалоб: {complaints_count}",
-                        f"Похвал: {praises_count}"
-                    ]
-                }
-            ],
-            "experience": [
-                {
-                    "titleName": "Заработанный опыт",
-                    "contentPoint": [
-                        f"Всего: {total_experience_earned}",
-                        f"За месяц: {total_experience_earned_month}",
-                        f"За неделю: {total_experience_earned_week}"
-                    ]
-                }
-            ],
-            "acoins": [
-                {
-                    "titleName": "Заработанные A-Коины",
-                    "contentPoint": [
-                        f"Всего: {total_acoins}",
-                        f"За месяц: {total_acoins_month}",
-                        f"За неделю: {total_acoins_week}"
-                    ]
-                }
-            ],
-            "praises_details": FeedbackSerializer(praises, many=True).data
-        }
+        profile_statistics = [
+            {
+                "titleName": "Основная информация",
+                "contentPoint": [
+                    f"Дата регистрации профиля: {registration_date}",
+                    f"Кол-во отработанных дней: {worked_days}",
+                    f"Опозданий всего: {total_lates}",
+                    f"Максимум дней без опозданий: {max_days_without_late}",
+                    f"Заработано тестов: {completed_tests_count}",
+                    f"Жалоб: {complaints_count}",
+                    f"Похвал: {praises_count}"
+                ]
+            },
+            {
+                "titleName": "Заработанный опыт",
+                "contentPoint": [
+                    f"Всего: {total_experience_earned}",
+                    f"За месяц: {total_experience_earned_month}",
+                    f"За неделю: {total_experience_earned_week}"
+                ]
+            },
+            {
+                "titleName": "Заработанные A-Коины",
+                "contentPoint": [
+                    f"Всего: {total_acoins}",
+                    f"За месяц: {total_acoins_month}",
+                    f"За неделю: {total_acoins_week}"
+                ]
+            }
+        ]
+
+        # Собираем статистику по обращениям
+        statistics_requests = request_statistics  # Уже является списком списков
+
+        # Объединяем основную статистику и статистику по обращениям
+        statistics = [
+            profile_statistics,  # Первая "страница"
+            statistics_requests  # Вторая "страница"
+        ]
 
         # Достижения сотрудника
-        statistics = {
-            "basic_info": profile_statistics["basic_info"],
-            "experience": profile_statistics["experience"],
-            "acoins": profile_statistics["acoins"],
-            "praises_details": profile_statistics["praises_details"],
-            "requests": request_statistics
-        }
+        # Похвалы остаются отдельным ключом "praises_details"
 
         return Response({
             'profile': serializer.data,
             'level_title': employee.level_title,
-            'statistics': statistics,
+            'statistics': statistics,  # Список списков
+            'praises_details': FeedbackSerializer(praises, many=True).data,  # Оставляем отдельным
             'answers': answers,
             'achievements': employee_achievements_data,
             'inventory': employee_items_data,
