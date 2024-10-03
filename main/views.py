@@ -888,7 +888,7 @@ def get_user(request):
 
         serializer = EmployeeSerializer(employee, context={'request': request})
 
-        # Вычисление периода времени (месяц и неделя)
+        # Вычисление периодов времени
         today = datetime.now()
         start_of_week = today - timedelta(days=today.weekday())
         start_of_month = today.replace(day=1)
@@ -922,18 +922,113 @@ def get_user(request):
 
         # Остальные данные профиля, статистика
         registration_date = employee.date_joined.strftime('%Y-%m-%d')
-        last_login = employee.last_login.strftime('%Y-%m-%d %H:%M:%S') if employee.last_login else 'Never'
-        completed_tests_count = TestAttempt.objects.filter(employee=employee, status=TestAttempt.PASSED).count()
+        worked_days = ShiftHistory.objects.filter(employee=employee).values('date').distinct().count()
 
-        complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved').count()
-        praises_count = Feedback.objects.filter(target_employee=employee, type="praise", status='approved').count()
-        praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
+        # Количество опозданий
+        total_lates = ShiftHistory.objects.filter(
+            employee=employee,
+            actual_start__gt=F('scheduled_start')
+        ).count()
 
+        # Наибольшее количество дней без опозданий
+        shift_history = ShiftHistory.objects.filter(employee=employee).order_by('date')
+        max_days_without_late = 0
+        current_streak = 0
+        last_date = None
+        for shift in shift_history:
+            if shift.actual_start <= shift.scheduled_start:
+                if last_date and (shift.date - last_date).days == 1:
+                    current_streak += 1
+                else:
+                    current_streak = 1
+                max_days_without_late = max(max_days_without_late, current_streak)
+            else:
+                current_streak = 0
+            last_date = shift.date
+
+        # Обращения
+        requests_qs = Request.objects.filter(support_operator=employee)
+        requests_massive_qs = requests_qs.filter(is_massive=True)
+
+        total_requests = requests_qs.count()
+        requests_this_month = requests_qs.filter(date__month=today.month).count()
+        requests_this_week = requests_qs.filter(date__gte=start_of_week).count()
+
+        total_requests_massive = requests_massive_qs.count()
+        requests_massive_this_month = requests_massive_qs.filter(date__month=today.month).count()
+        requests_massive_this_week = requests_massive_qs.filter(date__gte=start_of_week).count()
+
+        # Группировка по классификациям
+        classifications = requests_qs.values('classification__name').annotate(count=Count('number'))
+        grouped_requests = [
+            {
+                'classification_name': c['classification__name'],
+                'total': c['count'],
+                'month': requests_qs.filter(classification__name=c['classification__name'], date__month=today.month).count(),
+                'week': requests_qs.filter(classification__name=c['classification__name'], date__gte=start_of_week).count(),
+            }
+            for c in classifications
+        ]
+
+        # Массивы для вывода данных по обращениям
+        request_statistics = [
+            {
+                'titleName': 'Все обращения',
+                'contentPoint': [
+                    f'Всего: {total_requests}',
+                    f'За месяц: {requests_this_month}',
+                    f'За неделю: {requests_this_week}'
+                ],
+            },
+            {
+                'titleName': 'Массовые обращения',
+                'contentPoint': [
+                    f'Всего массовых обращений: {total_requests_massive}',
+                    f'За месяц: {requests_massive_this_month}',
+                    f'За неделю: {requests_massive_this_week}'
+                ]
+            },
+            {
+                'titleName': 'Обращения по классификациям',
+                'contentPoint': [
+                    f'{item["classification_name"]}: {item["total"]} обращений'
+                    for item in grouped_requests
+                ]
+            }
+        ]
+
+        # Собираем основную информацию для профиля
+        profile_statistics = {
+            "basic_info": {
+                "registration_date": registration_date,
+                "worked_days": worked_days,
+                "total_lates": total_lates,
+                "max_days_without_late": max_days_without_late,
+                "achievements_earned": EmployeeAchievement.objects.filter(employee=employee).count()
+            },
+            "experience": {
+                "total": employee.experience,
+                "month": total_experience_month,
+                "week": total_experience_week
+            },
+            "acoins": {
+                "total": total_acoins,
+                "month": total_acoins_month,
+                "week": total_acoins_week
+            }
+        }
+
+        # Дополнительная информация
+        # Достижения сотрудника
+        employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
+        employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
+
+        # Ответы на вопросы опроса
+        survey_questions = SurveyQuestion.objects.all()
+        survey_answers = SurveyAnswer.objects.filter(employee=employee)
         answers_with_text = []
         answers_without_text = []
 
-        survey_questions = SurveyQuestion.objects.all()
-        survey_answers = SurveyAnswer.objects.filter(employee=employee)
         for question in survey_questions:
             answer = survey_answers.filter(question=question).first()
             if question.question_text.lower() == "дата рождения":
@@ -959,74 +1054,29 @@ def get_user(request):
                 })
         answers = answers_with_text + answers_without_text
 
-        employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
-        employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
-
-        requests = Request.objects.filter(support_operator=employee)
-        total_requests = requests.count()
-        requests_this_month = requests.filter(date__month=datetime.now().month).count()
-        requests_this_week = requests.filter(date__gte=datetime.now() - timedelta(days=7)).count()
-
-        classifications = requests.values('classification__name').annotate(count=models.Count('number'))
-        grouped_requests = {c['classification__name']: c['count'] for c in classifications}
-
-        request_statistics = {
-            'total_requests': total_requests,
-            'requests_this_month': requests_this_month,
-            'requests_this_week': requests_this_week,
-            'grouped_requests': grouped_requests,
-        }
-
-        worked_days = ShiftHistory.objects.filter(employee=employee).values('date').distinct().count()
-
-        # Количество опозданий
-        total_lates = ShiftHistory.objects.filter(
-            employee=employee,
-            actual_start__gt=models.F('scheduled_start')  # Фильтр на опоздания
-        ).count()
-
-        # Наибольшее количество дней без опозданий
-        shift_history = ShiftHistory.objects.filter(employee=employee).order_by('date')
-        max_days_without_late = 0
-        current_streak = 0
-        last_date = None
-        for shift in shift_history:
-            if shift.actual_start <= shift.scheduled_start:
-                if last_date and (shift.date - last_date).days == 1:
-                    current_streak += 1
-                else:
-                    current_streak = 1
-                max_days_without_late = max(max_days_without_late, current_streak)
-            else:
-                current_streak = 0
-            last_date = shift.date
-
+        # Инвентарь сотрудника
         employee_items = EmployeeItem.objects.filter(employee=employee)
         employee_items_data = EmployeeItemSerializer(employee_items, many=True).data
 
+        # Достижения сотрудника
+        achievements_count = employee_achievements.count()
+
         statistics = {
-            'registration_date': registration_date,
-            'last_login': last_login,
-            'completed_tests': completed_tests_count,
-            'complaints': complaints_count,
-            'praises': praises_count,
-            'praises_details': FeedbackSerializer(praises, many=True).data,
-            'request_statistics': request_statistics,
-            'worked_days': worked_days,
-            'acoin_amount': total_acoins,
-            'total_acoins_month': total_acoins_month,
-            'total_acoins_week': total_acoins_week,
-            'experience': employee.experience,
-            'total_experience_month': total_experience_month,
-            'total_experience_week': total_experience_week,
-            'total_lates': total_lates,
-            'max_days_without_late': max_days_without_late,
+            "basic_info": profile_statistics["basic_info"],
+            "experience": profile_statistics["experience"],
+            "acoins": profile_statistics["acoins"],
+            "requests": request_statistics,
+            "achievements_earned": achievements_count,
+            "max_days_without_late": max_days_without_late,
+            "total_lates": total_lates,
+            "worked_days": worked_days
         }
 
         return Response({
             'profile': serializer.data,
             'level_title': employee.level_title,
-            'statistics': statistics,
+            'statistics': profile_statistics,
+            'request_statistics': request_statistics,
             'answers': answers,
             'achievements': employee_achievements_data,
             'inventory': employee_items_data,
@@ -1034,7 +1084,6 @@ def get_user(request):
 
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, partial(HasPermission, perm='main.can_view_complaints')])
 def get_employee_complaints(request, employee_id):
