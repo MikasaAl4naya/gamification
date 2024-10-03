@@ -922,106 +922,12 @@ def get_user(request):
 
         # Остальные данные профиля, статистика
         registration_date = employee.date_joined.strftime('%Y-%m-%d')
-        worked_days = ShiftHistory.objects.filter(employee=employee).values('date').distinct().count()
+        last_login = employee.last_login.strftime('%Y-%m-%d %H:%M:%S') if employee.last_login else 'Never'
+        completed_tests_count = TestAttempt.objects.filter(employee=employee, status=TestAttempt.PASSED).count()
 
-        # Количество опозданий
-        total_lates = ShiftHistory.objects.filter(
-            employee=employee,
-            actual_start__gt=F('scheduled_start')
-        ).count()
-
-        # Наибольшее количество дней без опозданий
-        shift_history = ShiftHistory.objects.filter(employee=employee).order_by('date')
-        max_days_without_late = 0
-        current_streak = 0
-        last_date = None
-        for shift in shift_history:
-            if shift.actual_start <= shift.scheduled_start:
-                if last_date and (shift.date - last_date).days == 1:
-                    current_streak += 1
-                else:
-                    current_streak = 1
-                max_days_without_late = max(max_days_without_late, current_streak)
-            else:
-                current_streak = 0
-            last_date = shift.date
-
-        # Обращения
-        requests_qs = Request.objects.filter(support_operator=employee)
-        requests_massive_qs = requests_qs.filter(is_massive=True)
-
-        total_requests = requests_qs.count()
-        requests_this_month = requests_qs.filter(date__month=today.month).count()
-        requests_this_week = requests_qs.filter(date__gte=start_of_week).count()
-
-        total_requests_massive = requests_massive_qs.count()
-        requests_massive_this_month = requests_massive_qs.filter(date__month=today.month).count()
-        requests_massive_this_week = requests_massive_qs.filter(date__gte=start_of_week).count()
-
-        # Группировка по классификациям
-        classifications = requests_qs.values('classification__name').annotate(count=Count('number'))
-        grouped_requests = [
-            {
-                'classification_name': c['classification__name'],
-                'total': c['count'],
-                'month': requests_qs.filter(classification__name=c['classification__name'], date__month=today.month).count(),
-                'week': requests_qs.filter(classification__name=c['classification__name'], date__gte=start_of_week).count(),
-            }
-            for c in classifications
-        ]
-
-        # Массивы для вывода данных по обращениям
-        request_statistics = [
-            {
-                'titleName': 'Все обращения',
-                'contentPoint': [
-                    f'Всего: {total_requests}',
-                    f'За месяц: {requests_this_month}',
-                    f'За неделю: {requests_this_week}'
-                ],
-            },
-            {
-                'titleName': 'Массовые обращения',
-                'contentPoint': [
-                    f'Всего массовых обращений: {total_requests_massive}',
-                    f'За месяц: {requests_massive_this_month}',
-                    f'За неделю: {requests_massive_this_week}'
-                ]
-            },
-            {
-                'titleName': 'Обращения по классификациям',
-                'contentPoint': [
-                    f'{item["classification_name"]}: {item["total"]} обращений'
-                    for item in grouped_requests
-                ]
-            }
-        ]
-
-        # Собираем основную информацию для профиля
-        profile_statistics = {
-            "basic_info": {
-                "Дата регистрации": registration_date,
-                "Отработанные дни": worked_days,
-                "Опоздания": total_lates,
-                "Максимум дней без опозданий": max_days_without_late,
-                "Достижений заработано": EmployeeAchievement.objects.filter(employee=employee).count()
-            },
-            "experience": {
-                "Всего": employee.experience,
-                "За месяц": total_experience_month,
-                "За неделю": total_experience_week
-            },
-            "acoins": {
-                "Всего": total_acoins,
-                "За месяц": total_acoins_month,
-                "За неделю": total_acoins_week
-            }
-        }
-
-        # Дополнительная информация
-        # Достижения сотрудника
-        employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
-        employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
+        complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved').count()
+        praises_count = Feedback.objects.filter(target_employee=employee, type="praise", status='approved').count()
+        praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
         # Ответы на вопросы опроса
         survey_questions = SurveyQuestion.objects.all()
@@ -1054,29 +960,132 @@ def get_user(request):
                 })
         answers = answers_with_text + answers_without_text
 
+        # Достижения сотрудника
+        employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
+        employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
+        achievements_count = employee_achievements.count()
+
+        # Обращения
+        requests_qs = Request.objects.filter(support_operator=employee).select_related('classification')
+        requests_massive_qs = requests_qs.filter(is_massive=True)
+
+        total_requests = requests_qs.count()
+        requests_this_month = requests_qs.filter(date__month=today.month).count()
+        requests_this_week = requests_qs.filter(date__gte=start_of_week).count()
+
+        total_requests_massive = requests_massive_qs.count()
+        requests_massive_this_month = requests_massive_qs.filter(date__month=today.month).count()
+        requests_massive_this_week = requests_massive_qs.filter(date__gte=start_of_week).count()
+
+        # Группировка по классификациям
+        classifications = requests_qs.values('classification__name').annotate(
+            total=Count('number'),
+            month=Count('number', filter=Q(date__month=today.month)),
+            week=Count('number', filter=Q(date__gte=start_of_week))
+        )
+        grouped_requests = [
+            {
+                'classification_name': c['classification__name'],
+                'total': c['total'],
+                'month': c['month'],
+                'week': c['week'],
+            }
+            for c in classifications
+        ]
+
+        # Массивы для вывода данных по обращениям
+        request_statistics = [
+            {
+                'titleName': 'Общие обращения',
+                'contentPoint': [
+                    f'Всего: {total_requests}',
+                    f'За месяц: {requests_this_month}',
+                    f'За неделю: {requests_this_week}'
+                ],
+            },
+            {
+                'titleName': 'Массовые обращения',
+                'contentPoint': [
+                    f'Всего массовых обращений: {total_requests_massive}',
+                    f'За месяц: {requests_massive_this_month}',
+                    f'За неделю: {requests_massive_this_week}'
+                ]
+            },
+            {
+                'titleName': 'Обращения по классификациям',
+                'contentPoint': [
+                    f'{item["classification_name"]}: {item["total"]} обращений'
+                    for item in grouped_requests
+                ]
+            }
+        ]
+
+        # Количество отработанных дней
+        worked_days = ShiftHistory.objects.filter(employee=employee).values('date').distinct().count()
+
+        # Количество опозданий
+        total_lates = ShiftHistory.objects.filter(
+            employee=employee,
+            actual_start__gt=F('scheduled_start')
+        ).count()
+
+        # Наибольшее количество дней без опозданий
+        shift_history = ShiftHistory.objects.filter(employee=employee).order_by('date')
+        max_days_without_late = 0
+        current_streak = 0
+        last_date = None
+        for shift in shift_history:
+            if shift.actual_start <= shift.scheduled_start:
+                if last_date and (shift.date - last_date).days == 1:
+                    current_streak += 1
+                else:
+                    current_streak = 1
+                max_days_without_late = max(max_days_without_late, current_streak)
+            else:
+                current_streak = 0
+            last_date = shift.date
+
         # Инвентарь сотрудника
         employee_items = EmployeeItem.objects.filter(employee=employee)
         employee_items_data = EmployeeItemSerializer(employee_items, many=True).data
 
-        # Достижения сотрудника
-        achievements_count = employee_achievements.count()
+        # Собираем основную информацию для профиля
+        profile_statistics = {
+            "basic_info": {
+                "Дата регистрации": registration_date,
+                "Отработанные дни": worked_days,
+                "Опоздания": total_lates,
+                "Максимум дней без опозданий": max_days_without_late,
+                "Заработано тестов": completed_tests_count,
+                "Жалоб": complaints_count,
+                "Похвал": praises_count
+            },
+            "experience": {
+                "Всего": employee.experience,
+                "За месяц": total_experience_month,
+                "За неделю": total_experience_week
+            },
+            "acoins": {
+                "Всего": total_acoins,
+                "За месяц": total_acoins_month,
+                "За неделю": total_acoins_week
+            },
+            "praises_details": FeedbackSerializer(praises, many=True).data
+        }
 
+        # Достижения сотрудника
         statistics = {
-            "Общая статистика": profile_statistics["basic_info"],
-            "Опыт": profile_statistics["experience"],
-            "Акоины": profile_statistics["acoins"],
-            "Обращения": request_statistics,
-            "Достижений заработано": achievements_count,
-            "Максимум дней без опозданий": max_days_without_late,
-            "total_lates": total_lates,
-            "worked_days": worked_days
+            "basic_info": profile_statistics["basic_info"],
+            "experience": profile_statistics["experience"],
+            "acoins": profile_statistics["acoins"],
+            "praises_details": profile_statistics["praises_details"],
+            "requests": request_statistics
         }
 
         return Response({
             'profile': serializer.data,
             'level_title': employee.level_title,
-            'statistics': profile_statistics,
-            'request_statistics': request_statistics,
+            'statistics': statistics,
             'answers': answers,
             'achievements': employee_achievements_data,
             'inventory': employee_items_data,
