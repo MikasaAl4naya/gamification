@@ -1005,7 +1005,7 @@ def get_user(request):
 
         # Массивы для вывода данных по обращениям (вложенные массивы)
         request_statistics = [
-            [
+
                 {
                     'titleName': 'Общие обращения',
                     'contentPoint': [
@@ -1021,9 +1021,7 @@ def get_user(request):
                         f'За месяц: {requests_massive_this_month}',
                         f'За неделю: {requests_massive_this_week}'
                     ]
-                }
-            ],
-            [
+                },
                 {
                     'titleName': 'Обращения по классификациям',
                     'contentPoint': [
@@ -1031,7 +1029,6 @@ def get_user(request):
                         for item in grouped_requests
                     ]
                 }
-            ]
         ]
 
         # Количество отработанных дней
