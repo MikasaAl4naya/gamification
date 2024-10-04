@@ -18,12 +18,15 @@ admin.site.register(PasswordPolicy)
 admin.site.register(EmployeeActionLog)
 admin.site.register(Item)
 admin.site.register(ShiftHistory)
+admin.site.register(Template)
+
 
 
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
     list_display = ('first_name', 'last_name', 'email', 'is_active')
+
 
 @admin.register(KarmaSettings)
 class OperationSettingsAdmin(admin.ModelAdmin):

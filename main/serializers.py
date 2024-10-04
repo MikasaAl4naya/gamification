@@ -782,6 +782,7 @@ class NestedJSONField(serializers.Field):
     def to_representation(self, value):
         serializer = self.serializer_class(value)
         return serializer.data
+
 class TemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template

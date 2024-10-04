@@ -394,6 +394,10 @@ class Template(models.Model):
     name = models.CharField(max_length=100, unique=True)
     image = models.ImageField(upload_to='templates/')
 
+    class Meta:
+        verbose_name = "Шаблоны"
+        verbose_name_plural = "Шаблоны"
+
     def __str__(self):
         return self.name
 

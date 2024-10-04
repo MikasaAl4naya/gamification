@@ -335,9 +335,7 @@ def get_employee_info(request, employee_id):
 
     serializer = EmployeeSerializer(employee)
     return Response(serializer.data, status=status.HTTP_200_OK)
-class TemplateViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = Template.objects.all()
-    serializer_class = TemplateSerializer
+
 class EmployeeAchievementsView(generics.ListAPIView):
     serializer_class = AchievementSerializer
     permission_classes = [IsAuthenticated]
@@ -1419,6 +1417,10 @@ class ExperienceMultiplierViewSet(BasePermissionViewSet):
 class KarmaSettingsViewSet(BasePermissionViewSet):
     queryset = KarmaSettings.objects.all()
     serializer_class = KarmaSettingsSerializer
+
+class TemplateViewSet(BasePermissionViewSet):
+    queryset = Template.objects.all()
+    serializer_class = TemplateSerializer
 
 class FilePathViewSet(BasePermissionViewSet):
     queryset = FilePath.objects.all()
