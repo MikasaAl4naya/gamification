@@ -165,11 +165,6 @@ class EmployeeLogSerializer(serializers.ModelSerializer):
             # Обработка других типов изменений
             return obj.description if obj.description else f"{employee_name} изменил {obj.change_type}: {obj.old_value} -> {obj.new_value}."
 
-
-class EmployeeActionLogSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = EmployeeActionLog
-        fields = '__all__'
 class FileUploadSerializer(serializers.Serializer):
     file = serializers.FileField()
 class FilePathSerializer(serializers.ModelSerializer):
@@ -369,9 +364,6 @@ class GroupSerializer(serializers.ModelSerializer):
         model = Group
         fields = ['id', 'name', 'permissions', 'permissions_info']
 
-from rest_framework import serializers
-from .models import EmployeeActionLog
-
 
 class EmployeeActionLogSerializer(serializers.ModelSerializer):
     readable_description = serializers.SerializerMethodField()
@@ -402,8 +394,29 @@ class EmployeeActionLogSerializer(serializers.ModelSerializer):
             return self._handle_test(obj, employee_name)
         elif obj.model_name == 'EmployeeAchievement':
             return self._handle_employee_achievement(obj, employee_name)
+        elif obj.model_name == 'Classifications':
+            return self._handle_classifications(obj, employee_name)
         else:
             return self._handle_general(obj, employee_name)
+
+    def _handle_classifications(self, obj, employee_name):
+        """
+        Обрабатывает логи для модели Classifications.
+        """
+        if obj.action_type == 'создано':
+            # Извлекаем название и родителя из описания
+            pattern = r"создал классификацию '(.+)' с родителем '(.+)'"
+            match = re.search(pattern, obj.description)
+            if match:
+                classification_name, parent_name = match.groups()
+                return f"{employee_name} создал классификацию '{classification_name}' с родителем '{parent_name}'."
+            else:
+                return f"{employee_name} создал классификацию."
+        elif obj.action_type == 'обновлено':
+            # Извлекаем изменения из описания
+            return f"{employee_name} обновил классификацию: {obj.description}"
+        else:
+            return f"{employee_name} {obj.action_type} классификацию (ID: {obj.object_id}). {obj.description}"
 
     def _handle_test_attempt(self, obj, employee_name):
         """
@@ -412,11 +425,11 @@ class EmployeeActionLogSerializer(serializers.ModelSerializer):
         test_name = self._extract_field_from_description(obj.description, "тест '", "'")
         if "провалил тест" in obj.description.lower():
             return f"{employee_name} провалил тест '{test_name}'."
-        elif "успешно прошел тест" in obj.description.lower():
+        elif "успешно прошёл тест" in obj.description.lower():
             return f"{employee_name} успешно прошёл тест '{test_name}'."
         elif "отправлен на модерацию" in obj.description.lower():
             return f"{employee_name} завершил тест '{test_name}', и он отправлен на модерацию."
-        elif "начал проходить тест" in obj.description.lower():
+        elif "начал прохождение теста" in obj.description.lower():
             return f"{employee_name} начал прохождение теста '{test_name}'."
         else:
             return f"{employee_name} обновил TestAttempt (ID: {obj.object_id}). {obj.description}"
@@ -513,6 +526,7 @@ class EmployeeActionLogSerializer(serializers.ModelSerializer):
             achievement_name, from_val, to_val = match.groups()
             return achievement_name, from_val, to_val
         return "Неизвестное достижение", "0", "0"
+
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all()
     serializer_class = GroupSerializer

@@ -53,10 +53,16 @@ def is_classification(value):
     if not isinstance(value, str):
         print(f"Проверка классификации: значение не строка ({value})")
         return False
+    # Исключаем строки с XML-тегами или другими нежелательными символами
+    if any(char in value for char in ['\\', 'Web', '<']):
+        print(f"Проверка классификации: '{value}' содержит запрещённые символы")
+        return False
+    # Проверяем наличие '->' и отсутствие нежелательных ключевых слов
     result = '->' in value and not any(
         keyword in value for keyword in ['Укажите', 'Дополнительная информация', 'Опишите', '['])
     print(f"Проверка классификации: '{value}' -> {result}")
     return result
+
 
 
 def add_request(number, date, description, classification, initiator, responsible, support_operator, status,

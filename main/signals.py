@@ -144,6 +144,14 @@ def log_model_save(sender, instance, created, **kwargs):
     elif hasattr(instance, 'user'):
         employee = instance.user
 
+    # Специальная обработка для Classifications
+    if sender.__name__ == 'Classifications' and not employee:
+        try:
+            employee = Employee.objects.get(username='oleg')
+        except Employee.DoesNotExist:
+            print("Employee with username 'oleg' does not exist.")
+            return
+
     if not employee:
         return  # Если нет связанного сотрудника, не логируем
 
@@ -176,6 +184,8 @@ def log_model_save(sender, instance, created, **kwargs):
         change_description = _handle_test_log(instance, created, employee, sender, action)
     elif sender.__name__ == 'EmployeeAchievement':
         change_description = _handle_employee_achievement_log(instance, old_data, current_data, employee, sender, action)
+    elif sender.__name__ == 'Classifications':
+        change_description = _handle_classification_log(instance, old_data, current_data, employee, sender, action)
     else:
         change_description = "; ".join(changes) if changes else f"{sender.__name__} {action}"
 
@@ -187,6 +197,26 @@ def log_model_save(sender, instance, created, **kwargs):
         object_id=str(instance.pk),
         description=change_description
     )
+
+def _handle_classification_log(instance, old_data, current_data, employee, sender, action):
+    """
+    Обрабатывает логи для модели Classifications.
+    """
+    if action == 'создано':
+        parent = instance.parent.name if instance.parent else 'None'
+        return f"{employee.get_full_name()} создал классификацию '{instance.name}' с родителем '{parent}'."
+    else:
+        changes = []
+        if old_data.get('name') != current_data.get('name'):
+            changes.append(f"Название изменено с '{old_data.get('name')}' на '{current_data.get('name')}'")
+        if old_data.get('parent') != current_data.get('parent'):
+            old_parent = old_data.get('parent')
+            new_parent = current_data.get('parent')
+            old_parent_name = old_parent.name if old_parent else 'None'
+            new_parent_name = new_parent.name if new_parent else 'None'
+            changes.append(f"Родитель изменен с '{old_parent_name}' на '{new_parent_name}'")
+        return "; ".join(changes) if changes else f"{sender.__name__} {action}"
+
 
 
 def _handle_test_attempt_log(instance, created, changes, employee, sender, action):
@@ -255,6 +285,8 @@ def field_translation(field):
         'end_time': 'Время окончания',
         'attempts': 'Попытки',
         'test_results': 'Результаты теста',
+        'name': 'Название',
+        'parent': 'Родитель',
         # Добавьте другие переводы полей по необходимости
     }
     return field_translations.get(field, field)  # Возвращаем перевод или само поле, если перевода нет
