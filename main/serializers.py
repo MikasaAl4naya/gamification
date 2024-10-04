@@ -732,15 +732,20 @@ class StyleCardSerializer(serializers.Serializer):
         return value
 
 class TypeAchContentSerializer(serializers.Serializer):
-    type = serializers.ChoiceField(choices=Achievement.TYPE_CHOICES)
+    # Удаляем поле 'type', чтобы избежать конфликта
     difficulty = serializers.ChoiceField(choices=Achievement.DIFFICULTY_CHOICES)
-    request_type = serializers.PrimaryKeyRelatedField(queryset=Classifications.objects.all(), allow_null=True, required=False)
+    request_type = serializers.PrimaryKeyRelatedField(
+        queryset=Classifications.objects.all(),
+        allow_null=True,
+        required=False
+    )
     required_count = serializers.IntegerField(default=0, required=False)
     type_specific_data = serializers.JSONField(required=False)
 
     def validate(self, data):
         # Добавьте дополнительные проверки, если необходимо
         return data
+
 class TemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template
@@ -820,29 +825,41 @@ class AchievementSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         style_data = validated_data.pop('styleCard', {})
         type_content_data = validated_data.pop('typeAchContent', {})
-
         type_specific_data = type_content_data.pop('type_specific_data', {})
 
+        # Логирование для отладки
+        print(f"Creating Achievement with validated_data: {validated_data}")
+        print(f"Style data: {style_data}")
+        print(f"Type content data: {type_content_data}")
+        print(f"Type specific data: {type_specific_data}")
+
+        # Создаем объект Achievement
         achievement = Achievement.objects.create(**validated_data, type_specific_data=type_specific_data)
 
-        # Обновляем поля стиля
+        # Применяем поля стиля к созданному объекту
         for attr, value in style_data.items():
             setattr(achievement, attr, value)
 
-        # Обновляем поля контента
+        # Применяем поля из typeAchContent
         for attr, value in type_content_data.items():
             setattr(achievement, attr, value)
 
+        # Устанавливаем type_specific_data
+        achievement.type_specific_data = type_specific_data
+
+        # Сохраняем объект с обновленными данными
         achievement.save()
+
+        print(f"Achievement created: {achievement}")
+
         return achievement
 
     def update(self, instance, validated_data):
         style_data = validated_data.pop('styleCard', {})
         type_content_data = validated_data.pop('typeAchContent', {})
-
         type_specific_data = type_content_data.pop('type_specific_data', {})
 
-        # Обновляем основные поля
+        # Обновляем основные поля экземпляра
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
@@ -854,8 +871,12 @@ class AchievementSerializer(serializers.ModelSerializer):
         for attr, value in type_content_data.items():
             setattr(instance, attr, value)
 
+        # Обновляем поле type_specific_data
         instance.type_specific_data = type_specific_data
+
+        # Сохраняем обновленный экземпляр
         instance.save()
+
         return instance
 
 class ClassificationSerializer(serializers.ModelSerializer):
