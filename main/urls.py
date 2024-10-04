@@ -128,6 +128,7 @@ urlpatterns = [
     path('store/', StoreView.as_view(), name='store'),
     path('assign-achievement/', assign_achievement, name='assign_achievement'),
     path('get_complaints/<int:employee_id>/', get_employee_complaints, name='get_employee_complaints'),
+    path('delete-logs/', delete_logs, name='delete_logs'),
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
 if settings.DEBUG:
