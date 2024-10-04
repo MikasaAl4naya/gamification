@@ -424,7 +424,7 @@ class Achievement(models.Model):
     ]
 
     name = models.CharField(max_length=100)
-    description = models.TextField()
+    description = models.TextField(null=True, blank=True)
     type = models.IntegerField(choices=TYPE_CHOICES)  # Поле для выбора типа по номеру
     request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, blank=True, null=True)
     required_count = models.IntegerField(null=True, blank=True, default=0)
