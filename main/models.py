@@ -441,7 +441,7 @@ class Achievement(models.Model):
     use_border = models.BooleanField(default=False)
     is_double = models.BooleanField(default=False)
     type_specific_data = JSONField(null=True, blank=True)
-
+    textColor = models.CharField(default='#000000', max_length=7)
 
     def __str__(self):
         return self.name

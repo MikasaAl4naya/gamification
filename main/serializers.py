@@ -714,13 +714,17 @@ class ThemeWithTestsSerializer(serializers.ModelSerializer):
         model = Test
         fields = ['theme', 'tests']
 
+    def validate(self, data):
+        # Добавьте дополнительные проверки, если необходимо
+        return data
+
 class StyleCardSerializer(serializers.Serializer):
     background_color = serializers.CharField(max_length=7, default='#FFFFFF')
     border_style = serializers.CharField(default='solid')
     border_width = serializers.IntegerField(default=0, required=False)
     border_color = serializers.CharField(max_length=7, default='#000000')
     use_border = serializers.BooleanField(default=False)
-
+    textColor = serializers.CharField(max_length=7, default='#00000')
     def validate_border_width(self, value):
         if value < 0:
             raise serializers.ValidationError("Толщина рамки не может быть отрицательной.")
@@ -730,9 +734,14 @@ class StyleCardSerializer(serializers.Serializer):
         if not re.match(r'^#(?:[0-9a-fA-F]{3}){1,2}$', value):
             raise serializers.ValidationError("Цвет рамки должен быть валидным HEX кодом.")
         return value
+    def validate_textColor(self, value):
+        if not re.match(r'^#(?:[0-9a-fA-F]{3}){1,2}$', value):
+            raise serializers.ValidationError("Цвет текста должен быть валидным HEX кодом.")
+        return value
+
 
 class TypeAchContentSerializer(serializers.Serializer):
-    # Удаляем поле 'type', чтобы избежать конфликта
+    # Удаляем поле 'type' чтобы избежать конфликта
     difficulty = serializers.ChoiceField(choices=Achievement.DIFFICULTY_CHOICES)
     request_type = serializers.PrimaryKeyRelatedField(
         queryset=Classifications.objects.all(),
@@ -745,7 +754,34 @@ class TypeAchContentSerializer(serializers.Serializer):
     def validate(self, data):
         # Добавьте дополнительные проверки, если необходимо
         return data
+class NestedJSONField(serializers.Field):
+    def __init__(self, serializer_class, **kwargs):
+        self.serializer_class = serializer_class
+        super().__init__(**kwargs)
 
+    def to_internal_value(self, data):
+        # Логирование для отладки
+        print(f"NestedJSONField received data: {data}")
+
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+                print(f"Parsed JSON string: {data}")
+            except json.JSONDecodeError:
+                raise serializers.ValidationError("Invalid JSON format.")
+        elif isinstance(data, dict):
+            pass  # Данные уже в виде словаря
+        else:
+            raise serializers.ValidationError("Invalid data type. Expected a JSON string or object.")
+
+        # Валидируем данные с помощью вложенного сериализатора
+        serializer = self.serializer_class(data=data)
+        serializer.is_valid(raise_exception=True)
+        return serializer.validated_data
+
+    def to_representation(self, value):
+        serializer = self.serializer_class(value)
+        return serializer.data
 class TemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template
@@ -758,8 +794,8 @@ class TemplateSerializer(serializers.ModelSerializer):
             representation['image'] = request.build_absolute_uri(instance.image.url)
         return representation
 class AchievementSerializer(serializers.ModelSerializer):
-    styleCard = StyleCardSerializer(required=False)
-    typeAchContent = TypeAchContentSerializer(required=False)
+    styleCard = NestedJSONField(serializer_class=StyleCardSerializer, required=False)
+    typeAchContent = NestedJSONField(serializer_class=TypeAchContentSerializer, required=False)
     image = serializers.ImageField(required=False)
     background_image = serializers.ImageField(required=False)
 
@@ -804,6 +840,7 @@ class AchievementSerializer(serializers.ModelSerializer):
             "border_width": instance.border_width,
             "border_color": instance.border_color,
             "use_border": instance.use_border,
+            "textColor": instance.textColor,
         }
 
         # Формирование объекта typeAchContent с только необходимой информацией для типа
@@ -878,8 +915,3 @@ class AchievementSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
-
-class ClassificationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Classifications
-        fields = ['id', 'name']#коммент ради коммента
