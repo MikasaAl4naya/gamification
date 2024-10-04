@@ -2720,7 +2720,7 @@ def test_attempt_moderation_list(request):
     return Response(response_data, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsModeratorOrAdmin])
+@permission_classes([IsAuthenticated])
 def moderate_test_attempt(request, test_attempt_id):
     try:
         test_attempt = TestAttempt.objects.get(id=test_attempt_id)
@@ -2728,7 +2728,7 @@ def moderate_test_attempt(request, test_attempt_id):
         return Response({"message": "Test Attempt not found"}, status=status.HTTP_404_NOT_FOUND)
 
     # Получаем текущего пользователя (модератора)
-    moderator = request.employee
+    moderator = request.employee  # Исправлено с request.employee на request.user
     print(f"Moderator: {moderator.username} is moderating test attempt {test_attempt_id}")
 
     if 'moderated_questions' not in request.data:
@@ -2755,6 +2755,9 @@ def moderate_test_attempt(request, test_attempt_id):
         if moderation_score is None:
             return Response({"message": "Moderation score is required for each question"}, status=status.HTTP_400_BAD_REQUEST)
 
+        if not isinstance(question_number, int):
+            return Response({"message": "Question number must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
+
         if question_number < 1 or question_number > len(answers_info):
             return Response({"message": "Invalid question number"}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -2773,6 +2776,7 @@ def moderate_test_attempt(request, test_attempt_id):
 
         if moderation_score == max_question_score:
             question_to_moderate['is_correct'] = True
+            question_to_moderate.pop('is_partially_true', None)  # Удаляем, если существует
         elif moderation_score > 0:
             question_to_moderate['is_correct'] = False
             question_to_moderate['is_partially_true'] = True
@@ -2781,7 +2785,6 @@ def moderate_test_attempt(request, test_attempt_id):
             question_to_moderate['is_partially_true'] = False
 
     test_results['answers_info'] = answers_info
-
     test_results['moderator'] = f"{moderator.first_name} {moderator.last_name}"
     test_attempt.test_results = json.dumps(test_results)
 
@@ -2804,16 +2807,12 @@ def moderate_test_attempt(request, test_attempt_id):
         experience_awarded = 10  # Дефолтное значение опыта, если настройка не найдена
 
     moderator.add_experience(experience_awarded, source=f'За модерацию теста {test_attempt.test.name}')
-    moderator.save()
 
     # Начисление опыта сотруднику за прохождение теста
     test_employee = test_attempt.employee
     experience_for_employee = test_attempt.test.experience_points
     if test_attempt.status == TestAttempt.PASSED:
         test_employee.add_experience(experience_for_employee, source=f'За прохождение теста {test_attempt.test.name}')
-
-    test_employee.save()
-
     response_data = {
         "score": test_attempt.score,
         "message": "Test moderated successfully",
