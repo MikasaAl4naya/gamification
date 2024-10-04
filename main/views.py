@@ -935,8 +935,16 @@ def get_user(request):
         last_login = employee.last_login.strftime('%Y-%m-%d %H:%M:%S') if employee.last_login else 'Never'
         completed_tests_count = TestAttempt.objects.filter(employee=employee, status=TestAttempt.PASSED).count()
 
-        complaints_count = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved').count()
-        praises_count = Feedback.objects.filter(target_employee=employee, type="praise", status='approved').count()
+        complaints_count = Feedback.objects.filter(
+            target_employee=employee,
+            type="complaint",
+            status='approved'
+        ).count()
+        praises_count = Feedback.objects.filter(
+            target_employee=employee,
+            type="praise",
+            status='approved'
+        ).count()
         praises = Feedback.objects.filter(target_employee=employee, type="praise", status='approved')
 
         # Ответы на вопросы опроса
@@ -1092,6 +1100,9 @@ def get_user(request):
             }
         ]
 
+        profile_data = serializer.data.copy()
+        profile_data['praises_count'] = praises_count
+        profile_data['complaints_count'] = complaints_count
         # Собираем статистику по обращениям
         statistics_requests = request_statistics  # Уже является списком списков
 
@@ -1105,7 +1116,7 @@ def get_user(request):
         # Похвалы остаются отдельным ключом "praises_details"
 
         return Response({
-            'profile': serializer.data,
+            'profile': profile_data,
             'level_title': employee.level_title,
             'statistics': statistics,  # Список списков
             'praises_details': FeedbackSerializer(praises, many=True).data,  # Оставляем отдельным

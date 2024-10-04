@@ -5,6 +5,7 @@ import django
 import pandas as pd
 from datetime import datetime
 import pytz
+from django.utils import timezone
 
 # Django setup
 project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -18,30 +19,45 @@ from main.models import Classifications, Request, Employee, FilePath
 # Кэш для классификаций
 classification_cache = {}
 
+
 def add_classification_levels(classification_string):
     """Кэшируем классификации для ускорения процесса."""
     levels = [level.strip() for level in classification_string.split('->')]
     parent = None
     cache_key = '->'.join(levels)
 
+    print(f"Обработка классификации: '{classification_string}'")
+
     if cache_key in classification_cache:
+        print(f"Кэш найден для ключа: '{cache_key}'")
         return classification_cache[cache_key]
 
     for level in levels:
+        print(f"Ищем классификацию: '{level}' с родителем: '{parent}'")
         obj = Classifications.objects.filter(name=level, parent=parent).first()
-        if not obj:
+        if obj:
+            print(f"Найдена существующая классификация: {obj}")
+        else:
+            print(f"Создаём новую классификацию: '{level}' с родителем: '{parent}'")
             obj = Classifications.objects.create(name=level, parent=parent)
+            print(f"Создана классификация: {obj}")
         parent = obj
 
     classification_cache[cache_key] = parent
+    print(f"Кэшируем классификацию с ключом: '{cache_key}'")
     return parent
+
 
 def is_classification(value):
     """Проверка, является ли значение классификацией."""
     if not isinstance(value, str):
+        print(f"Проверка классификации: значение не строка ({value})")
         return False
-    return '->' in value and not any(
+    result = '->' in value and not any(
         keyword in value for keyword in ['Укажите', 'Дополнительная информация', 'Опишите', '['])
+    print(f"Проверка классификации: '{value}' -> {result}")
+    return result
+
 
 def add_request(number, date, description, classification, initiator, responsible, support_operator, status,
                is_massive=False):
@@ -111,8 +127,12 @@ def run_classification_script(file_path, file_path_entry=None):
 
         is_massive_file = "Массовые" in file_path
         df = pd.read_excel(file_path, sheet_name='TDSheet', skiprows=8)
+        print(f"Файл '{file_path}' успешно загружен.")
+
         # Найти динамические позиции для столбцов инициатора, ответственного и статуса
         initiator_col, responsible_col, status_col = find_column_positions(df)
+        print(f"Найденные столбцы - Инициатор: '{initiator_col}', Ответственный: '{responsible_col}', Статус: '{status_col}'")
+
         support_operator = None
         classification = None  # Инициализируем переменную классификации
         requests_to_create = []
@@ -127,41 +147,47 @@ def run_classification_script(file_path, file_path_entry=None):
                     if len(parts) >= 2:
                         first_name, last_name = parts[1], parts[0]
                         support_operator = Employee.objects.filter(first_name=first_name, last_name=last_name).first()
-                        if not support_operator:
-                            print(f"Employee {full_name} not found.")
+                        if support_operator:
+                            print(f"Найден сотрудник: {support_operator}")
+                        else:
+                            print(f"Сотрудник '{full_name}' не найден.")
                 elif is_classification(value):
                     classification = add_classification_levels(value)
+                    print(f"Установлена классификация: {classification}")
                 elif "Обращение" in str(value):
                     match = re.match(r"Обращение (\d+) от (\d{2}\.\d{2}\.\d{4} \d{1,2}:\d{2}:\d{2})", str(value))
                     if match:
                         number = match.group(1)
                         date_str = match.group(2)
                         date = datetime.strptime(date_str, '%d.%m.%Y %H:%M:%S')
+                        date = pytz.UTC.localize(date)  # Добавление часового пояса, если необходимо
 
                         description = df.iloc[index + 1, 0] if index + 1 < len(df) else ''
                         initiator = row[initiator_col]
                         responsible = row[responsible_col]
                         status = row[status_col]
 
+                        print(f"Создание запроса: номер={number}, дата={date}, инициатор={initiator}, ответственный={responsible}, статус={status}, классификация={classification}")
+
                         if classification and pd.notna(initiator) and pd.notna(responsible) and support_operator:
                             new_request = add_request(number, date, description, classification, initiator,
                                                       responsible, support_operator, status, is_massive_file)
                             if new_request:
-                                # Если вы хотите использовать bulk_create, не сохраняйте объекты индивидуально
                                 requests_to_create.append(new_request)
                                 total_requests += 1
-
-
-        print(f"Successfully created {total_requests} requests")
+                                print(f"Запрос создан: {new_request}")
+        print(f"Успешно создано {total_requests} запросов")
 
         if file_path_entry:
-            file_path_entry.last_updated = datetime.now(pytz.UTC)
+            file_path_entry.last_updated = timezone.now()
             file_path_entry.save()
+            print(f"Обновлён файл пути: {file_path_entry}")
 
     except Exception as e:
         import traceback
-        print(f"Error processing file {file_path}: {e}")
+        print(f"Ошибка при обработке файла {file_path}: {e}")
         traceback.print_exc()
+
 
 if __name__ == "__main__":
     import sys
