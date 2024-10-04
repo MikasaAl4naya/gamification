@@ -26,41 +26,34 @@ def add_classification_levels(classification_string):
     parent = None
     cache_key = '->'.join(levels)
 
-    print(f"Обработка классификации: '{classification_string}'")
 
     if cache_key in classification_cache:
-        print(f"Кэш найден для ключа: '{cache_key}'")
         return classification_cache[cache_key]
 
     for level in levels:
-        print(f"Ищем классификацию: '{level}' с родителем: '{parent}'")
+
         obj = Classifications.objects.filter(name=level, parent=parent).first()
         if obj:
             print(f"Найдена существующая классификация: {obj}")
         else:
             print(f"Создаём новую классификацию: '{level}' с родителем: '{parent}'")
             obj = Classifications.objects.create(name=level, parent=parent)
-            print(f"Создана классификация: {obj}")
         parent = obj
 
     classification_cache[cache_key] = parent
-    print(f"Кэшируем классификацию с ключом: '{cache_key}'")
     return parent
 
 
 def is_classification(value):
     """Проверка, является ли значение классификацией."""
     if not isinstance(value, str):
-        print(f"Проверка классификации: значение не строка ({value})")
         return False
     # Исключаем строки с XML-тегами или другими нежелательными символами
     if any(char in value for char in ['\\', 'Web', '<']):
-        print(f"Проверка классификации: '{value}' содержит запрещённые символы")
         return False
     # Проверяем наличие '->' и отсутствие нежелательных ключевых слов
     result = '->' in value and not any(
         keyword in value for keyword in ['Укажите', 'Дополнительная информация', 'Опишите', '['])
-    print(f"Проверка классификации: '{value}' -> {result}")
     return result
 
 
@@ -137,7 +130,6 @@ def run_classification_script(file_path, file_path_entry=None):
 
         # Найти динамические позиции для столбцов инициатора, ответственного и статуса
         initiator_col, responsible_col, status_col = find_column_positions(df)
-        print(f"Найденные столбцы - Инициатор: '{initiator_col}', Ответственный: '{responsible_col}', Статус: '{status_col}'")
 
         support_operator = None
         classification = None  # Инициализируем переменную классификации
@@ -172,8 +164,6 @@ def run_classification_script(file_path, file_path_entry=None):
                         initiator = row[initiator_col]
                         responsible = row[responsible_col]
                         status = row[status_col]
-
-                        print(f"Создание запроса: номер={number}, дата={date}, инициатор={initiator}, ответственный={responsible}, статус={status}, классификация={classification}")
 
                         if classification and pd.notna(initiator) and pd.notna(responsible) and support_operator:
                             new_request = add_request(number, date, description, classification, initiator,
