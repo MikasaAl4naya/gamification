@@ -849,7 +849,6 @@ class AchievementSerializer(serializers.ModelSerializer):
 
         # Формирование объекта styleCard
         representation['styleCard'] = {
-            "background_color": instance.background_color,
             "background_image": representation['background_image'],
             "border_style": instance.border_style,
             "border_width": instance.border_width,
