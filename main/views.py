@@ -485,7 +485,7 @@ class EmployeeUpdateView(generics.UpdateAPIView):
 class AdminEmployeeUpdateView(generics.UpdateAPIView):
     queryset = Employee.objects.all()
     serializer_class = AdminEmployeeSerializer
-    permission_classes = [IsAdmin]
+    permission_classes = [IsAuthenticated]
 
     def put(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -888,7 +888,8 @@ def get_user(request):
 
         # Вычисление периодов времени
         today = timezone.now()
-        start_of_week = today - timedelta(days=today.weekday())  # Начало недели (понедельник)
+        start_of_week = today - timedelta(days=today.weekday())
+        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0) # Начало недели (понедельник)
         start_of_month = today.replace(day=1)  # Начало месяца
 
         # Подсчёт заработанного опыта за месяц и неделю (только положительные изменения)
@@ -993,7 +994,7 @@ def get_user(request):
         requests_massive_this_month = requests_massive_qs.filter(date__year=today.year, date__month=today.month).count()
         requests_massive_this_week = requests_massive_qs.filter(date__gte=start_of_week).count()
 
-        # Группировка по классификациям с подсчетом за месяц и неделю
+        # Обновляем группировку по классификациям
         classifications = requests_qs.values('classification__name').annotate(
             total=Count('number'),
             month=Count('number', filter=Q(date__year=today.year, date__month=today.month)),
