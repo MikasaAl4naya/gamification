@@ -57,7 +57,7 @@ class PlayersSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = [
-            'id', 'first_name', 'last_name', 'level', 'experience',
+            'id', 'first_name', 'last_name', 'level','karma', 'experience',
             'next_level_experience', 'avatar_url', 'acoin_amount'
         ]
         read_only_fields = ['first_name', 'last_name', 'level', 'experience', 'next_level_experience']
@@ -820,36 +820,31 @@ class AchievementSerializer(serializers.ModelSerializer):
     typeAchContent = NestedJSONField(serializer_class=TypeAchContentSerializer, required=False)
     image = serializers.ImageField(required=False)
     background_image = serializers.ImageField(required=False)
+    template_background = serializers.PrimaryKeyRelatedField(queryset=Template.objects.filter(is_background=True), required=False, allow_null=True)
+    template_foreground = serializers.PrimaryKeyRelatedField(queryset=Template.objects.filter(is_background=False), required=False, allow_null=True)
 
     class Meta:
         model = Achievement
         fields = [
-            'id',
-            'name',
-            'description',
-            'reward_experience',
-            'reward_currency',
-            'image',
-            'is_award',
-            'is_double',
-            'type',  # Номер типа
-            'background_image',
-            'styleCard',
-            'typeAchContent',
+            'id', 'name', 'description', 'reward_experience', 'reward_currency', 'image', 'template_background',
+            'template_foreground', 'is_award', 'is_double', 'type', 'styleCard', 'typeAchContent',
         ]
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         request = self.context.get('request')
 
-        # Обработка основного изображения
+        # Обработка изображений и шаблонов
         if instance.image and hasattr(instance.image, 'url'):
             representation['image'] = request.build_absolute_uri(instance.image.url)
+        elif instance.template_foreground and instance.template_foreground.image and hasattr(instance.template_foreground.image, 'url'):
+            representation['image'] = request.build_absolute_uri(instance.template_foreground.image.url)
         else:
             representation['image'] = request.build_absolute_uri('/media/default.jpg')
 
-        # Обработка фонового изображения
-        if instance.background_image and hasattr(instance.background_image, 'url'):
+        if instance.template_background and hasattr(instance.template_background.image, 'url'):
+            representation['background_image'] = request.build_absolute_uri(instance.template_background.image.url)
+        elif instance.background_image and hasattr(instance.background_image, 'url'):
             representation['background_image'] = request.build_absolute_uri(instance.background_image.url)
         else:
             representation['background_image'] = None
@@ -865,7 +860,7 @@ class AchievementSerializer(serializers.ModelSerializer):
             "textColor": instance.textColor,
         }
 
-        # Формирование объекта typeAchContent с только необходимой информацией для типа
+        # Формирование объекта typeAchContent
         representation['typeAchContent'] = {
             "difficulty": instance.difficulty,
             "request_type": instance.request_type.id if instance.request_type else None,
@@ -876,7 +871,7 @@ class AchievementSerializer(serializers.ModelSerializer):
         # Добавление текстового названия типа достижения на основе номера типа
         representation['type'] = {
             "id": instance.type,
-            "name": dict(Achievement.TYPE_CHOICES).get(instance.type, "Unknown")  # Преобразование номера в название
+            "name": dict(Achievement.TYPE_CHOICES).get(instance.type, "Unknown")
         }
 
         return representation
@@ -903,14 +898,7 @@ class AchievementSerializer(serializers.ModelSerializer):
         for attr, value in type_content_data.items():
             setattr(achievement, attr, value)
 
-        # Устанавливаем type_specific_data
-        achievement.type_specific_data = type_specific_data
-
-        # Сохраняем объект с обновленными данными
         achievement.save()
-
-        print(f"Achievement created: {achievement}")
-
         return achievement
 
     def update(self, instance, validated_data):
@@ -930,10 +918,7 @@ class AchievementSerializer(serializers.ModelSerializer):
         for attr, value in type_content_data.items():
             setattr(instance, attr, value)
 
-        # Обновляем поле type_specific_data
         instance.type_specific_data = type_specific_data
-
-        # Сохраняем обновленный экземпляр
         instance.save()
 
         return instance

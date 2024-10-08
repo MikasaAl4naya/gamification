@@ -122,6 +122,8 @@ class Employee(AbstractUser):
         super().save(*args, **kwargs)
 
     def log_change(self, change_type, old_value, new_value, source=None, description=None):
+
+        # Если описание не передано, создаём его на основе типа изменения
         if description is None:
             if change_type == 'experience':
                 if new_value > old_value:
@@ -141,16 +143,17 @@ class Employee(AbstractUser):
             else:
                 description = f"Сотрудник {self.get_full_name()} изменил {change_type}: {old_value} -> {new_value}."
 
-        # Создаем запись лога с изменениями
+        # Создаём запись лога с изменениями
         EmployeeLog.objects.create(
             employee=self,
             change_type=change_type,
             old_value=old_value,
             new_value=new_value,
             source=source,
-            description=description
+            description=description  # Описание всегда заполняется
         )
-
+        print(
+            f"Logging change: {change_type}, {old_value} -> {new_value}, source: {source}, description: {description}")
     def add_karma(self, amount, source="Изменили вручную"):
         """ Увеличивает карму на указанное количество и логирует изменение """
         if not self.is_active:
@@ -195,18 +198,6 @@ class Employee(AbstractUser):
         print(f"Setting karma: {old_karma} -> {self.karma}")
         self.log_change('karma', old_karma, self.karma, source=source)
         self.save()
-
-    def log_change(self, change_type, old_value, new_value, source=None, description=None):
-        print(f"Logging change: {change_type}, {old_value} -> {new_value}, source: {source}")
-        # Создаем запись лога с изменениями
-        EmployeeLog.objects.create(
-            employee=self,
-            change_type=change_type,
-            old_value=old_value,
-            new_value=new_value,
-            source=source,
-            description=description
-        )
 
     def check_level_up(self):
         leveled_up_or_down = False  # Флаг для отслеживания, был ли уровень изменен
@@ -417,7 +408,6 @@ class Template(models.Model):
         return self.name
 
 class Achievement(models.Model):
-    # Сопоставление номера и типа
     TYPE_CHOICES = [
         (1, 'Appeals'),
         (2, 'Tasks'),
@@ -444,16 +434,16 @@ class Achievement(models.Model):
 
     name = models.CharField(max_length=100)
     description = models.TextField(null=True, blank=True)
-    type = models.IntegerField(choices=TYPE_CHOICES)  # Поле для выбора типа по номеру
+    type = models.IntegerField(choices=TYPE_CHOICES)
     request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, blank=True, null=True)
     required_count = models.IntegerField(null=True, blank=True, default=0)
     reward_experience = models.IntegerField(null=True, blank=True, default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
-    image = models.ImageField(upload_to='achievements/', default='default.jpg')
+    image = models.ImageField(upload_to='achievements/', null=True, blank=True)  # Индивидуальное изображение
+    template_background = models.ForeignKey(Template, related_name='background_achievements', on_delete=models.SET_NULL, null=True, blank=True)
+    template_foreground = models.ForeignKey(Template, related_name='foreground_achievements', on_delete=models.SET_NULL, null=True, blank=True)
     difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='Medium')
     is_award = models.BooleanField(default=False)
-    background_color = models.CharField(max_length=7, default='#FFFFFF')
-    background_image = models.ImageField(upload_to='achievement_backgrounds/', null=True, blank=True)
     border_style = models.CharField(max_length=20, default='solid')
     border_width = models.IntegerField(null=True, blank=True, default=0)
     border_color = models.CharField(max_length=7, default='#000000')
@@ -461,6 +451,9 @@ class Achievement(models.Model):
     is_double = models.BooleanField(default=False)
     type_specific_data = JSONField(null=True, blank=True)
     textColor = models.CharField(default='#000000', max_length=7)
+
+    class Meta:
+        app_label = 'main'
 
     def __str__(self):
         return self.name
