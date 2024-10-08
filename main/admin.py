@@ -4,7 +4,6 @@ from main.models import *
 
 admin.site.register(Achievement)
 admin.site.register(Classifications)
-admin.site.register(Request)
 admin.site.register(Test)
 admin.site.register(TestAttempt)
 admin.site.register(TestQuestion)
@@ -20,6 +19,19 @@ admin.site.register(Item)
 admin.site.register(ShiftHistory)
 admin.site.register(Template)
 
+@admin.register(Request)
+class RequestAdmin(admin.ModelAdmin):
+    # Определяем поля, которые будут отображаться в списке объектов
+    list_display = ('number', 'support_operator_full_name', 'classification', 'date')
+    # Определяем, по каким полям можно выполнять поиск
+    search_fields = ('support_operator__first_name', 'support_operator__last_name', 'classification__name')
+    # Определяем, по каким полям можно фильтровать записи
+    list_filter = ('classification', 'date')
+
+    def support_operator_full_name(self, obj):
+        # Метод для отображения ФИО сотрудника
+        return f"{obj.support_operator.first_name} {obj.support_operator.last_name}"
+    support_operator_full_name.short_description = 'Сотрудник'
 
 
 
