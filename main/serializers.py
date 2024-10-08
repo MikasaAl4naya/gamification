@@ -230,24 +230,40 @@ class AdminEmployeeSerializer(serializers.ModelSerializer):
         ]
 
     def update(self, instance, validated_data):
+        print(f"Serializer updating Employee: {instance.pk}")
         acoin_data = validated_data.pop('acoin', None)
         groups_data = validated_data.pop('groups', None)
 
-        # Update the Employee instance
-        instance = super().update(instance, validated_data)
+        # Обновляем поля experience и karma через методы модели
+        experience = validated_data.pop('experience', None)
+        karma = validated_data.pop('karma', None)
 
-        # Update Acoin amount if present
+        if experience is not None:
+            print(f"Updating experience to {experience}")
+            instance.set_experience(experience, source="Обновлено через сериализатор")
+
+        if karma is not None:
+            print(f"Updating karma to {karma}")
+            instance.set_karma(karma, source="Обновлено через сериализатор")
+
+        # Обновляем остальные поля
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+
+        # Обновляем Acoin amount, если предоставлено
         if acoin_data:
             acoin_instance, created = Acoin.objects.get_or_create(employee=instance)
             acoin_instance.amount = acoin_data['amount']
             acoin_instance.save()
 
-        # Update groups if present
+        # Обновляем группы, если предоставлено
         if groups_data:
             instance.groups.set(groups_data)
 
+        print(f"Employee updated: {instance.pk}")
         return instance
-
 class StatusUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
@@ -786,14 +802,19 @@ class NestedJSONField(serializers.Field):
 class TemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template
-        fields = ['id', 'name', 'image']
+        fields = ['id', 'name', 'image', 'is_background']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         request = self.context.get('request')
-        if instance.image and hasattr(instance.image, 'url'):
+
+        if request and instance.image and hasattr(instance.image, 'url'):
             representation['image'] = request.build_absolute_uri(instance.image.url)
+        else:
+            representation['image'] = instance.image.url if instance.image and hasattr(instance.image, 'url') else None
+
         return representation
+
 class AchievementSerializer(serializers.ModelSerializer):
     styleCard = NestedJSONField(serializer_class=StyleCardSerializer, required=False)
     typeAchContent = NestedJSONField(serializer_class=TypeAchContentSerializer, required=False)
