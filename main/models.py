@@ -447,6 +447,9 @@ class Achievement(models.Model):
     border_style = models.CharField(max_length=20, default='solid')
     border_width = models.IntegerField(null=True, blank=True, default=0)
     border_color = models.CharField(max_length=7, default='#000000')
+    background_image = models.ImageField(upload_to='achievement_backgrounds/', null=True, blank=True)  # Файл фона
+    foreground_image = models.ImageField(upload_to='achievement_foregrounds/', null=True,
+                                         blank=True)  # Файл основной части
     use_border = models.BooleanField(default=False)
     is_double = models.BooleanField(default=False)
     type_specific_data = JSONField(null=True, blank=True)

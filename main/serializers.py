@@ -820,32 +820,42 @@ class AchievementSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=False)
     template_background = serializers.PrimaryKeyRelatedField(queryset=Template.objects.filter(is_background=True), required=False, allow_null=True)
     template_foreground = serializers.PrimaryKeyRelatedField(queryset=Template.objects.filter(is_background=False), required=False, allow_null=True)
+    background_image = serializers.ImageField(required=False)
+    foreground_image = serializers.ImageField(required=False)
 
     class Meta:
         model = Achievement
         fields = [
             'id', 'name', 'description', 'reward_experience', 'reward_currency', 'image', 'template_background',
-            'template_foreground', 'is_award', 'is_double', 'type', 'styleCard', 'typeAchContent',
+            'template_foreground', 'background_image', 'foreground_image', 'is_award', 'is_double', 'type',
+            'styleCard', 'typeAchContent',
         ]
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         request = self.context.get('request')
 
-        # Обработка изображений и шаблонов
-        if instance.image and hasattr(instance.image, 'url'):
-            representation['image'] = request.build_absolute_uri(instance.image.url)
-        elif instance.template_foreground and instance.template_foreground.image and hasattr(instance.template_foreground.image, 'url'):
-            representation['image'] = request.build_absolute_uri(instance.template_foreground.image.url)
-        else:
-            representation['image'] = request.build_absolute_uri('/media/default.jpg')
-
-        if instance.template_background and hasattr(instance.template_background.image, 'url'):
-            representation['background_image'] = request.build_absolute_uri(instance.template_background.image.url)
-        elif instance.background_image and hasattr(instance.background_image, 'url'):
+        # Обработка фона (template_background или background_image)
+        if instance.background_image and hasattr(instance.background_image, 'url'):
             representation['background_image'] = request.build_absolute_uri(instance.background_image.url)
+        elif instance.template_background and instance.template_background.image and hasattr(instance.template_background.image, 'url'):
+            representation['background_image'] = request.build_absolute_uri(instance.template_background.image.url)
         else:
             representation['background_image'] = None
+
+        # Обработка основной части (template_foreground или foreground_image)
+        if instance.foreground_image and hasattr(instance.foreground_image, 'url'):
+            representation['foreground_image'] = request.build_absolute_uri(instance.foreground_image.url)
+        elif instance.template_foreground and instance.template_foreground.image and hasattr(instance.template_foreground.image, 'url'):
+            representation['foreground_image'] = request.build_absolute_uri(instance.template_foreground.image.url)
+        else:
+            representation['foreground_image'] = None
+
+        # Обработка основного изображения (image)
+        if instance.image and hasattr(instance.image, 'url'):
+            representation['image'] = request.build_absolute_uri(instance.image.url)
+        else:
+            representation['image'] = None
 
         # Формирование объекта styleCard
         representation['styleCard'] = {
@@ -872,6 +882,7 @@ class AchievementSerializer(serializers.ModelSerializer):
         }
 
         return representation
+
 
     def create(self, validated_data):
         style_data = validated_data.pop('styleCard', {})
