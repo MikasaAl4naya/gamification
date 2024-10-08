@@ -1042,10 +1042,7 @@ def get_user(request):
         worked_days = ShiftHistory.objects.filter(employee=employee).values('date').distinct().count()
 
         # Количество опозданий
-        total_lates = ShiftHistory.objects.filter(
-            employee=employee,
-            actual_start__gt=F('scheduled_start')
-        ).count()
+        total_lates = ShiftHistory.objects.filter(employee=employee, late=True).count()
 
         # Наибольшее количество дней без опозданий
         shift_history = ShiftHistory.objects.filter(employee=employee).order_by('date')
@@ -1053,7 +1050,7 @@ def get_user(request):
         current_streak = 0
         last_date = None
         for shift in shift_history:
-            if shift.actual_start <= shift.scheduled_start:
+            if not shift.late:
                 if last_date and (shift.date - last_date).days == 1:
                     current_streak += 1
                 else:
