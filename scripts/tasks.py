@@ -52,31 +52,30 @@ def determine_late_penalty_level(start_diff):
 def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
     try:
         # Расчет разницы в минутах между запланированным и фактическим временем начала
-        start_diff = (datetime.combine(datetime.today(), actual_start) - datetime.combine(datetime.today(),
-                                                                                              scheduled_start)).total_seconds() / 60.0
+        start_diff = (datetime.combine(datetime.today(), actual_start) - datetime.combine(datetime.today(), scheduled_start)).total_seconds() / 60.0
 
         # Расчет разницы в минутах между запланированным и фактическим временем окончания
-        end_diff = (datetime.combine(datetime.today(), actual_end) - datetime.combine(datetime.today(),
-                                                                                          scheduled_end)).total_seconds() / 60.0
+        end_diff = (datetime.combine(datetime.today(), actual_end) - datetime.combine(datetime.today(), scheduled_end)).total_seconds() / 60.0
 
         grace_period = 5  # Допустимая граница в 5 минут
 
         # Проверяем только положительное опоздание
         if start_diff <= grace_period and end_diff >= -grace_period:
             print("Время в пределах допустимых границ")
-            return True, 0  # Время в норме, уровень опоздания 0
+            return True, 0, False  # Время в норме, уровень опоздания 0, late=False
         elif start_diff > grace_period:
             late_level = determine_late_penalty_level(start_diff)
             print(f"Опоздание уровня {late_level}")
-            return False, late_level  # Определяем уровень штрафа
+            return False, late_level, True  # Определяем уровень штрафа и помечаем как опоздание (late=True)
         else:
             # Если сотрудник пришел раньше или ушел раньше без опоздания
             print("Время в пределах допустимых границ (раннее прибытие или ранний уход)")
-            return True, 0
+            return True, 0, False
 
     except Exception as e:
         print(f"Error in check_work_time: {e}")
-        return False, 0
+        return False, 0, False
+
 
 
 def extract_date_from_filename(filename):
@@ -189,19 +188,21 @@ def update_employee_karma(file_path):
                         continue
 
                     # Проверка фактического времени и начисление/штраф кармы
-                    is_on_time, late_level = check_work_time(scheduled_start, scheduled_end, actual_start, actual_end)
-                    print(f"Проверка: is_on_time={is_on_time}, late_level={late_level}")
+                    is_on_time, late_level, is_late = check_work_time(scheduled_start, scheduled_end, actual_start,
+                                                                      actual_end)
+                    print(f"Проверка: is_on_time={is_on_time}, late_level={late_level}, is_late={is_late}")
 
                     shift_date = datetime(file_date.year, file_date.month, day).date()
 
                     # Проверка, есть ли уже запись в ShiftHistory
                     if ShiftHistory.objects.filter(
-                        employee=employee,
-                        date=shift_date,
-                        scheduled_start=scheduled_start,
-                        scheduled_end=scheduled_end
+                            employee=employee,
+                            date=shift_date,
+                            scheduled_start=scheduled_start,
+                            scheduled_end=scheduled_end
                     ).exists():
-                        print(f"Запись ShiftHistory уже существует для {full_name} на {shift_date}. Пропуск начислений.")
+                        print(
+                            f"Запись ShiftHistory уже существует для {full_name} на {shift_date}. Пропуск начислений.")
                         continue  # Пропускаем, так как запись уже существует
 
                     print(f"Добавление новой записи в ShiftHistory для {full_name} на {shift_date}")
@@ -213,7 +214,8 @@ def update_employee_karma(file_path):
                         actual_start=actual_start,
                         actual_end=actual_end,
                         karma_change=0,
-                        experience_change=0
+                        experience_change=0,
+                        late=is_late  # Устанавливаем значение late в зависимости от результата проверки
                     )
 
                     if is_on_time:
@@ -222,8 +224,10 @@ def update_employee_karma(file_path):
                             shift_record.karma_change = settings.karma_change
                             shift_record.experience_change = settings.experience_change
                             employee.add_karma(settings.karma_change, source=f"Смена {shift_date}, Опоздание: Нет")
-                            employee.add_experience(settings.experience_change, source=f"Смена {shift_date}, Опоздание: Нет")
-                            print(f"Карма и опыт начислены: Карма = {settings.karma_change}, Опыт = {settings.experience_change}")
+                            employee.add_experience(settings.experience_change,
+                                                    source=f"Смена {shift_date}, Опоздание: Нет")
+                            print(
+                                f"Карма и опыт начислены: Карма = {settings.karma_change}, Опыт = {settings.experience_change}")
                         except KarmaSettings.DoesNotExist:
                             print("Настройки для правильного выполнения смены не найдены")
                             shift_record.karma_change = 0
@@ -233,7 +237,8 @@ def update_employee_karma(file_path):
                             settings = KarmaSettings.objects.get(operation_type='late_penalty', level=late_level)
                             shift_record.karma_change = -settings.karma_change
                             shift_record.experience_change = 0  # Устанавливаем опыт в 0 при опоздании
-                            employee.add_karma(-settings.karma_change, source=f"Смена {shift_date}, Опоздание уровень {late_level}")
+                            employee.add_karma(-settings.karma_change,
+                                               source=f"Смена {shift_date}, Опоздание уровень {late_level}")
                             print(f"Штраф за опоздание: Карма уменьшена на {settings.karma_change}")
                         except KarmaSettings.DoesNotExist:
                             print("Настройки для штрафа за опоздание не найдены")
@@ -243,7 +248,8 @@ def update_employee_karma(file_path):
                     shift_record.save()
                     employee.save()
 
-                    print(f"Карма и опыт сохранены для {employee.first_name} {employee.last_name}: Карма = {employee.karma}, Опыт = {employee.experience}")
+                    print(
+                        f"Карма и опыт сохранены для {employee.first_name} {employee.last_name}: Карма = {employee.karma}, Опыт = {employee.experience}")
 
                 # Обновление последней даты изменения кармы
                 employee.last_karma_update = timezone.make_aware(datetime.combine(file_date, time.min))
