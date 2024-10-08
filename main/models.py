@@ -151,19 +151,6 @@ class Employee(AbstractUser):
             description=description
         )
 
-    def set_karma(self, amount, source="Изменили вручную"):
-        """ Устанавливает карму напрямую """
-        if not self.is_active:
-            raise ValidationError("Cannot modify a deactivated account.")
-
-        if amount < 0:
-            raise ValidationError("Karma cannot be negative.")
-
-        old_karma = self.karma
-        self.karma = amount
-        self.log_change('karma', old_karma, self.karma, source=source)
-        self.save()
-
     def add_karma(self, amount, source="Изменили вручную"):
         """ Увеличивает карму на указанное количество и логирует изменение """
         if not self.is_active:
@@ -181,7 +168,7 @@ class Employee(AbstractUser):
 
     # Уже существующие методы для experience
     def set_experience(self, amount, source="Изменили вручную"):
-        """ Устанавливает опыт напрямую или увеличивает его, если это вызов для увеличения. """
+        """ Устанавливает опыт напрямую """
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
 
@@ -190,26 +177,36 @@ class Employee(AbstractUser):
 
         old_experience = self.experience
         self.experience = amount
+        print(f"Setting experience: {old_experience} -> {self.experience}")
         self.log_change('experience', old_experience, self.experience, source=source)
         self.check_level_up()
         self.save()
 
-    def add_experience(self, experience, source="Изменили вручную"):
-        """ Увеличивает опыт на указанное количество и логирует изменение. """
+    def set_karma(self, amount, source="Изменили вручную"):
+        """ Устанавливает карму напрямую """
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
 
-        if experience is not None:
-            old_experience = self.experience
-            new_experience = old_experience + experience
+        if amount < 0:
+            raise ValidationError("Karma cannot be negative.")
 
-            if new_experience < 0:
-                raise ValidationError("Experience cannot be negative.")
+        old_karma = self.karma
+        self.karma = amount
+        print(f"Setting karma: {old_karma} -> {self.karma}")
+        self.log_change('karma', old_karma, self.karma, source=source)
+        self.save()
 
-            self.experience = new_experience
-            self.log_change('experience', old_experience, self.experience, source=source)
-            self.check_level_up()
-            self.save()
+    def log_change(self, change_type, old_value, new_value, source=None, description=None):
+        print(f"Logging change: {change_type}, {old_value} -> {new_value}, source: {source}")
+        # Создаем запись лога с изменениями
+        EmployeeLog.objects.create(
+            employee=self,
+            change_type=change_type,
+            old_value=old_value,
+            new_value=new_value,
+            source=source,
+            description=description
+        )
 
     def check_level_up(self):
         leveled_up_or_down = False  # Флаг для отслеживания, был ли уровень изменен
@@ -247,6 +244,7 @@ class Employee(AbstractUser):
 
         # Сохранение изменений только если уровень был изменен
         if leveled_up_or_down:
+            print(f"Level changed: {self.level}, recalculating experience.")
             super(Employee, self).save(
                 update_fields=['level', 'experience', 'next_level_experience', 'remaining_experience',
                                'experience_progress'])
@@ -264,6 +262,22 @@ class Employee(AbstractUser):
 
         return experience_required
 
+    def add_experience(self, experience, source="Изменили вручную"):
+        """ Увеличивает опыт на указанное количество и логирует изменение. """
+        if not self.is_active:
+            raise ValidationError("Cannot modify a deactivated account.")
+
+        if experience is not None:
+            old_experience = self.experience
+            new_experience = old_experience + experience
+
+            if new_experience < 0:
+                raise ValidationError("Experience cannot be negative.")
+
+            self.experience = new_experience
+            self.log_change('experience', old_experience, self.experience, source=source)
+            self.check_level_up()
+            self.save()
     def add_acoins(self, acoins):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
@@ -391,8 +405,9 @@ class Classifications(models.Model):
             super(Classifications, self).save(*args, **kwargs)
 
 class Template(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=255)
     image = models.ImageField(upload_to='templates/')
+    is_background = models.BooleanField(default=False)
 
     class Meta:
         verbose_name = "Шаблоны"

@@ -1423,6 +1423,31 @@ class TemplateViewSet(BasePermissionViewSet):
     queryset = Template.objects.all()
     serializer_class = TemplateSerializer
 
+    def list(self, request, *args, **kwargs):
+        # Получаем все шаблоны с is_background = True и False
+        background_templates = Template.objects.filter(is_background=True)
+        non_background_templates = Template.objects.filter(is_background=False)
+
+        # Функция для разделения списка на части по 6 элементов
+        def chunk_list(queryset, chunk_size):
+            return [queryset[i:i + chunk_size] for i in range(0, len(queryset), chunk_size)]
+
+        # Разбиваем на части
+        background_chunks = chunk_list(background_templates, 6)
+        non_background_chunks = chunk_list(non_background_templates, 6)
+
+        # Объединяем списки в один с приоритетом для background_chunks
+        combined_chunks = background_chunks + non_background_chunks
+
+        # Сериализуем каждый блок
+        serialized_data = [
+            TemplateSerializer(chunk, many=True, context={'request': request}).data
+            for chunk in combined_chunks
+        ]
+
+        return Response(serialized_data)
+
+
 class FilePathViewSet(BasePermissionViewSet):
     queryset = FilePath.objects.all()
     serializer_class = FilePathSerializer
