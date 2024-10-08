@@ -1,7 +1,7 @@
 from django.contrib.admin.models import LogEntry
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
-from django.db.models.signals import post_save, pre_delete, post_delete
+from django.db.models.signals import post_save, pre_delete, post_delete, pre_save
 from django.dispatch import receiver
 from django.forms import model_to_dict
 from django.utils.translation import gettext as _
@@ -115,6 +115,26 @@ def award_experience(sender, instance, created, **kwargs):
         support_operator.save()  # Сохраняем изменения в сотруднике
 
 
+@receiver(post_save, sender=Employee)
+def track_experience_and_karma_changes(sender, instance, created, **kwargs):
+    # Если сотрудник был создан, ничего не делаем
+    if created:
+        return
+
+    # Получаем старые значения из базы данных
+    try:
+        old_instance = sender.objects.get(pk=instance.pk)
+    except sender.DoesNotExist:
+        return
+
+    # Проверяем изменения опыта
+    if old_instance.experience != instance.experience:
+        instance.set_experience(instance.experience, source="Ручное изменение через админку или API")
+
+    # Проверяем изменения кармы
+    if old_instance.karma != instance.karma:
+        instance.set_karma(instance.karma, source="Ручное изменение через админку или API")
+
 @receiver(post_save, sender=Request)
 def update_achievement_progress(sender, instance, **kwargs):
     if instance.status == 'Completed':
@@ -129,7 +149,6 @@ def update_achievement_progress(sender, instance, **kwargs):
         )
         employee_achievement.increment_progress()
         employee_achievement.save()
-
 
 @receiver(post_save)
 def log_model_save(sender, instance, created, **kwargs):
