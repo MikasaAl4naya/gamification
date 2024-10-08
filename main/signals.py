@@ -332,23 +332,6 @@ def log_model_delete(sender, instance, **kwargs):
         object_id=str(instance.pk),
         description=f"{sender.__name__} был удален"
     )
-# Вспомогательная функция для перевода полей в читабельный вид
-def field_translation(field):
-    field_translations = {
-        'id': 'ID',
-        'employee': 'Сотрудник',
-        'achievement': 'Достижение',
-        'progress': 'Прогресс',
-        'level': 'Уровень',
-        'status': 'Статус',
-        'test': 'Тест',
-        'start_time': 'Время начала',
-        'end_time': 'Время окончания',
-        'attempts': 'Попытки',
-        'test_results': 'Результаты теста',
-    }
-    return field_translations.get(field, field)  # Возвращаем перевод или само поле, если перевода нет
-
 
 @receiver(post_save, sender=Request)
 def track_request_classification(sender, instance, created, **kwargs):

@@ -1044,21 +1044,50 @@ def get_user(request):
         # Количество опозданий
         total_lates = ShiftHistory.objects.filter(employee=employee, late=True).count()
 
-        # Наибольшее количество дней без опозданий
+        # Получаем все смены сотрудника, отсортированные по дате
         shift_history = ShiftHistory.objects.filter(employee=employee).order_by('date')
+
         max_days_without_late = 0
         current_streak = 0
         last_date = None
+
         for shift in shift_history:
             if not shift.late:
-                if last_date and (shift.date - last_date).days == 1:
-                    current_streak += 1
+                # Если last_date существует, проверяем разницу в днях
+                if last_date:
+                    day_difference = (shift.date - last_date).days
+                    # Если разница больше 1 дня, проверяем наличие смен между ними
+                    if day_difference > 1:
+                        # Проверяем, есть ли смены между last_date и shift.date
+                        dates_in_between = [
+                            last_date + timedelta(days=i)
+                            for i in range(1, day_difference)
+                        ]
+                        shifts_in_between = ShiftHistory.objects.filter(
+                            employee=employee,
+                            date__in=dates_in_between
+                        )
+                        # Если смен между датами нет (это были выходные), продолжаем текущий стрик
+                        if not shifts_in_between.exists():
+                            current_streak += 1
+                        else:
+                            current_streak = 1
+                    else:
+                        current_streak += 1
                 else:
+                    # Если это первая смена, начинаем стрик
                     current_streak = 1
+
+                # Обновляем максимум, если текущий стрик больше
                 max_days_without_late = max(max_days_without_late, current_streak)
             else:
+                # Сбрасываем стрик, если была отметка о позднем приходе
                 current_streak = 0
+
+            # Обновляем последнюю обработанную дату
             last_date = shift.date
+
+        print(f"Максимальное количество дней без опозданий: {max_days_without_late}")
 
         # Инвентарь сотрудника
         employee_items = EmployeeItem.objects.filter(employee=employee)
