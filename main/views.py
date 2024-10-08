@@ -1445,8 +1445,6 @@ class KarmaSettingsViewSet(BasePermissionViewSet):
     queryset = KarmaSettings.objects.all()
     serializer_class = KarmaSettingsSerializer
 
-from rest_framework.response import Response
-
 class TemplateViewSet(BasePermissionViewSet):
     queryset = Template.objects.all()
     serializer_class = TemplateSerializer
@@ -1461,24 +1459,26 @@ class TemplateViewSet(BasePermissionViewSet):
             return [queryset[i:i + chunk_size] for i in range(0, len(queryset), chunk_size)]
 
         # Разбиваем на части
-        background_chunks = chunk_list(background_templates, 6)
-        non_background_chunks = chunk_list(non_background_templates, 6)
+        background_chunks = chunk_list(list(background_templates), 6)
+        non_background_chunks = chunk_list(list(non_background_templates), 6)
 
         # Сериализуем каждый блок
-        serialized_background_chunks = [
+        serialized_background_data = [
             TemplateSerializer(chunk, many=True, context={'request': request}).data
             for chunk in background_chunks
         ]
-
-        serialized_non_background_chunks = [
+        serialized_non_background_data = [
             TemplateSerializer(chunk, many=True, context={'request': request}).data
             for chunk in non_background_chunks
         ]
 
-        # Объединяем списки в один с приоритетом для background_chunks
-        combined_chunks = serialized_background_chunks + serialized_non_background_chunks
+        # Формируем итоговый ответ с двумя отдельными списками
+        response_data = {
+            "backgrounds": serialized_background_data,
+            "non_backgrounds": serialized_non_background_data
+        }
 
-        return Response(combined_chunks)
+        return Response(response_data)
 
 
 
