@@ -52,29 +52,27 @@ def determine_late_penalty_level(start_diff):
 def check_work_time(scheduled_start, scheduled_end, actual_start, actual_end):
     try:
         # Расчет разницы в минутах между запланированным и фактическим временем начала
-        start_diff = (datetime.combine(datetime.today(), actual_start) - datetime.combine(datetime.today(), scheduled_start)).total_seconds() / 60.0
+        start_diff = (datetime.combine(datetime.today(), actual_start) - datetime.combine(datetime.today(),
+                                                                                         scheduled_start)).total_seconds() / 60.0
 
         # Расчет разницы в минутах между запланированным и фактическим временем окончания
-        end_diff = (datetime.combine(datetime.today(), actual_end) - datetime.combine(datetime.today(), scheduled_end)).total_seconds() / 60.0
+        end_diff = (datetime.combine(datetime.today(), actual_end) - datetime.combine(datetime.today(),
+                                                                                     scheduled_end)).total_seconds() / 60.0
 
-        grace_period = 5  # Допустимая граница в 5 минут
-
-        # Проверяем только положительное опоздание
-        if start_diff <= grace_period and end_diff >= -grace_period:
-            print("Время в пределах допустимых границ")
-            return True, 0, False  # Время в норме, уровень опоздания 0, late=False
-        elif start_diff > grace_period:
+        # Проверяем, если опоздание хотя бы на 1 минуту
+        if start_diff > 0:
             late_level = determine_late_penalty_level(start_diff)
             print(f"Опоздание уровня {late_level}")
-            return False, late_level, True  # Определяем уровень штрафа и помечаем как опоздание (late=True)
+            return False, late_level  # Определяем уровень штрафа
         else:
-            # Если сотрудник пришел раньше или ушел раньше без опоздания
-            print("Время в пределах допустимых границ (раннее прибытие или ранний уход)")
-            return True, 0, False
+            # Если сотрудник прибыл вовремя или раньше
+            print("Сотрудник прибыл вовремя или раньше.")
+            return True, 0
 
     except Exception as e:
         print(f"Error in check_work_time: {e}")
-        return False, 0, False
+        return False, 0
+
 
 
 
@@ -188,9 +186,9 @@ def update_employee_karma(file_path):
                         continue
 
                     # Проверка фактического времени и начисление/штраф кармы
-                    is_on_time, late_level, is_late = check_work_time(scheduled_start, scheduled_end, actual_start,
+                    is_on_time, late_level = check_work_time(scheduled_start, scheduled_end, actual_start,
                                                                       actual_end)
-                    print(f"Проверка: is_on_time={is_on_time}, late_level={late_level}, is_late={is_late}")
+                    print(f"Проверка: is_on_time={is_on_time}, late_level={late_level}")
 
                     shift_date = datetime(file_date.year, file_date.month, day).date()
 
@@ -215,7 +213,7 @@ def update_employee_karma(file_path):
                         actual_end=actual_end,
                         karma_change=0,
                         experience_change=0,
-                        late=is_late  # Устанавливаем значение late в зависимости от результата проверки
+                        late=(not is_on_time)  # Устанавливаем флаг late в зависимости от результата проверки
                     )
 
                     if is_on_time:
