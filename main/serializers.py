@@ -735,7 +735,6 @@ class ThemeWithTestsSerializer(serializers.ModelSerializer):
         return data
 
 class StyleCardSerializer(serializers.Serializer):
-    background_color = serializers.CharField(max_length=7, default='#FFFFFF')
     border_style = serializers.CharField(default='solid')
     border_width = serializers.IntegerField(default=0, required=False)
     border_color = serializers.CharField(max_length=7, default='#000000')
@@ -819,7 +818,6 @@ class AchievementSerializer(serializers.ModelSerializer):
     styleCard = NestedJSONField(serializer_class=StyleCardSerializer, required=False)
     typeAchContent = NestedJSONField(serializer_class=TypeAchContentSerializer, required=False)
     image = serializers.ImageField(required=False)
-    background_image = serializers.ImageField(required=False)
     template_background = serializers.PrimaryKeyRelatedField(queryset=Template.objects.filter(is_background=True), required=False, allow_null=True)
     template_foreground = serializers.PrimaryKeyRelatedField(queryset=Template.objects.filter(is_background=False), required=False, allow_null=True)
 
