@@ -817,7 +817,6 @@ class TemplateSerializer(serializers.ModelSerializer):
 class AchievementSerializer(serializers.ModelSerializer):
     styleCard = NestedJSONField(serializer_class=StyleCardSerializer, required=False)
     typeAchContent = NestedJSONField(serializer_class=TypeAchContentSerializer, required=False)
-    image = serializers.ImageField(required=False)
     template_background = serializers.PrimaryKeyRelatedField(queryset=Template.objects.filter(is_background=True), required=False, allow_null=True)
     template_foreground = serializers.PrimaryKeyRelatedField(queryset=Template.objects.filter(is_background=False), required=False, allow_null=True)
     background_image = serializers.ImageField(required=False)
@@ -826,7 +825,7 @@ class AchievementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Achievement
         fields = [
-            'id', 'name', 'description', 'reward_experience', 'reward_currency', 'image', 'template_background',
+            'id', 'name', 'description', 'reward_experience', 'reward_currency', 'template_background',
             'template_foreground', 'background_image', 'foreground_image', 'is_award', 'is_double', 'type',
             'styleCard', 'typeAchContent',
         ]
@@ -850,12 +849,6 @@ class AchievementSerializer(serializers.ModelSerializer):
             representation['foreground_image'] = request.build_absolute_uri(instance.template_foreground.image.url)
         else:
             representation['foreground_image'] = None
-
-        # Обработка основного изображения (image)
-        if instance.image and hasattr(instance.image, 'url'):
-            representation['image'] = request.build_absolute_uri(instance.image.url)
-        else:
-            representation['image'] = None
 
         # Формирование объекта styleCard
         representation['styleCard'] = {

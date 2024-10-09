@@ -439,7 +439,6 @@ class Achievement(models.Model):
     required_count = models.IntegerField(null=True, blank=True, default=0)
     reward_experience = models.IntegerField(null=True, blank=True, default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
-    image = models.ImageField(upload_to='achievements/', null=True, blank=True)  # Индивидуальное изображение
     template_background = models.ForeignKey(Template, related_name='background_achievements', on_delete=models.SET_NULL, null=True, blank=True)
     template_foreground = models.ForeignKey(Template, related_name='foreground_achievements', on_delete=models.SET_NULL, null=True, blank=True)
     difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='Medium')
