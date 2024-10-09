@@ -1102,9 +1102,9 @@ def get_user(request):
                     f"Кол-во отработанных дней: {worked_days}",
                     f"Опозданий всего: {total_lates}",
                     f"Максимум дней без опозданий: {max_days_without_late}",
-                    f"Заработано тестов: {completed_tests_count}",
+                    f"Выполнено тестов: {completed_tests_count}",
                     f"Жалоб: {complaints_count}",
-                    f"Похвал: {praises_count}"
+                    f"Комплиментов: {praises_count}"
                 ]
             },
             {
