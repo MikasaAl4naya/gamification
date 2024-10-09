@@ -997,6 +997,9 @@ def get_user(request):
             month=Count('number', filter=Q(date__year=today.year, date__month=today.month)),
             week=Count('number', filter=Q(date__gte=start_of_week))
         )
+        simple_requests = requests_qs.filter(classification__complexity='simple').count()
+        medium_requests = requests_qs.filter(classification__complexity='medium').count()
+        hard_requests = requests_qs.filter(classification__complexity='hard').count()
         grouped_requests = [
             {
                 'classification_name': c['classification__name'],
@@ -1101,7 +1104,11 @@ def get_user(request):
                     f"Максимум дней без опозданий: {max_days_without_late}",
                     f"Выполнено тестов: {completed_tests_count}",
                     f"Жалоб: {complaints_count}",
-                    f"Комплиментов: {praises_count}"
+                    f"Комплиментов: {praises_count}",
+                    f"Простых: {simple_requests}",
+                    f"Средних:{medium_requests}",
+                    f"Сложных: {hard_requests}",
+
                 ]
             },
             {
