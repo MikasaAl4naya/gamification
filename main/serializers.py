@@ -58,7 +58,7 @@ class PlayersSerializer(serializers.ModelSerializer):
         model = Employee
         fields = [
             'id', 'first_name', 'last_name', 'level','karma', 'experience',
-            'next_level_experience', 'avatar_url', 'acoin_amount'
+            'next_level_experience', 'avatar_url', 'acoin_amount', 'level_title'
         ]
         read_only_fields = ['first_name', 'last_name', 'level', 'experience', 'next_level_experience']
 
