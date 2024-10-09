@@ -426,22 +426,20 @@ class AchievementViewSet(viewsets.ModelViewSet):
         else:
             print(f"An achievement has been updated: {achievement.name}")
 class UpdateStatusView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def patch(self, request, *args, **kwargs):
         # Получаем ID пользователя из параметров запроса, если он указан
         employee_id = request.data.get('id', None)
 
-        # Если указан id, проверяем, является ли текущий пользователь администратором
+        # Получаем сотрудника по указанному ID или текущего пользователя
         if employee_id:
-            if not request.user.is_staff:  # Проверяем, является ли пользователь администратором
-                return Response({"detail": "У вас нет прав для изменения статуса этого пользователя."},
-                                status=status.HTTP_403_FORBIDDEN)
-
-            # Получаем сотрудника по указанному ID
             employee = get_object_or_404(Employee, id=employee_id)
         else:
-            # Если ID не указан, значит пользователь хочет изменить статус себе
             employee = request.user
+
+        # Проверяем права пользователя на изменение
+        self.check_object_permissions(request, employee)
 
         # Используем сериализатор для обновления статуса
         serializer = StatusUpdateSerializer(employee, data=request.data, partial=True)
