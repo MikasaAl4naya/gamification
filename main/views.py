@@ -426,7 +426,6 @@ class AchievementViewSet(viewsets.ModelViewSet):
         else:
             print(f"An achievement has been updated: {achievement.name}")
 class UpdateStatusView(APIView):
-    permission_classes = [IsAuthenticated]
 
     def patch(self, request, *args, **kwargs):
         # Получаем ID пользователя из параметров запроса, если он указан
