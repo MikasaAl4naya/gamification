@@ -11,7 +11,7 @@ from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, A
     Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, \
     KarmaSettings, \
     FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement, EmployeeLog, \
-    Item, EmployeeItem, Template
+    Item, EmployeeItem, Template, ComplexityThresholds
 from main.names_translations import translate_permission_name
 
 
@@ -132,6 +132,11 @@ class PasswordPolicySerializer(serializers.ModelSerializer):
     class Meta:
         model = PasswordPolicy
         fields = '__all__'
+
+class ComplexityThresholdsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ComplexityThresholds
+        fields = ['simple', 'medium', 'hard']
 
 class ExperienceMultiplierSerializer(serializers.ModelSerializer):
     class Meta:

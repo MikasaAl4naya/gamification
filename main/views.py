@@ -1265,6 +1265,28 @@ class ClassificationsViewSet(BasePermissionViewSet):
         serializer = self.get_serializer(leaf_nodes, many=True)
 
         return Response(serializer.data)
+class ComplexityThresholdsViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['get'])
+    def current(self, request):
+        # Возвращает текущие пороги сложности
+        thresholds = ComplexityThresholds.get_current_thresholds()
+        serializer = ComplexityThresholdsSerializer(thresholds)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['post'])
+    def update_thresholds(self, request):
+        # Обновляет текущие пороги сложности
+        thresholds = ComplexityThresholds.get_current_thresholds()
+        serializer = ComplexityThresholdsSerializer(thresholds, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            # Обновляем сложности у всех классификаций после изменения порогов
+            Classifications.objects.all().update(complexity=models.F('complexity'))
+            return Response(serializer.data)
+        else:
+            return Response(serializer.errors, status=400)
 class SurveyQuestionViewSet(BasePermissionViewSet):
     queryset = SurveyQuestion.objects.all()
     serializer_class = SurveyQuestionSerializer

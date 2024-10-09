@@ -26,6 +26,7 @@ router.register(r'logs', EmployeeActionLogViewSet, basename='logs')
 router.register(r'preloaded-avatars', PreloadedAvatarUploadViewSet, basename='preloaded-avatars')
 router.register(r'achievements', AchievementViewSet, basename='achievement')
 router.register(r'templates', TemplateViewSet, basename='template')
+router.register(r'complexity-thresholds', ComplexityThresholdsViewSet, basename='complexity-thresholds')
 
 urlpatterns = [
     # Включение маршрутов, зарегистрированных с помощью DefaultRouter

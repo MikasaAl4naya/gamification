@@ -369,13 +369,39 @@ class FilePath(models.Model):
 
     def __str__(self):
         return f"{self.name}: {self.path}"
+class ComplexityThresholds(models.Model):
+    simple = models.IntegerField(default=10)
+    medium = models.IntegerField(default=20)
+    hard = models.IntegerField(default=30)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def get_current_thresholds(cls):
+        # Получаем текущие пороги или создаем новые, если они отсутствуют
+        thresholds = cls.objects.first()
+        if not thresholds:
+            thresholds = cls.objects.create()
+        return thresholds
+
+    def __str__(self):
+        return f"Simple: {self.simple}, Medium: {self.medium}, Hard: {self.hard}"
 
 
 class Classifications(models.Model):
+    SIMPLE = 'simple'
+    MEDIUM = 'medium'
+    HARD = 'hard'
+
+    COMPLEXITY_CHOICES = [
+        (SIMPLE, 'Простое'),
+        (MEDIUM, 'Среднее'),
+        (HARD, 'Сложное'),
+    ]
+
     name = models.CharField(max_length=100)
-    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True,
-                               related_name='subclassifications')
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True, related_name='subclassifications')
     experience_points = models.IntegerField(default=10, verbose_name="Очки опыта")
+    complexity = models.CharField(max_length=10, choices=COMPLEXITY_CHOICES, default=SIMPLE, editable=False)
 
     class Meta:
         unique_together = ('name', 'parent')
@@ -384,15 +410,21 @@ class Classifications(models.Model):
         return self.name
 
     def save(self, *args, **kwargs):
+        # Устанавливаем сложность в зависимости от очков опыта и текущих порогов
+        thresholds = ComplexityThresholds.get_current_thresholds()
+        if self.experience_points < thresholds.simple:
+            self.complexity = self.SIMPLE
+        elif self.experience_points < thresholds.medium:
+            self.complexity = self.MEDIUM
+        else:
+            self.complexity = self.HARD
+
         # Проверка на наличие существующей классификации с таким же именем и родителем
         existing_classification = Classifications.objects.filter(name=self.name, parent=self.parent).first()
-
         if existing_classification and existing_classification.id != self.id:
-            # Если такая классификация уже существует, обновляем её поле experience_points
             existing_classification.experience_points = self.experience_points
             super(Classifications, existing_classification).save(*args, **kwargs)  # сохраняем изменения
         else:
-            # Если классификация не найдена, или это новая запись, выполняем стандартное сохранение
             super(Classifications, self).save(*args, **kwargs)
 
 class Template(models.Model):
