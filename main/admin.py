@@ -18,6 +18,7 @@ admin.site.register(EmployeeActionLog)
 admin.site.register(Item)
 admin.site.register(ShiftHistory)
 admin.site.register(Template)
+admin.site.register(ComplexityThresholds)
 
 @admin.register(Request)
 class RequestAdmin(admin.ModelAdmin):
