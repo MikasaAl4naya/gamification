@@ -104,6 +104,7 @@ class EmployeeProfileSerializer(serializers.ModelSerializer):
         model = Employee
         fields = ['first_name', 'last_name', 'email', 'position', 'birth_date', 'survey_answers']
 
+
 class ClassificationsSerializer(serializers.ModelSerializer):
     parentName = serializers.SerializerMethodField()
 
@@ -112,7 +113,20 @@ class ClassificationsSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'experience_points', 'parent', 'parentName']
 
     def get_parentName(self, obj):
-        return obj.parent.name if obj.parent else None
+        # Вызываем вспомогательный метод для построения полного имени цепочки без последнего элемента
+        return self.build_full_parent_name(obj)
+
+    def build_full_parent_name(self, obj):
+        # Если у объекта нет родителя, возвращаем пустую строку
+        if not obj.parent:
+            return None
+
+        # Рекурсивно строим полное имя цепочки родительских элементов
+        parent_name = self.build_full_parent_name(obj.parent)
+        if parent_name:
+            return f"{parent_name}->{obj.parent.name}"
+        else:
+            return obj.parent.name
 class PasswordPolicySerializer(serializers.ModelSerializer):
 
     class Meta:
