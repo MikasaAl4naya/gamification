@@ -756,9 +756,9 @@ class ThemeWithTestsSerializer(serializers.ModelSerializer):
 class StyleCardSerializer(serializers.Serializer):
     border_style = serializers.CharField(default='solid')
     border_width = serializers.IntegerField(default=0, required=False)
-    border_color = serializers.CharField(max_length=7, default='#000000')
+    border_color = serializers.CharField(max_length=255, default='#000000')
     use_border = serializers.BooleanField(default=False)
-    textColor = serializers.CharField(max_length=7, default='#00000')
+    textColor = serializers.CharField(max_length=255, default='#00000')
     def validate_border_width(self, value):
         if value < 0:
             raise serializers.ValidationError("Толщина рамки не может быть отрицательной.")
