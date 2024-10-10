@@ -431,6 +431,7 @@ class Template(models.Model):
     name = models.CharField(max_length=255)
     image = models.ImageField(upload_to='templates/')
     is_background = models.BooleanField(default=False)
+    back_image = models.ImageField(upload_to='templates/back_images/', null = True)
 
     class Meta:
         verbose_name = "Шаблоны"
@@ -485,6 +486,7 @@ class Achievement(models.Model):
     is_double = models.BooleanField(default=False)
     type_specific_data = JSONField(null=True, blank=True)
     textColor = models.CharField(default='#000000', max_length=7)
+    back_image = models.ImageField(upload_to='achievement_back_images/', null=True, blank=True)
 
     class Meta:
         app_label = 'main'

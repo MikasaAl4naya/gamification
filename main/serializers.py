@@ -820,18 +820,28 @@ class NestedJSONField(serializers.Field):
 class TemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Template
-        fields = ['id', 'name', 'image', 'is_background']
+        fields = ['id', 'name', 'image', 'is_background', 'back_image']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         request = self.context.get('request')
 
+        # Обработка поля image
         if request and instance.image and hasattr(instance.image, 'url'):
             representation['image'] = request.build_absolute_uri(instance.image.url)
         else:
             representation['image'] = instance.image.url if instance.image and hasattr(instance.image, 'url') else None
 
+        # Обработка поля back_image
+        if request and instance.back_image and hasattr(instance.back_image, 'url'):
+            representation['back_image'] = request.build_absolute_uri(instance.back_image.url)
+        else:
+            representation['back_image'] = instance.back_image.url if instance.back_image and hasattr(
+                instance.back_image, 'url') else None
+
         return representation
+
+
 
 class AchievementSerializer(serializers.ModelSerializer):
     styleCard = NestedJSONField(serializer_class=StyleCardSerializer, required=False)
@@ -840,20 +850,31 @@ class AchievementSerializer(serializers.ModelSerializer):
     template_foreground = serializers.PrimaryKeyRelatedField(queryset=Template.objects.filter(is_background=False), required=False, allow_null=True)
     background_image = serializers.ImageField(required=False)
     foreground_image = serializers.ImageField(required=False)
+    back_image = serializers.SerializerMethodField()
 
     class Meta:
         model = Achievement
         fields = [
             'id', 'name', 'description', 'reward_experience', 'reward_currency', 'template_background',
-            'template_foreground', 'background_image', 'foreground_image', 'is_award', 'is_double', 'type',
+            'template_foreground', 'background_image', 'foreground_image', 'back_image', 'is_award', 'is_double', 'type',
             'styleCard', 'typeAchContent',
         ]
+
+    def get_back_image(self, instance):
+        """Возвращает URL для back_image из template_background или из самой ачивки."""
+        request = self.context.get('request')
+        if instance.template_background and instance.template_background.back_image and hasattr(instance.template_background.back_image, 'url'):
+            return request.build_absolute_uri(instance.template_background.back_image.url) if request else instance.template_background.back_image.url
+        elif instance.back_image and hasattr(instance.back_image, 'url'):
+            return request.build_absolute_uri(instance.back_image.url) if request else instance.back_image.url
+        else:
+            return None
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         request = self.context.get('request')
 
-        # Обработка фона (template_background или background_image)
+        # Обработка основного фона (template_background или background_image)
         if instance.background_image and hasattr(instance.background_image, 'url'):
             representation['background_image'] = request.build_absolute_uri(instance.background_image.url)
         elif instance.template_background and instance.template_background.image and hasattr(instance.template_background.image, 'url'):
@@ -895,17 +916,10 @@ class AchievementSerializer(serializers.ModelSerializer):
 
         return representation
 
-
     def create(self, validated_data):
         style_data = validated_data.pop('styleCard', {})
         type_content_data = validated_data.pop('typeAchContent', {})
         type_specific_data = type_content_data.pop('type_specific_data', {})
-
-        # Логирование для отладки
-        print(f"Creating Achievement with validated_data: {validated_data}")
-        print(f"Style data: {style_data}")
-        print(f"Type content data: {type_content_data}")
-        print(f"Type specific data: {type_specific_data}")
 
         # Создаем объект Achievement
         achievement = Achievement.objects.create(**validated_data, type_specific_data=type_specific_data)
