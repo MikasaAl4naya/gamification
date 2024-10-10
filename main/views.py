@@ -978,6 +978,13 @@ def get_user(request):
         employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
         achievements_count = employee_achievements.count()
 
+        # Функция для разделения списка достижений на группы по 3 элемента
+        def chunk_list(data, chunk_size):
+            return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
+
+        # Разделяем данные достижений на группы по 3 элемента
+        achievements_chunks = chunk_list(employee_achievements_data, 6)
+
         # Обращения
         requests_qs = Request.objects.filter(support_operator=employee).select_related('classification')
         requests_massive_qs = requests_qs.filter(is_massive=True)
@@ -1149,7 +1156,7 @@ def get_user(request):
             'statistics': statistics,  # Список списков
             'praises_details': FeedbackSerializer(praises, many=True).data,  # Оставляем отдельным
             'answers': answers,
-            'achievements': employee_achievements_data,
+            'achievements': achievements_chunks,
             'inventory': employee_items_data,
         }, status=status.HTTP_200_OK)
 
