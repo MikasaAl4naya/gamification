@@ -847,17 +847,17 @@ class AchievementSerializer(serializers.ModelSerializer):
 
         # Обработка основного фона (template_background или background_image)
         if instance.background_image and hasattr(instance.background_image, 'url'):
-            representation['background_image'] = request.build_absolute_uri(instance.background_image.url)
+            representation['background_image'] = request.build_absolute_uri(instance.background_image.url) if request else instance.background_image.url
         elif instance.template_background and instance.template_background.image and hasattr(instance.template_background.image, 'url'):
-            representation['background_image'] = request.build_absolute_uri(instance.template_background.image.url)
+            representation['background_image'] = request.build_absolute_uri(instance.template_background.image.url) if request else instance.template_background.image.url
         else:
             representation['background_image'] = None
 
         # Обработка основной части (template_foreground или foreground_image)
         if instance.foreground_image and hasattr(instance.foreground_image, 'url'):
-            representation['foreground_image'] = request.build_absolute_uri(instance.foreground_image.url)
+            representation['foreground_image'] = request.build_absolute_uri(instance.foreground_image.url) if request else instance.foreground_image.url
         elif instance.template_foreground and instance.template_foreground.image and hasattr(instance.template_foreground.image, 'url'):
-            representation['foreground_image'] = request.build_absolute_uri(instance.template_foreground.image.url)
+            representation['foreground_image'] = request.build_absolute_uri(instance.template_foreground.image.url) if request else instance.template_foreground.image.url
         else:
             representation['foreground_image'] = None
 
