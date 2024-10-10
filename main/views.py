@@ -973,7 +973,6 @@ def get_user(request):
                     "answer_text": ""
                 })
         answers = answers_with_text + answers_without_text
-
         # Достижения сотрудника
         employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
         employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
