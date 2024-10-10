@@ -728,20 +728,6 @@ class RequestSerializer(serializers.ModelSerializer):
             'date', 'is_massive'
         ]
 
-
-class EmployeeAchievementSerializer(serializers.ModelSerializer):
-    achievement_name = serializers.CharField(source='achievement.name')
-    achievement_image_url = serializers.SerializerMethodField()
-
-    class Meta:
-        model = EmployeeAchievement
-        fields = ['achievement_name', 'achievement_image_url', 'level', 'progress']
-
-    def get_achievement_image_url(self, obj):
-        if obj.achievement.image and hasattr(obj.achievement.image, 'url'):
-            return f"http://shaman.pythonanywhere.com{obj.achievement.image.url}"
-        return "http://shaman.pythonanywhere.com/media/default.jpg"
-
 class ThemeWithTestsSerializer(serializers.ModelSerializer):
     tests = TestSerializer(many=True, read_only=True)
 
@@ -827,10 +813,6 @@ class TemplateSerializer(serializers.ModelSerializer):
                 instance.back_image, 'url') else None
 
         return representation
-
-
-
-from rest_framework import serializers
 
 class AchievementSerializer(serializers.ModelSerializer):
     styleCard = NestedJSONField(serializer_class=StyleCardSerializer, required=False)
@@ -954,3 +936,10 @@ class AchievementSerializer(serializers.ModelSerializer):
         instance.save()
 
         return instance
+
+class EmployeeAchievementSerializer(serializers.ModelSerializer):
+    achievement = AchievementSerializer(read_only=True)
+
+    class Meta:
+        model = EmployeeAchievement
+        fields = ['achievement', 'level', 'progress']
