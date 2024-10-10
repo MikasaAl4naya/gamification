@@ -843,6 +843,8 @@ class TemplateSerializer(serializers.ModelSerializer):
 
 
 
+from rest_framework import serializers
+
 class AchievementSerializer(serializers.ModelSerializer):
     styleCard = NestedJSONField(serializer_class=StyleCardSerializer, required=False)
     typeAchContent = NestedJSONField(serializer_class=TypeAchContentSerializer, required=False)
@@ -850,7 +852,7 @@ class AchievementSerializer(serializers.ModelSerializer):
     template_foreground = serializers.PrimaryKeyRelatedField(queryset=Template.objects.filter(is_background=False), required=False, allow_null=True)
     background_image = serializers.ImageField(required=False)
     foreground_image = serializers.ImageField(required=False)
-    back_image = serializers.SerializerMethodField()
+    back_image = serializers.ImageField(required=False)
 
     class Meta:
         model = Achievement
@@ -914,7 +916,16 @@ class AchievementSerializer(serializers.ModelSerializer):
             "name": dict(Achievement.TYPE_CHOICES).get(instance.type, "Unknown")
         }
 
+        # Добавление back_image
+        representation['back_image'] = self.get_back_image(instance)
+
         return representation
+
+    def validate(self, attrs):
+        # Проверка, чтобы или template_background, или back_image было заполнено
+        if not attrs.get('template_background') and not attrs.get('back_image'):
+            raise serializers.ValidationError("Вы должны указать либо template_background, либо back_image.")
+        return attrs
 
     def create(self, validated_data):
         style_data = validated_data.pop('styleCard', {})
