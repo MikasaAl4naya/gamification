@@ -759,19 +759,6 @@ class StyleCardSerializer(serializers.Serializer):
     border_color = serializers.CharField(max_length=255, default='#000000')
     use_border = serializers.BooleanField(default=False)
     textColor = serializers.CharField(max_length=255, default='#00000')
-    def validate_border_width(self, value):
-        if value < 0:
-            raise serializers.ValidationError("Толщина рамки не может быть отрицательной.")
-        return value
-
-    def validate_border_color(self, value):
-        if not re.match(r'^#(?:[0-9a-fA-F]{3}){1,2}$', value):
-            raise serializers.ValidationError("Цвет рамки должен быть валидным HEX кодом.")
-        return value
-    def validate_textColor(self, value):
-        if not re.match(r'^#(?:[0-9a-fA-F]{3}){1,2}$', value):
-            raise serializers.ValidationError("Цвет текста должен быть валидным HEX кодом.")
-        return value
 
 
 class TypeAchContentSerializer(serializers.Serializer):
