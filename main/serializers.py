@@ -831,13 +831,19 @@ class AchievementSerializer(serializers.ModelSerializer):
             'styleCard', 'typeAchContent',
         ]
 
+    def get_full_url(self, request, url):
+        """Формирует полный URL на основе запроса и относительного пути"""
+        if request and url:
+            return request.build_absolute_uri(url)
+        return url
+
     def get_back_image(self, instance):
         """Возвращает URL для back_image из template_background или из самой ачивки."""
         request = self.context.get('request')
         if instance.template_background and instance.template_background.back_image and hasattr(instance.template_background.back_image, 'url'):
-            return request.build_absolute_uri(instance.template_background.back_image.url) if request else instance.template_background.back_image.url
+            return self.get_full_url(request, instance.template_background.back_image.url)
         elif instance.back_image and hasattr(instance.back_image, 'url'):
-            return request.build_absolute_uri(instance.back_image.url) if request else instance.back_image.url
+            return self.get_full_url(request, instance.back_image.url)
         else:
             return None
 
@@ -847,17 +853,17 @@ class AchievementSerializer(serializers.ModelSerializer):
 
         # Обработка основного фона (template_background или background_image)
         if instance.background_image and hasattr(instance.background_image, 'url'):
-            representation['background_image'] = request.build_absolute_uri(instance.background_image.url) if request else instance.background_image.url
+            representation['background_image'] = self.get_full_url(request, instance.background_image.url)
         elif instance.template_background and instance.template_background.image and hasattr(instance.template_background.image, 'url'):
-            representation['background_image'] = request.build_absolute_uri(instance.template_background.image.url) if request else instance.template_background.image.url
+            representation['background_image'] = self.get_full_url(request, instance.template_background.image.url)
         else:
             representation['background_image'] = None
 
         # Обработка основной части (template_foreground или foreground_image)
         if instance.foreground_image and hasattr(instance.foreground_image, 'url'):
-            representation['foreground_image'] = request.build_absolute_uri(instance.foreground_image.url) if request else instance.foreground_image.url
+            representation['foreground_image'] = self.get_full_url(request, instance.foreground_image.url)
         elif instance.template_foreground and instance.template_foreground.image and hasattr(instance.template_foreground.image, 'url'):
-            representation['foreground_image'] = request.build_absolute_uri(instance.template_foreground.image.url) if request else instance.template_foreground.image.url
+            representation['foreground_image'] = self.get_full_url(request, instance.template_foreground.image.url)
         else:
             representation['foreground_image'] = None
 
@@ -890,52 +896,6 @@ class AchievementSerializer(serializers.ModelSerializer):
 
         return representation
 
-    def validate(self, attrs):
-        # Проверка, чтобы или template_background, или back_image было заполнено
-        if not attrs.get('template_background') and not attrs.get('back_image'):
-            raise serializers.ValidationError("Вы должны указать либо template_background, либо back_image.")
-        return attrs
-
-    def create(self, validated_data):
-        style_data = validated_data.pop('styleCard', {})
-        type_content_data = validated_data.pop('typeAchContent', {})
-        type_specific_data = type_content_data.pop('type_specific_data', {})
-
-        # Создаем объект Achievement
-        achievement = Achievement.objects.create(**validated_data, type_specific_data=type_specific_data)
-
-        # Применяем поля стиля к созданному объекту
-        for attr, value in style_data.items():
-            setattr(achievement, attr, value)
-
-        # Применяем поля из typeAchContent
-        for attr, value in type_content_data.items():
-            setattr(achievement, attr, value)
-
-        achievement.save()
-        return achievement
-
-    def update(self, instance, validated_data):
-        style_data = validated_data.pop('styleCard', {})
-        type_content_data = validated_data.pop('typeAchContent', {})
-        type_specific_data = type_content_data.pop('type_specific_data', {})
-
-        # Обновляем основные поля экземпляра
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-
-        # Обновляем поля стиля
-        for attr, value in style_data.items():
-            setattr(instance, attr, value)
-
-        # Обновляем поля контента
-        for attr, value in type_content_data.items():
-            setattr(instance, attr, value)
-
-        instance.type_specific_data = type_specific_data
-        instance.save()
-
-        return instance
 
 class EmployeeAchievementSerializer(serializers.ModelSerializer):
     achievement = AchievementSerializer(read_only=True)
@@ -943,3 +903,15 @@ class EmployeeAchievementSerializer(serializers.ModelSerializer):
     class Meta:
         model = EmployeeAchievement
         fields = ['achievement', 'level', 'progress']
+
+    def to_representation(self, instance):
+        # Получаем оригинальное представление
+        representation = super().to_representation(instance)
+
+        # Передаем request контекст для вложенного achievement
+        request = self.context.get('request')
+        if request:
+            achievement_serializer = AchievementSerializer(instance.achievement, context={'request': request})
+            representation['achievement'] = achievement_serializer.data
+
+        return representation

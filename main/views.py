@@ -974,8 +974,10 @@ def get_user(request):
                 })
         answers = answers_with_text + answers_without_text
         # Достижения сотрудника
+        # Достижения сотрудника
         employee_achievements = EmployeeAchievement.objects.filter(employee=employee)
-        employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True).data
+        employee_achievements_data = EmployeeAchievementSerializer(employee_achievements, many=True,
+                                                                   context={'request': request}).data
         achievements_count = employee_achievements.count()
 
         # Функция для разделения списка достижений на группы по 3 элемента
