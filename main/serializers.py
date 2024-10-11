@@ -831,6 +831,33 @@ class AchievementSerializer(serializers.ModelSerializer):
             'styleCard', 'typeAchContent',
         ]
 
+    def create(self, validated_data):
+        # Извлекаем данные, которые не относятся к модели Achievement
+        style_data = validated_data.pop('styleCard', None)
+        type_content_data = validated_data.pop('typeAchContent', None)
+
+        # Создаем объект Achievement без этих данных
+        achievement = Achievement.objects.create(**validated_data)
+
+        # Обрабатываем данные стиля
+        if style_data:
+            achievement.border_style = style_data.get('border_style', 'solid')
+            achievement.border_width = style_data.get('border_width', 0)
+            achievement.border_color = style_data.get('border_color', '#000000')
+            achievement.use_border = style_data.get('use_border', False)
+            achievement.textColor = style_data.get('textColor', '#000000')
+
+        # Обрабатываем данные типа достижений
+        if type_content_data:
+            achievement.difficulty = type_content_data.get('difficulty', 'Medium')
+            achievement.request_type = type_content_data.get('request_type')
+            achievement.required_count = type_content_data.get('required_count', 0)
+            achievement.type_specific_data = type_content_data.get('type_specific_data')
+
+        # Сохраняем изменения
+        achievement.save()
+
+        return achievement
     def get_full_url(self, request, url):
         """Формирует полный URL на основе запроса и относительного пути"""
         if request and url:
@@ -915,3 +942,13 @@ class EmployeeAchievementSerializer(serializers.ModelSerializer):
             representation['achievement'] = achievement_serializer.data
 
         return representation
+
+class RatingSerializer(serializers.ModelSerializer):
+    full_name = serializers.SerializerMethodField()
+    class Meta:
+        model = Employee
+        fields = ['full_name']
+
+    def get_full_name(self,obj):
+        full_name = f'{obj.first_name} {obj.last_name}'
+        return full_name

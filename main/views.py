@@ -871,6 +871,26 @@ def get_micro_user(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def get_rating(request):
+    current_employee = request.user
+    employee_id = request.query_params.get('employee_id', None)
+
+    # Определение нужного сотрудника
+    if employee_id:
+        employee = get_object_or_404(Employee, id=employee_id)
+    else:
+        employee = current_employee
+
+    # Получаем всех сотрудников и сортируем их по опыту (опыт, вероятно, числовое поле)
+    employees = Employee.objects.all().order_by('-experience')  # '-experience' для сортировки от большего к меньшему
+
+    # Сериализация списка сотрудников
+    serializer = RatingSerializer(employees, many=True, context={'request': request})
+
+    # Возвращение списка сотрудников в виде JSON ответа
+    return Response(serializer.data, status=status.HTTP_200_OK)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_user(request):
     try:
         current_employee = request.user
