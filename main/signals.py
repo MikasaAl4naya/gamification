@@ -106,9 +106,9 @@ def award_experience(sender, instance, created, **kwargs):
 
         # Добавление опыта оператору
         if instance.is_massive:
-            support_operator.add_experience(experience_points, source="За массовую")
+            support_operator.add_experience(experience_points, source=f"За массовую {instance.number}")
         else:
-            support_operator.add_experience(experience_points, source="За обращение")
+            support_operator.add_experience(experience_points, source=f"За обращение {instance.number}")
 
         print(
             f"Awarded {experience_points} experience points to {support_operator.first_name} {support_operator.last_name}")
