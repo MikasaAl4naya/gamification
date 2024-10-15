@@ -468,8 +468,6 @@ class Achievement(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(null=True, blank=True)
     type = models.IntegerField(choices=TYPE_CHOICES)
-    request_type = models.ForeignKey(Classifications, on_delete=models.CASCADE, blank=True, null=True)
-    required_count = models.IntegerField(null=True, blank=True, default=0)
     reward_experience = models.IntegerField(null=True, blank=True, default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
     template_background = models.ForeignKey(Template, related_name='background_achievements', on_delete=models.SET_NULL, null=True, blank=True)
@@ -651,11 +649,16 @@ class EmployeeAchievement(models.Model):
             # Достижение уже выдано, дальнейший прогресс не отслеживается
             return
 
-        self.progress += 1
+        # Проверяем, требуется ли достижение определенного количества запросов
+        required_count = self.achievement.type_specific_data.get("required_requests_count")
+        if required_count:
+            # Увеличиваем прогресс
+            self.progress += 1
 
-        if (self.achievement.required_count is not None and
-            self.progress >= self.achievement.required_count):
-            self.reward_employee()
+            # Проверяем, достиг ли прогресс требуемого количества для получения награды
+            if self.progress >= required_count:
+                self.reward_employee()
+                self.date_awarded = timezone.now()  # Фиксируем дату награждения
 
         self.save()
 

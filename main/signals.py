@@ -1,9 +1,13 @@
+from datetime import timedelta
+
 from django.contrib.admin.models import LogEntry
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
+from django.db.models import F
 from django.db.models.signals import post_save, pre_delete, post_delete, pre_save
 from django.dispatch import receiver
 from django.forms import model_to_dict
+from django.utils import timezone
 from django.utils.translation import gettext as _
 from .models import TestAttempt, AcoinTransaction, Employee, create_acoin_transaction, TestQuestion, Test, Acoin, \
     Request, Achievement, EmployeeAchievement, ExperienceMultiplier, EmployeeActionLog, ShiftHistory, EmployeeLog, \
@@ -134,7 +138,85 @@ def track_experience_and_karma_changes(sender, instance, created, **kwargs):
     # Проверяем изменения кармы
     if old_instance.karma != instance.karma:
         instance.set_karma(instance.karma, source="Ручное изменение через админку или API")
+@receiver(post_save, sender=ShiftHistory)
+def track_shift_late_achievements(sender, instance, created, **kwargs):
+    if created:
+        try:
+            employee = instance.employee
 
+            # Получаем все достижения по отсутствию опозданий
+            achievements = Achievement.objects.filter(type=4)
+
+            # Стрик дней без опозданий
+            shift_history = ShiftHistory.objects.filter(employee=employee).order_by('date')
+
+            max_days_without_late = 0
+            current_streak = 0
+            last_date = None
+
+            for shift in shift_history:
+                if not shift.late:
+                    if last_date:
+                        day_difference = (shift.date - last_date).days
+                        if day_difference > 1:
+                            dates_in_between = [
+                                last_date + timedelta(days=i)
+                                for i in range(1, day_difference)
+                            ]
+                            shifts_in_between = ShiftHistory.objects.filter(
+                                employee=employee,
+                                date__in=dates_in_between
+                            )
+                            if not shifts_in_between.exists():
+                                current_streak += 1
+                            else:
+                                current_streak = 1
+                        else:
+                            current_streak += 1
+                    else:
+                        current_streak = 1
+                    max_days_without_late = max(max_days_without_late, current_streak)
+                else:
+                    current_streak = 0
+                last_date = shift.date
+
+            # Общее количество дней без опозданий
+            total_days_without_late = ShiftHistory.objects.filter(employee=employee, late=False).count()
+
+            for achievement in achievements:
+                if achievement.type_specific_data:
+                    type_data = achievement.type_specific_data
+
+                    # Проверяем достижение на 10 дней подряд без опозданий
+                    if 'streak_days_required' in type_data:
+                        required_streak = type_data['streak_days_required']
+                        employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                            employee=employee,
+                            achievement=achievement
+                        )
+                        # Обновляем прогресс по стрику
+                        if max_days_without_late > employee_achievement.progress:
+                            employee_achievement.progress = min(max_days_without_late, required_streak)
+                            if employee_achievement.progress >= required_streak and not employee_achievement.date_awarded:
+                                employee_achievement.date_awarded = timezone.now()
+                            employee_achievement.save()
+
+                    # Проверяем достижение на 40 суммарных дней без опозданий
+                    if 'total_days_required' in type_data:
+                        required_total = type_data['total_days_required']
+                        employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                            employee=employee,
+                            achievement=achievement
+                        )
+                        # Обновляем прогресс по общему количеству дней без опозданий
+                        if total_days_without_late > employee_achievement.progress:
+                            employee_achievement.progress = min(total_days_without_late, required_total)
+                            if employee_achievement.progress >= required_total and not employee_achievement.date_awarded:
+                                employee_achievement.date_awarded = timezone.now()
+                            employee_achievement.save()
+
+        except Exception as e:
+            print(f"Ошибка при обновлении прогресса ачивки: {e}")
 @receiver(post_save, sender=Request)
 def update_achievement_progress(sender, instance, **kwargs):
     if instance.status == 'Completed':
@@ -153,7 +235,7 @@ def update_achievement_progress(sender, instance, **kwargs):
 @receiver(post_save)
 def log_model_save(sender, instance, created, **kwargs):
     # Исключаем отслеживание определенных моделей
-    excluded_models = [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession, LogEntry]
+    excluded_models = [EmployeeActionLog, ShiftHistory, EmployeeLog, Request, UserSession, LogEntry, EmployeeAchievement, Acoin, AcoinTransaction]
     if sender in excluded_models:
         return
 
@@ -175,6 +257,20 @@ def log_model_save(sender, instance, created, **kwargs):
         return  # Если нет связанного сотрудника, не логируем
 
     action = 'создано' if created else 'обновлено'
+
+    # Обработка для модели EmployeeAchievement
+    if sender.__name__ == 'EmployeeAchievement':
+        # Логируем только если достижение завершено и выдано (т.е. есть date_awarded)
+        if instance.date_awarded:
+            change_description = _handle_employee_achievement_log(instance, employee, sender, action)
+            EmployeeActionLog.objects.create(
+                employee=employee,
+                action_type=action,
+                model_name=sender.__name__,
+                object_id=str(instance.pk),
+                description=change_description
+            )
+        return  # Выходим из обработчика, чтобы избежать ненужных логов для EmployeeAchievement
 
     # Получаем текущие данные модели
     current_data = model_to_dict(instance)
@@ -201,14 +297,12 @@ def log_model_save(sender, instance, created, **kwargs):
         change_description = _handle_test_attempt_log(instance, created, changes, employee, sender, action)
     elif sender.__name__ == 'Test' and created:
         change_description = _handle_test_log(instance, created, employee, sender, action)
-    elif sender.__name__ == 'EmployeeAchievement':
-        change_description = _handle_employee_achievement_log(instance, old_data, current_data, employee, sender, action)
     elif sender.__name__ == 'Classifications':
         change_description = _handle_classification_log(instance, old_data, current_data, employee, sender, action)
     else:
         change_description = "; ".join(changes) if changes else f"{sender.__name__} {action}"
 
-    # Логируем изменения
+    # Логируем изменения для всех остальных моделей
     EmployeeActionLog.objects.create(
         employee=employee,
         action_type=action,
@@ -217,6 +311,12 @@ def log_model_save(sender, instance, created, **kwargs):
         description=change_description
     )
 
+def _handle_employee_achievement_log(instance, employee, sender, action):
+    """
+    Обрабатывает логи для модели EmployeeAchievement, когда достижение выдается.
+    """
+    achievement_name = instance.achievement.name if hasattr(instance, 'achievement') and instance.achievement else _("Неизвестное достижение")
+    return f"{employee.get_full_name()} получил достижение '{achievement_name}' с уровнем {instance.level}."
 def _handle_classification_log(instance, old_data, current_data, employee, sender, action):
     """
     Обрабатывает логи для модели Classifications.
@@ -332,6 +432,10 @@ def log_model_delete(sender, instance, **kwargs):
         object_id=str(instance.pk),
         description=f"{sender.__name__} был удален"
     )
+@receiver(pre_delete, sender=Employee)
+def delete_related_logs(sender, instance, **kwargs):
+    EmployeeActionLog.objects.filter(employee=instance).delete()
+
 
 @receiver(post_save, sender=Request)
 def track_request_classification(sender, instance, created, **kwargs):
@@ -339,39 +443,64 @@ def track_request_classification(sender, instance, created, **kwargs):
         try:
             employee = instance.support_operator
             request_classification = instance.classification
+            is_massive = instance.is_massive
 
-            # Измените фильтрацию по числовому значению, а не строке
-            request_achievements = Achievement.objects.filter(type=1)  # Замените 1 на нужное числовое значение
+            # Фильтрация достижений типа "Обращения" (type=1)
+            request_achievements = Achievement.objects.filter(type=1)
 
             for achievement in request_achievements:
-                if achievement_matches_classification(achievement, request_classification):
-                    employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                # Получаем данные из type_specific_data для каждого достижения
+                type_specific_data = achievement.type_specific_data
+                required_requests_count = type_specific_data.get("required_requests_count")
+                required_classification_ids = type_specific_data.get("classification_ids", [])
+                is_massive_required = type_specific_data.get("is_massive", False)
+
+                # Проверяем соответствие классификации и типу обращения
+                if request_classification.id in required_classification_ids and is_massive == is_massive_required:
+                    # Найти или создать объект EmployeeAchievement
+                    employee_achievement, _ = EmployeeAchievement.objects.get_or_create(
                         employee=employee,
                         achievement=achievement
                     )
+
+                    # Увеличить прогресс с помощью метода increment_progress
                     employee_achievement.increment_progress()
 
         except Exception as e:
             print(f"Ошибка при обновлении прогресса ачивки: {e}")
 
+@receiver(post_save, sender=Employee)
+def track_employee_level(sender, instance, **kwargs):
+    try:
+        # Получаем текущий уровень сотрудника
+        current_level = instance.level
 
-@receiver(pre_delete, sender=Employee)
-def delete_related_logs(sender, instance, **kwargs):
-    EmployeeActionLog.objects.filter(employee=instance).delete()
+        # Фильтрация достижений типа "NewLvl" (type=3)
+        level_achievements = Achievement.objects.filter(type=3)
 
+        for achievement in level_achievements:
+            # Получаем данные из type_specific_data для каждого достижения
+            type_specific_data = achievement.type_specific_data
+            required_level = type_specific_data.get("required_level")
 
-def achievement_matches_classification(achievement, classification):
-    """
-    Проверяет, соответствует ли классификация (или её родители) классификации в ачивке.
-    """
-    if classification == achievement.request_type:
-        return True
+            # Проверяем, есть ли требуемый уровень и соответствует ли текущий уровень сотрудника
+            if required_level:
+                # Найти или создать объект EmployeeAchievement
+                employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                    employee=instance,
+                    achievement=achievement
+                )
 
-    # Проверяем родителей классификации
-    parent_classification = classification.parent
-    while parent_classification:
-        if parent_classification == achievement.request_type:
-            return True
-        parent_classification = parent_classification.parent
+                # Обновляем прогресс, если текущий уровень выше текущего прогресса
+                if current_level > employee_achievement.progress:
+                    employee_achievement.progress = min(current_level, required_level)
 
-    return False
+                    # Если достигли необходимого уровня, фиксируем дату награждения и выдаем награду
+                    if employee_achievement.progress >= required_level and not employee_achievement.date_awarded:
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+                    employee_achievement.save()
+
+    except Exception as e:
+        print(f"Ошибка при отслеживании уровня сотрудника: {e}")

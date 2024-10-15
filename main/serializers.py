@@ -850,35 +850,24 @@ class AchievementSerializer(serializers.ModelSerializer):
         # Обрабатываем данные типа достижений
         if type_content_data:
             achievement.difficulty = type_content_data.get('difficulty', 'Medium')
-            achievement.request_type = type_content_data.get('request_type')
-            achievement.required_count = type_content_data.get('required_count', 0)
             achievement.type_specific_data = type_content_data.get('type_specific_data')
 
         # Сохраняем изменения
         achievement.save()
 
         return achievement
+
     def get_full_url(self, request, url):
         """Формирует полный URL на основе запроса и относительного пути"""
         if request and url:
             return request.build_absolute_uri(url)
         return url
 
-    def get_back_image(self, instance):
-        """Возвращает URL для back_image из template_background или из самой ачивки."""
-        request = self.context.get('request')
-        if instance.template_background and instance.template_background.back_image and hasattr(instance.template_background.back_image, 'url'):
-            return self.get_full_url(request, instance.template_background.back_image.url)
-        elif instance.back_image and hasattr(instance.back_image, 'url'):
-            return self.get_full_url(request, instance.back_image.url)
-        else:
-            return None
-
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         request = self.context.get('request')
 
-        # Обработка основного фона (template_background или background_image)
+        # Обработка изображений и получения полного URL
         if instance.background_image and hasattr(instance.background_image, 'url'):
             representation['background_image'] = self.get_full_url(request, instance.background_image.url)
         elif instance.template_background and instance.template_background.image and hasattr(instance.template_background.image, 'url'):
@@ -886,7 +875,6 @@ class AchievementSerializer(serializers.ModelSerializer):
         else:
             representation['background_image'] = None
 
-        # Обработка основной части (template_foreground или foreground_image)
         if instance.foreground_image and hasattr(instance.foreground_image, 'url'):
             representation['foreground_image'] = self.get_full_url(request, instance.foreground_image.url)
         elif instance.template_foreground and instance.template_foreground.image and hasattr(instance.template_foreground.image, 'url'):
@@ -907,19 +895,8 @@ class AchievementSerializer(serializers.ModelSerializer):
         # Формирование объекта typeAchContent
         representation['typeAchContent'] = {
             "difficulty": instance.difficulty,
-            "request_type": instance.request_type.id if instance.request_type else None,
-            "required_count": instance.required_count,
             "type_specific_data": instance.type_specific_data,
         }
-
-        # Добавление текстового названия типа достижения на основе номера типа
-        representation['type'] = {
-            "id": instance.type,
-            "name": dict(Achievement.TYPE_CHOICES).get(instance.type, "Unknown")
-        }
-
-        # Добавление back_image
-        representation['back_image'] = self.get_back_image(instance)
 
         return representation
 
