@@ -376,7 +376,153 @@ def _handle_test_attempt_log(instance, created, changes, employee, sender, actio
         else:
             return "; ".join(changes) if changes else f"{sender.__name__} {action}"
 
+@receiver(post_save, sender=EmployeeLog)
+def track_karma_and_acoin_achievements(sender, instance, created, **kwargs):
+    try:
+        # Получаем текущего сотрудника и тип изменения
+        employee = instance.employee
+        change_type = instance.change_type
 
+        # Получаем текущие дату и время для вычисления периодов
+        today = timezone.now()
+        start_of_day = today.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_week = today - timedelta(days=today.weekday())
+        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
+        start_of_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+        # Получаем все достижения типа "Indicators"
+        indicator_achievements = Achievement.objects.filter(type=6)
+
+        for achievement in indicator_achievements:
+            type_specific_data = achievement.type_specific_data
+
+            # Логика для кармы
+            if change_type == 'karma':
+                # Заработано кармы
+                if 'karma_earned' in type_specific_data:
+                    required_karma = type_specific_data['karma_earned']
+                    total_karma_earned = EmployeeLog.objects.filter(
+                        employee=employee,
+                        change_type='karma',
+                        new_value__gt=F('old_value')
+                    ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
+
+                    # Найти или создать объект EmployeeAchievement
+                    employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                        employee=employee,
+                        achievement=achievement
+                    )
+
+                    if total_karma_earned >= required_karma and not employee_achievement.date_awarded:
+                        employee_achievement.progress = required_karma
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+                # Заработать кармы за день, неделю, месяц
+                if 'karma_earned_day' in type_specific_data:
+                    required_karma_day = type_specific_data['karma_earned_day']
+                    karma_earned_day = EmployeeLog.objects.filter(
+                        employee=employee,
+                        change_type='karma',
+                        timestamp__gte=start_of_day,
+                        new_value__gt=F('old_value')
+                    ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
+
+                    if karma_earned_day >= required_karma_day and not employee_achievement.date_awarded:
+                        employee_achievement.progress = required_karma_day
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+                if 'karma_earned_week' in type_specific_data:
+                    required_karma_week = type_specific_data['karma_earned_week']
+                    karma_earned_week = EmployeeLog.objects.filter(
+                        employee=employee,
+                        change_type='karma',
+                        timestamp__gte=start_of_week,
+                        new_value__gt=F('old_value')
+                    ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
+
+                    if karma_earned_week >= required_karma_week and not employee_achievement.date_awarded:
+                        employee_achievement.progress = required_karma_week
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+                if 'karma_earned_month' in type_specific_data:
+                    required_karma_month = type_specific_data['karma_earned_month']
+                    karma_earned_month = EmployeeLog.objects.filter(
+                        employee=employee,
+                        change_type='karma',
+                        timestamp__gte=start_of_month,
+                        new_value__gt=F('old_value')
+                    ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
+
+                    if karma_earned_month >= required_karma_month and not employee_achievement.date_awarded:
+                        employee_achievement.progress = required_karma_month
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+            # Логика для акоинов
+            if change_type == 'acoins':
+                # Заработать акоины
+                if 'acoins_earned' in type_specific_data:
+                    required_acoins = type_specific_data['acoins_earned']
+                    total_acoins_earned = AcoinTransaction.objects.filter(
+                        employee=employee
+                    ).aggregate(total=Sum('amount'))['total'] or 0
+
+                    # Найти или создать объект EmployeeAchievement
+                    employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                        employee=employee,
+                        achievement=achievement
+                    )
+
+                    if total_acoins_earned >= required_acoins and not employee_achievement.date_awarded:
+                        employee_achievement.progress = required_acoins
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+                # Заработать акоины за день, неделю, месяц
+                if 'acoins_earned_day' in type_specific_data:
+                    required_acoins_day = type_specific_data['acoins_earned_day']
+                    acoins_earned_day = AcoinTransaction.objects.filter(
+                        employee=employee,
+                        timestamp__gte=start_of_day
+                    ).aggregate(total=Sum('amount'))['total'] or 0
+
+                    if acoins_earned_day >= required_acoins_day and not employee_achievement.date_awarded:
+                        employee_achievement.progress = required_acoins_day
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+                if 'acoins_earned_week' in type_specific_data:
+                    required_acoins_week = type_specific_data['acoins_earned_week']
+                    acoins_earned_week = AcoinTransaction.objects.filter(
+                        employee=employee,
+                        timestamp__gte=start_of_week
+                    ).aggregate(total=Sum('amount'))['total'] or 0
+
+                    if acoins_earned_week >= required_acoins_week and not employee_achievement.date_awarded:
+                        employee_achievement.progress = required_acoins_week
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+                if 'acoins_earned_month' in type_specific_data:
+                    required_acoins_month = type_specific_data['acoins_earned_month']
+                    acoins_earned_month = AcoinTransaction.objects.filter(
+                        employee=employee,
+                        timestamp__gte=start_of_month
+                    ).aggregate(total=Sum('amount'))['total'] or 0
+
+                    if acoins_earned_month >= required_acoins_month and not employee_achievement.date_awarded:
+                        employee_achievement.progress = required_acoins_month
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+            # Сохраняем изменения в объекте EmployeeAchievement
+            employee_achievement.save()
+
+    except Exception as e:
+        print(f"Ошибка при отслеживании прогресса показателей: {e}")
 def _handle_test_log(instance, created, employee, sender, action):
     """
     Обрабатывает логи для модели Test.
@@ -470,85 +616,84 @@ def track_test_attempt_achievements(sender, instance, created, **kwargs):
             if achievement.type_specific_data:
                 type_data = achievement.type_specific_data
 
+                required_tests = type_data.get('total_tests_required')
+                required_successful_tests = type_data.get('successful_tests_required')
+                required_perfect_score_tests = type_data.get('perfect_score_tests_required')
+                required_moderation_tests = type_data.get('moderation_tests_required')
+
+                # Найти или создать объект EmployeeAchievement
+                employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                    employee=employee,
+                    achievement=achievement
+                )
+
+                # Отслеживаем прогресс по каждому условию отдельно
+                progress_total_tests = 0
+                progress_successful_tests = 0
+                progress_perfect_score_tests = 0
+                progress_moderation_tests = 0
+                total_conditions = 0
+                fulfilled_conditions = 0
+
                 # Отслеживаем прогресс по общему количеству выполненных тестов
-                if 'total_tests_required' in type_data:
-                    required_tests = type_data['total_tests_required']
-                    total_tests_completed = TestAttempt.objects.filter(employee=employee, status='PASSED').count()
-
-                    employee_achievement, _ = EmployeeAchievement.objects.get_or_create(
-                        employee=employee,
-                        achievement=achievement
-                    )
-
-                    # Обновляем прогресс по количеству выполненных тестов
-                    if total_tests_completed > employee_achievement.progress:
-                        employee_achievement.progress = min(total_tests_completed, required_tests)
-                        if employee_achievement.progress >= required_tests and not employee_achievement.date_awarded:
-                            employee_achievement.date_awarded = timezone.now()
-                        employee_achievement.save()
+                if required_tests is not None:
+                    total_tests_completed = TestAttempt.objects.filter(
+                        employee=employee, status=TestAttempt.PASSED
+                    ).count()
+                    progress_total_tests = min(total_tests_completed, required_tests)
+                    total_conditions += 1
+                    if total_tests_completed >= required_tests:
+                        fulfilled_conditions += 1
 
                 # Отслеживаем прогресс по успешным тестам
-                if 'successful_tests_required' in type_data:
-                    required_successful_tests = type_data['successful_tests_required']
+                if required_successful_tests is not None:
                     successful_tests_completed = TestAttempt.objects.filter(
                         employee=employee,
                         status=TestAttempt.PASSED
                     ).count()
-
-                    employee_achievement, _ = EmployeeAchievement.objects.get_or_create(
-                        employee=employee,
-                        achievement=achievement
-                    )
-
-                    # Обновляем прогресс по успешным тестам
-                    if successful_tests_completed > employee_achievement.progress:
-                        employee_achievement.progress = min(successful_tests_completed, required_successful_tests)
-                        if employee_achievement.progress >= required_successful_tests and not employee_achievement.date_awarded:
-                            employee_achievement.date_awarded = timezone.now()
-                        employee_achievement.save()
+                    progress_successful_tests = min(successful_tests_completed, required_successful_tests)
+                    total_conditions += 1
+                    if successful_tests_completed >= required_successful_tests:
+                        fulfilled_conditions += 1
 
                 # Отслеживаем прогресс по тестам, выполненным на 100%
-                if 'perfect_score_tests_required' in type_data:
-                    required_perfect_score_tests = type_data['perfect_score_tests_required']
+                if required_perfect_score_tests is not None:
                     perfect_score_tests_completed = TestAttempt.objects.filter(
                         employee=employee,
                         score=instance.test.max_score
                     ).count()
-
-                    employee_achievement, _ = EmployeeAchievement.objects.get_or_create(
-                        employee=employee,
-                        achievement=achievement
-                    )
-
-                    # Обновляем прогресс по тестам, выполненным на 100%
-                    if perfect_score_tests_completed > employee_achievement.progress:
-                        employee_achievement.progress = min(perfect_score_tests_completed, required_perfect_score_tests)
-                        if employee_achievement.progress >= required_perfect_score_tests and not employee_achievement.date_awarded:
-                            employee_achievement.date_awarded = timezone.now()
-                        employee_achievement.save()
+                    progress_perfect_score_tests = min(perfect_score_tests_completed, required_perfect_score_tests)
+                    total_conditions += 1
+                    if perfect_score_tests_completed >= required_perfect_score_tests:
+                        fulfilled_conditions += 1
 
                 # Отслеживаем прогресс по модерации тестов
-                if 'moderation_tests_required' in type_data:
-                    required_moderation_tests = type_data['moderation_tests_required']
+                if required_moderation_tests is not None:
                     moderation_tests_completed = TestAttempt.objects.filter(
                         employee=employee,
                         status=TestAttempt.MODERATION
                     ).count()
+                    progress_moderation_tests = min(moderation_tests_completed, required_moderation_tests)
+                    total_conditions += 1
+                    if moderation_tests_completed >= required_moderation_tests:
+                        fulfilled_conditions += 1
 
-                    employee_achievement, _ = EmployeeAchievement.objects.get_or_create(
-                        employee=employee,
-                        achievement=achievement
-                    )
+                # Обновляем прогресс достижения
+                total_progress = (progress_total_tests + progress_successful_tests +
+                                 progress_perfect_score_tests + progress_moderation_tests)
+                employee_achievement.progress = total_progress
 
-                    # Обновляем прогресс по модерации тестов
-                    if moderation_tests_completed > employee_achievement.progress:
-                        employee_achievement.progress = min(moderation_tests_completed, required_moderation_tests)
-                        if employee_achievement.progress >= required_moderation_tests and not employee_achievement.date_awarded:
-                            employee_achievement.date_awarded = timezone.now()
-                        employee_achievement.save()
+                # Если все указанные условия выполнены, фиксируем дату награждения и выдаем награду
+                if fulfilled_conditions == total_conditions and not employee_achievement.date_awarded:
+                    employee_achievement.reward_employee()
+                    employee_achievement.date_awarded = timezone.now()
+
+                # Сохраняем изменения в объекте EmployeeAchievement
+                employee_achievement.save()
 
     except Exception as e:
         print(f"Ошибка при отслеживании прогресса теста: {e}")
+
 @receiver(post_delete)
 def log_model_delete(sender, instance, **kwargs):
     excluded_models = [EmployeeActionLog, ShiftHistory, EmployeeLog, Request]
@@ -602,14 +747,28 @@ def track_request_classification(sender, instance, created, **kwargs):
                         achievement=achievement
                     )
 
-                    # Увеличить прогресс с помощью метода increment_progress
-                    employee_achievement.increment_progress()
+                    # Увеличить прогресс на 1
+                    if required_requests_count:
+                        current_progress = employee_achievement.progress + 1
+                        employee_achievement.progress = current_progress
+                        progress_percent = min(current_progress / required_requests_count, 1.0) * 100
+
+                        # Обновляем процент выполнения достижения
+                        employee_achievement.progress_percent = progress_percent
+
+                        # Проверяем, достигнут ли необходимый прогресс для награждения
+                        if current_progress >= required_requests_count and not employee_achievement.date_awarded:
+                            employee_achievement.reward_employee()
+                            employee_achievement.date_awarded = timezone.now()
+
+                        # Сохраняем изменения в объекте EmployeeAchievement
+                        employee_achievement.save()
 
         except Exception as e:
             print(f"Ошибка при обновлении прогресса ачивки: {e}")
 
 @receiver(post_save, sender=Employee)
-def track_employee_level(sender, instance, **kwargs):
+def track_employee_level_and_experience(sender, instance, **kwargs):
     try:
         # Получаем текущий уровень и опыт сотрудника
         current_level = instance.level
@@ -621,16 +780,14 @@ def track_employee_level(sender, instance, **kwargs):
         # Фильтрация достижений типа "NewLvl" (type=3)
         level_achievements = Achievement.objects.filter(type=3)
 
-        # Считаем заработанный опыт за текущую неделю
         total_experience_earned_week = EmployeeLog.objects.filter(
             employee=instance,
             change_type='experience',
             timestamp__gte=start_of_week,
-            new_value__gt=F('old_value')  # Только положительные изменения
+            new_value__gt=F('old_value')
         ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
 
         for achievement in level_achievements:
-            # Получаем данные из type_specific_data для каждого достижения
             type_specific_data = achievement.type_specific_data
             required_level = type_specific_data.get("required_level")
             exp_earned = type_specific_data.get("exp_earned")
@@ -642,44 +799,50 @@ def track_employee_level(sender, instance, **kwargs):
                 achievement=achievement
             )
 
-            progress_updated = False
+            # Инициализируем список для хранения прогрессов по каждому условию
+            progress_values = []
 
-            # Проверяем достижение по уровню
-            if required_level:
-                if current_level > employee_achievement.progress:
-                    employee_achievement.progress = min(current_level, required_level)
-                    progress_updated = True
+            # Проверяем прогресс по уровню
+            if required_level is not None:
+                level_progress = min(current_level / required_level, 1.0) * 100  # Прогресс по уровню в процентах
+                progress_values.append(level_progress)
 
-                    # Если достигли необходимого уровня, фиксируем дату награждения и выдаем награду
-                    if employee_achievement.progress >= required_level and not employee_achievement.date_awarded:
+                # Обновляем прогресс, если уровень достигнут
+                if current_level >= required_level:
+                    employee_achievement.progress = required_level
+                    if not employee_achievement.date_awarded:
                         employee_achievement.reward_employee()
                         employee_achievement.date_awarded = timezone.now()
 
-            # Проверяем достижение по общему количеству заработанного опыта
-            if exp_earned:
-                if current_exp > employee_achievement.progress:
-                    employee_achievement.progress = min(current_exp, exp_earned)
-                    progress_updated = True
+            # Проверяем прогресс по общему заработанному опыту
+            if exp_earned is not None:
+                experience_progress = min(current_exp / exp_earned, 1.0) * 100  # Прогресс по опыту в процентах
+                progress_values.append(experience_progress)
 
-                    # Если достигли необходимого количества опыта, фиксируем дату награждения и выдаем награду
-                    if employee_achievement.progress >= exp_earned and not employee_achievement.date_awarded:
+                if current_exp >= exp_earned:
+                    employee_achievement.progress = exp_earned
+                    if not employee_achievement.date_awarded:
                         employee_achievement.reward_employee()
                         employee_achievement.date_awarded = timezone.now()
 
-            # Проверяем достижение по количеству опыта, заработанного за неделю
-            if exp_earned_week:
-                if total_experience_earned_week > employee_achievement.progress:
-                    employee_achievement.progress = min(total_experience_earned_week, exp_earned_week)
-                    progress_updated = True
+            # Проверяем прогресс по заработанному опыту за неделю
+            if exp_earned_week is not None:
+                weekly_exp_progress = min(total_experience_earned_week / exp_earned_week, 1.0) * 100  # Прогресс по неделе
+                progress_values.append(weekly_exp_progress)
 
-                    # Если достигли необходимого количества опыта за неделю, фиксируем дату награждения и выдаем награду
-                    if employee_achievement.progress >= exp_earned_week and not employee_achievement.date_awarded:
+                if total_experience_earned_week >= exp_earned_week:
+                    employee_achievement.progress = exp_earned_week
+                    if not employee_achievement.date_awarded:
                         employee_achievement.reward_employee()
                         employee_achievement.date_awarded = timezone.now()
 
-            # Сохраняем изменения в объекте EmployeeAchievement, если прогресс был обновлен
-            if progress_updated:
-                employee_achievement.save()
+            # Рассчитываем общий прогресс
+            if progress_values:
+                overall_progress_percent = min(progress_values)  # Общий прогресс равен минимальному из всех условий
+                employee_achievement.progress_percent = overall_progress_percent
+
+            # Сохраняем изменения в объекте EmployeeAchievement
+            employee_achievement.save()
 
     except Exception as e:
-        print(f"Ошибка при отслеживании уровня и опыта сотрудника: {e}")
+        print(f"Ошибка при отслеживании прогресса уровня и опыта: {e}")

@@ -494,10 +494,10 @@ class Achievement(models.Model):
     foreground_image = models.ImageField(upload_to='achievement_foregrounds/', null=True,
                                          blank=True)  # Файл основной части
     use_border = models.BooleanField(default=False)
-    is_double = models.BooleanField(default=False)
     type_specific_data = JSONField(null=True, blank=True)
     textColor = models.CharField(default='#000000', max_length=255)
     back_image = models.ImageField(upload_to='achievement_back_images/', null=True, blank=True)
+    can_be_repeated = models.BooleanField(default=False)
 
     class Meta:
         app_label = 'main'
@@ -641,37 +641,36 @@ class EmployeeItem(models.Model):
 class EmployeeAchievement(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE)
     achievement = models.ForeignKey(Achievement, on_delete=models.CASCADE)
-    progress = models.IntegerField(default=0)
+    progress = models.IntegerField(default=0)  # Абсолютное значение прогресса
+    progress_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0.0)  # Прогресс в процентах
     level = models.IntegerField(default=0)
+    count = models.IntegerField(default=1)  # Количество раз, когда достижение было получено
     assigned_manually = models.BooleanField(default=False)  # Флаг для вручную назначенных наград
-    date_awarded = models.DateTimeField(null=True, blank=True)  # Дата получения достижения
+    date_awarded = models.DateTimeField(null=True, blank=True)  # Дата последнего получения достижения
 
     class Meta:
         unique_together = ('employee', 'achievement')  # Гарантирует уникальность для каждого сочетания сотрудник-достижение
 
     def increment_progress(self):
         """
-        Увеличивает прогресс достижения. Если достижение уже выдано и это уникальное достижение,
-        дальнейшее увеличение прогресса не производится.
+        Увеличивает прогресс достижения. Если достижение уже выдано и можно получить его снова,
+        прогресс сбрасывается, а `count` увеличивается.
         """
         if self.assigned_manually:
             # Не увеличиваем прогресс для вручную назначенных достижений
             return
 
-        if self.date_awarded:
-            # Достижение уже выдано, дальнейший прогресс не отслеживается
-            return
+        self.progress += 1
 
-        # Проверяем, требуется ли достижение определенного количества запросов
-        required_count = self.achievement.type_specific_data.get("required_requests_count")
-        if required_count:
-            # Увеличиваем прогресс
-            self.progress += 1
+        if self.achievement.type_specific_data:
+            required_count = self.achievement.type_specific_data.get("required_count")
 
-            # Проверяем, достиг ли прогресс требуемого количества для получения награды
-            if self.progress >= required_count:
+            if required_count and self.progress >= required_count:
+                # Выдаем награду и увеличиваем количество раз получения достижения
                 self.reward_employee()
-                self.date_awarded = timezone.now()  # Фиксируем дату награждения
+                self.date_awarded = timezone.now()
+                self.count += 1
+                self.progress = 0  # Сбрасываем прогресс после получения достижения
 
         self.save()
 

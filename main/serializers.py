@@ -896,7 +896,7 @@ class AchievementSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'reward_experience', 'reward_currency', 'template_background',
             'template_foreground', 'background_image', 'foreground_image', 'back_image', 'is_award', 'is_double', 'type',
-            'styleCard', 'typeAchContent',
+            'styleCard', 'typeAchContent', 'can_be_repeated'
         ]
 
     def create(self, validated_data):
@@ -936,56 +936,12 @@ class AchievementSerializer(serializers.ModelSerializer):
 
         return achievement
 
-    def get_full_url(self, request, url):
-        """Формирует полный URL на основе запроса и относительного пути"""
-        if request and url:
-            return request.build_absolute_uri(url)
-        return url
-
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        request = self.context.get('request')
-
-        # Обработка изображений и получения полного URL
-        if instance.background_image and hasattr(instance.background_image, 'url'):
-            representation['background_image'] = self.get_full_url(request, instance.background_image.url)
-        elif instance.template_background and instance.template_background.image and hasattr(instance.template_background.image, 'url'):
-            representation['background_image'] = self.get_full_url(request, instance.template_background.image.url)
-        else:
-            representation['background_image'] = None
-
-        if instance.foreground_image and hasattr(instance.foreground_image, 'url'):
-            representation['foreground_image'] = self.get_full_url(request, instance.foreground_image.url)
-        elif instance.template_foreground and instance.template_foreground.image and hasattr(instance.template_foreground.image, 'url'):
-            representation['foreground_image'] = self.get_full_url(request, instance.template_foreground.image.url)
-        else:
-            representation['foreground_image'] = None
-
-        # Формирование объекта styleCard
-        representation['styleCard'] = {
-            "background_image": representation['background_image'],
-            "border_style": instance.border_style,
-            "border_width": instance.border_width,
-            "border_color": instance.border_color,
-            "use_border": instance.use_border,
-            "textColor": instance.textColor,
-        }
-
-        # Формирование объекта typeAchContent
-        representation['typeAchContent'] = {
-            "difficulty": instance.difficulty,
-            "type_specific_data": instance.type_specific_data,
-        }
-
-        return representation
-
-
 class EmployeeAchievementSerializer(serializers.ModelSerializer):
     achievement = AchievementSerializer(read_only=True)
 
     class Meta:
         model = EmployeeAchievement
-        fields = ['achievement', 'level', 'progress']
+        fields = ['achievement', 'level', 'progress','count']
 
     def to_representation(self, instance):
         # Получаем оригинальное представление
