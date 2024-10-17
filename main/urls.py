@@ -131,6 +131,7 @@ urlpatterns = [
     path('get_complaints/<int:employee_id>/', get_employee_complaints, name='get_employee_complaints'),
     path('delete-logs/', delete_logs, name='delete_logs'),
     path('rating/', get_rating, name='get_rating'),
+    path('get-exp-karma/', get_exp_karma, name='get_exp_karma'),
 ]
 # Добавляем маршрут для обработки медиафайлов только в режиме отладки
 if settings.DEBUG:

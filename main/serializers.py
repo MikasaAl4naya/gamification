@@ -2,6 +2,7 @@ import json
 import re
 
 from django.contrib.auth.models import User, Permission, Group
+from django.db.models import F, Sum
 from django.utils.crypto import get_random_string
 from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAdminUser
@@ -11,7 +12,7 @@ from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, A
     Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, \
     KarmaSettings, \
     FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement, EmployeeLog, \
-    Item, EmployeeItem, Template, ComplexityThresholds
+    Item, EmployeeItem, Template, ComplexityThresholds, ShiftHistory
 from main.names_translations import translate_permission_name
 
 
@@ -54,39 +55,65 @@ class PreloadedAvatarSerializer(serializers.ModelSerializer):
 class PlayersSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
     avatar_url = serializers.SerializerMethodField()
-    level = serializers.SerializerMethodField()
-    experience = serializers.SerializerMethodField()
-    karma = serializers.SerializerMethodField()
+    statistics = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
         fields = [
             'id', 'first_name', 'last_name', 'level', 'karma', 'experience',
-            'next_level_experience', 'avatar_url', 'acoin_amount', 'level_title'
+            'next_level_experience', 'avatar_url', 'acoin_amount', 'level_title', 'statistics'
         ]
         read_only_fields = ['first_name', 'last_name', 'level', 'experience', 'next_level_experience']
 
     def get_avatar_url(self, obj):
+        # Проверяем, включено ли отображение аватара в настройках профиля
         if obj.profile_settings.get("show_avatar", True):
             if obj.avatar:
                 return f"http://shaman.pythonanywhere.com{obj.avatar.url}"
-            return "http://shaman.pythonanywhere.com/media/default.jpg"
-        return None
+        return "http://shaman.pythonanywhere.com/media/default.jpg"
 
-    def get_level(self, obj):
-        if obj.profile_settings.get("show_level", True):
-            return obj.level
-        return None
+    def get_statistics(self, obj):
+        # Получаем настройки профиля
+        settings = obj.profile_settings
 
-    def get_experience(self, obj):
-        if obj.profile_settings.get("show_experience", True):
-            return obj.experience
-        return None
+        # Логирование для отладки
+        print(f"Profile settings for {obj.first_name} {obj.last_name}: {settings}")
 
-    def get_karma(self, obj):
-        if obj.profile_settings.get("show_karma", True):
-            return obj.karma
-        return None
+        # Подготавливаем статистику на основе настроек профиля
+        statistics = {}
+
+        # Добавляем дополнительные элементы статистики, если они включены в настройках профиля
+        if settings.get("show_total_requests", True):
+            total_requests = Request.objects.filter(support_operator=obj).count()
+            statistics['total_requests'] = total_requests
+
+        if settings.get("show_achievements_count", True):
+            achievements_count = EmployeeAchievement.objects.filter(employee=obj).count()
+            statistics['achievements_count'] = achievements_count
+
+        if settings.get("show_total_experience_earned", True):
+            total_experience_earned = EmployeeLog.objects.filter(
+                employee=obj,
+                change_type='experience',
+                new_value__gt=F('old_value')
+            ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
+            statistics['total_experience_earned'] = total_experience_earned
+
+        if settings.get("show_completed_tests_count", True):
+            completed_tests_count = TestAttempt.objects.filter(employee=obj, status=TestAttempt.PASSED).count()
+            statistics['completed_tests_count'] = completed_tests_count
+
+        if settings.get("show_total_lates", True):
+            total_lates = ShiftHistory.objects.filter(employee=obj, late=True).count()
+            statistics['total_lates'] = total_lates
+
+        if settings.get("show_worked_days", True):
+            worked_days = ShiftHistory.objects.filter(employee=obj).values('date').distinct().count()
+            statistics['worked_days'] = worked_days
+
+        # Здесь можно добавить другие элементы статистики по желанию
+
+        return statistics
 
 
 class SurveyQuestionSerializer(serializers.ModelSerializer):
@@ -851,7 +878,10 @@ class TemplateSerializer(serializers.ModelSerializer):
                 instance.back_image, 'url') else None
 
         return representation
-
+class KarmaAndexpSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ['experience', 'karma']
 class AchievementSerializer(serializers.ModelSerializer):
     styleCard = NestedJSONField(serializer_class=StyleCardSerializer, required=False)
     typeAchContent = NestedJSONField(serializer_class=TypeAchContentSerializer, required=False)

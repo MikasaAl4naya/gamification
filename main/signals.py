@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.contrib.admin.models import LogEntry
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
-from django.db.models import F
+from django.db.models import F, Sum
 from django.db.models.signals import post_save, pre_delete, post_delete, pre_save
 from django.dispatch import receiver
 from django.forms import model_to_dict
@@ -611,35 +611,75 @@ def track_request_classification(sender, instance, created, **kwargs):
 @receiver(post_save, sender=Employee)
 def track_employee_level(sender, instance, **kwargs):
     try:
-        # Получаем текущий уровень сотрудника
+        # Получаем текущий уровень и опыт сотрудника
         current_level = instance.level
+        current_exp = instance.experience
+        today = timezone.now()
+        start_of_week = today - timedelta(days=today.weekday())
+        start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
 
         # Фильтрация достижений типа "NewLvl" (type=3)
         level_achievements = Achievement.objects.filter(type=3)
+
+        # Считаем заработанный опыт за текущую неделю
+        total_experience_earned_week = EmployeeLog.objects.filter(
+            employee=instance,
+            change_type='experience',
+            timestamp__gte=start_of_week,
+            new_value__gt=F('old_value')  # Только положительные изменения
+        ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
 
         for achievement in level_achievements:
             # Получаем данные из type_specific_data для каждого достижения
             type_specific_data = achievement.type_specific_data
             required_level = type_specific_data.get("required_level")
+            exp_earned = type_specific_data.get("exp_earned")
+            exp_earned_week = type_specific_data.get("exp_earned_week")
 
-            # Проверяем, есть ли требуемый уровень и соответствует ли текущий уровень сотрудника
+            # Найти или создать объект EmployeeAchievement
+            employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                employee=instance,
+                achievement=achievement
+            )
+
+            progress_updated = False
+
+            # Проверяем достижение по уровню
             if required_level:
-                # Найти или создать объект EmployeeAchievement
-                employee_achievement, created = EmployeeAchievement.objects.get_or_create(
-                    employee=instance,
-                    achievement=achievement
-                )
-
-                # Обновляем прогресс, если текущий уровень выше текущего прогресса
                 if current_level > employee_achievement.progress:
                     employee_achievement.progress = min(current_level, required_level)
+                    progress_updated = True
 
                     # Если достигли необходимого уровня, фиксируем дату награждения и выдаем награду
                     if employee_achievement.progress >= required_level and not employee_achievement.date_awarded:
                         employee_achievement.reward_employee()
                         employee_achievement.date_awarded = timezone.now()
 
-                    employee_achievement.save()
+            # Проверяем достижение по общему количеству заработанного опыта
+            if exp_earned:
+                if current_exp > employee_achievement.progress:
+                    employee_achievement.progress = min(current_exp, exp_earned)
+                    progress_updated = True
+
+                    # Если достигли необходимого количества опыта, фиксируем дату награждения и выдаем награду
+                    if employee_achievement.progress >= exp_earned and not employee_achievement.date_awarded:
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+            # Проверяем достижение по количеству опыта, заработанного за неделю
+            if exp_earned_week:
+                if total_experience_earned_week > employee_achievement.progress:
+                    employee_achievement.progress = min(total_experience_earned_week, exp_earned_week)
+                    progress_updated = True
+
+                    # Если достигли необходимого количества опыта за неделю, фиксируем дату награждения и выдаем награду
+                    if employee_achievement.progress >= exp_earned_week and not employee_achievement.date_awarded:
+                        employee_achievement.reward_employee()
+                        employee_achievement.date_awarded = timezone.now()
+
+            # Сохраняем изменения в объекте EmployeeAchievement, если прогресс был обновлен
+            if progress_updated:
+                employee_achievement.save()
 
     except Exception as e:
-        print(f"Ошибка при отслеживании уровня сотрудника: {e}")
+        print(f"Ошибка при отслеживании уровня и опыта сотрудника: {e}")

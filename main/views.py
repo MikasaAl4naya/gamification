@@ -64,6 +64,7 @@ class BasePermissionViewSet(viewsets.ModelViewSet):
 
         return super().get_permissions()
 
+
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def delete_logs(request):
@@ -3867,3 +3868,9 @@ def start_test_attempt(request, test_id, employee_id):
         # Возвращаем ответ с идентификатором попытки теста
         return Response({"message": "Test attempt started successfully.", "test_attempt_id": test_attempt.id},
                         status=status.HTTP_200_OK)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_exp_karma(request):
+    employee = request.user
+    serializer = KarmaAndexpSerializer(employee, context={'request': request})
+    return Response(serializer.data, status=status.HTTP_200_OK)
