@@ -144,7 +144,7 @@ def track_shift_late_achievements(sender, instance, created, **kwargs):
         try:
             employee = instance.employee
 
-            # Получаем все достижения по отсутствию опозданий
+            # Получаем все достижения по отсутствию опозданий и по отработанным дням
             achievements = Achievement.objects.filter(type=4)
 
             # Стрик дней без опозданий
@@ -183,6 +183,9 @@ def track_shift_late_achievements(sender, instance, created, **kwargs):
             # Общее количество дней без опозданий
             total_days_without_late = ShiftHistory.objects.filter(employee=employee, late=False).count()
 
+            # Общее количество отработанных дней
+            total_worked_days = ShiftHistory.objects.filter(employee=employee).values('date').distinct().count()
+
             for achievement in achievements:
                 if achievement.type_specific_data:
                     type_data = achievement.type_specific_data
@@ -200,8 +203,6 @@ def track_shift_late_achievements(sender, instance, created, **kwargs):
                             if employee_achievement.progress >= required_streak and not employee_achievement.date_awarded:
                                 employee_achievement.date_awarded = timezone.now()
                             employee_achievement.save()
-
-                    # Проверяем достижение на 40 суммарных дней без опозданий
                     if 'total_days_required' in type_data:
                         required_total = type_data['total_days_required']
                         employee_achievement, created = EmployeeAchievement.objects.get_or_create(
@@ -215,8 +216,23 @@ def track_shift_late_achievements(sender, instance, created, **kwargs):
                                 employee_achievement.date_awarded = timezone.now()
                             employee_achievement.save()
 
+                    # Проверяем достижение на общее количество отработанных дней
+                    if 'total_worked_days_required' in type_data:
+                        required_worked_days = type_data['total_worked_days_required']
+                        employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                            employee=employee,
+                            achievement=achievement
+                        )
+                        # Обновляем прогресс по общему количеству отработанных дней
+                        if total_worked_days > employee_achievement.progress:
+                            employee_achievement.progress = min(total_worked_days, required_worked_days)
+                            if employee_achievement.progress >= required_worked_days and not employee_achievement.date_awarded:
+                                employee_achievement.date_awarded = timezone.now()
+                            employee_achievement.save()
+
         except Exception as e:
             print(f"Ошибка при обновлении прогресса ачивки: {e}")
+
 @receiver(post_save, sender=Request)
 def update_achievement_progress(sender, instance, **kwargs):
     if instance.status == 'Completed':
@@ -409,7 +425,130 @@ def field_translation(field):
         # Добавьте другие переводы полей по необходимости
     }
     return field_translations.get(field, field)  # Возвращаем перевод или само поле, если перевода нет
+@receiver(post_save, sender=TestAttempt)
+def track_test_achievement(sender, instance, created, **kwargs):
+    if created and instance.status == TestAttempt.PASSED:
+        try:
+            employee = instance.employee
+            test_id = instance.test.id
 
+            # Найти все достижения, которые связаны с данным тестом
+            test_achievements = Achievement.objects.filter(
+                type=5,  # Тип достижения "Тест"
+                type_specific_data__test_id=test_id
+            )
+
+            for achievement in test_achievements:
+                # Проверка выполнения условия (например, процент правильных ответов)
+                required_score = achievement.type_specific_data.get("required_score", None)
+                if required_score is None or instance.score >= required_score:
+                    # Найти или создать EmployeeAchievement
+                    employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                        employee=employee,
+                        achievement=achievement
+                    )
+                    # Если достижение только что создано или прогресс не завершён, обновляем прогресс
+                    if created or employee_achievement.progress < 1:
+                        employee_achievement.progress = 1
+                        employee_achievement.reward_employee()  # Выдаем награду
+                        employee_achievement.date_awarded = timezone.now()  # Фиксируем дату награждения
+                        employee_achievement.save()
+
+        except Exception as e:
+            print(f"Ошибка при отслеживании прогресса тестового достижения: {e}")
+
+@receiver(post_save, sender=TestAttempt)
+def track_test_attempt_achievements(sender, instance, created, **kwargs):
+    try:
+        employee = instance.employee
+
+        # Получаем все достижения, относящиеся к тестам
+        test_achievements = Achievement.objects.filter(type=5)
+
+        # Проверяем, какие достижения связаны с количеством тестов
+        for achievement in test_achievements:
+            if achievement.type_specific_data:
+                type_data = achievement.type_specific_data
+
+                # Отслеживаем прогресс по общему количеству выполненных тестов
+                if 'total_tests_required' in type_data:
+                    required_tests = type_data['total_tests_required']
+                    total_tests_completed = TestAttempt.objects.filter(employee=employee, status='PASSED').count()
+
+                    employee_achievement, _ = EmployeeAchievement.objects.get_or_create(
+                        employee=employee,
+                        achievement=achievement
+                    )
+
+                    # Обновляем прогресс по количеству выполненных тестов
+                    if total_tests_completed > employee_achievement.progress:
+                        employee_achievement.progress = min(total_tests_completed, required_tests)
+                        if employee_achievement.progress >= required_tests and not employee_achievement.date_awarded:
+                            employee_achievement.date_awarded = timezone.now()
+                        employee_achievement.save()
+
+                # Отслеживаем прогресс по успешным тестам
+                if 'successful_tests_required' in type_data:
+                    required_successful_tests = type_data['successful_tests_required']
+                    successful_tests_completed = TestAttempt.objects.filter(
+                        employee=employee,
+                        status=TestAttempt.PASSED
+                    ).count()
+
+                    employee_achievement, _ = EmployeeAchievement.objects.get_or_create(
+                        employee=employee,
+                        achievement=achievement
+                    )
+
+                    # Обновляем прогресс по успешным тестам
+                    if successful_tests_completed > employee_achievement.progress:
+                        employee_achievement.progress = min(successful_tests_completed, required_successful_tests)
+                        if employee_achievement.progress >= required_successful_tests and not employee_achievement.date_awarded:
+                            employee_achievement.date_awarded = timezone.now()
+                        employee_achievement.save()
+
+                # Отслеживаем прогресс по тестам, выполненным на 100%
+                if 'perfect_score_tests_required' in type_data:
+                    required_perfect_score_tests = type_data['perfect_score_tests_required']
+                    perfect_score_tests_completed = TestAttempt.objects.filter(
+                        employee=employee,
+                        score=instance.test.max_score
+                    ).count()
+
+                    employee_achievement, _ = EmployeeAchievement.objects.get_or_create(
+                        employee=employee,
+                        achievement=achievement
+                    )
+
+                    # Обновляем прогресс по тестам, выполненным на 100%
+                    if perfect_score_tests_completed > employee_achievement.progress:
+                        employee_achievement.progress = min(perfect_score_tests_completed, required_perfect_score_tests)
+                        if employee_achievement.progress >= required_perfect_score_tests and not employee_achievement.date_awarded:
+                            employee_achievement.date_awarded = timezone.now()
+                        employee_achievement.save()
+
+                # Отслеживаем прогресс по модерации тестов
+                if 'moderation_tests_required' in type_data:
+                    required_moderation_tests = type_data['moderation_tests_required']
+                    moderation_tests_completed = TestAttempt.objects.filter(
+                        employee=employee,
+                        status=TestAttempt.MODERATION
+                    ).count()
+
+                    employee_achievement, _ = EmployeeAchievement.objects.get_or_create(
+                        employee=employee,
+                        achievement=achievement
+                    )
+
+                    # Обновляем прогресс по модерации тестов
+                    if moderation_tests_completed > employee_achievement.progress:
+                        employee_achievement.progress = min(moderation_tests_completed, required_moderation_tests)
+                        if employee_achievement.progress >= required_moderation_tests and not employee_achievement.date_awarded:
+                            employee_achievement.date_awarded = timezone.now()
+                        employee_achievement.save()
+
+    except Exception as e:
+        print(f"Ошибка при отслеживании прогресса теста: {e}")
 @receiver(post_delete)
 def log_model_delete(sender, instance, **kwargs):
     excluded_models = [EmployeeActionLog, ShiftHistory, EmployeeLog, Request]

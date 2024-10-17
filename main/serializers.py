@@ -50,22 +50,44 @@ class PreloadedAvatarSerializer(serializers.ModelSerializer):
     class Meta:
         model = PreloadedAvatar
         fields = ['id', 'name', 'image']
+
 class PlayersSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
     avatar_url = serializers.SerializerMethodField()
+    level = serializers.SerializerMethodField()
+    experience = serializers.SerializerMethodField()
+    karma = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
         fields = [
-            'id', 'first_name', 'last_name', 'level','karma', 'experience',
+            'id', 'first_name', 'last_name', 'level', 'karma', 'experience',
             'next_level_experience', 'avatar_url', 'acoin_amount', 'level_title'
         ]
         read_only_fields = ['first_name', 'last_name', 'level', 'experience', 'next_level_experience']
 
     def get_avatar_url(self, obj):
-        if obj.avatar:
-            return f"http://shaman.pythonanywhere.com{obj.avatar.url}"
-        return "http://shaman.pythonanywhere.com/media/default.jpg"
+        if obj.profile_settings.get("show_avatar", True):
+            if obj.avatar:
+                return f"http://shaman.pythonanywhere.com{obj.avatar.url}"
+            return "http://shaman.pythonanywhere.com/media/default.jpg"
+        return None
+
+    def get_level(self, obj):
+        if obj.profile_settings.get("show_level", True):
+            return obj.level
+        return None
+
+    def get_experience(self, obj):
+        if obj.profile_settings.get("show_experience", True):
+            return obj.experience
+        return None
+
+    def get_karma(self, obj):
+        if obj.profile_settings.get("show_karma", True):
+            return obj.karma
+        return None
+
 
 class SurveyQuestionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -750,17 +772,33 @@ class StyleCardSerializer(serializers.Serializer):
 class TypeAchContentSerializer(serializers.Serializer):
     # Удаляем поле 'type' чтобы избежать конфликта
     difficulty = serializers.ChoiceField(choices=Achievement.DIFFICULTY_CHOICES)
-    request_type = serializers.PrimaryKeyRelatedField(
-        queryset=Classifications.objects.all(),
-        allow_null=True,
-        required=False
-    )
-    required_count = serializers.IntegerField(default=0, required=False)
     type_specific_data = serializers.JSONField(required=False)
-
+    test_id = serializers.PrimaryKeyRelatedField(queryset=Test.objects.all(), required=False,
+                                                 allow_null=True)  # Новое поле
     def validate(self, data):
         # Добавьте дополнительные проверки, если необходимо
         return data
+
+    def create(self, validated_data):
+        type_content_data = validated_data.pop('typeAchContent', None)
+
+        # Создаём объект Achievement
+        achievement = Achievement.objects.create(**validated_data)
+
+        # Обрабатываем данные типа достижений
+        if type_content_data:
+            test_id = type_content_data.get('test_id')
+            required_score = type_content_data.get('required_score')
+            # Добавляем эти данные в type_specific_data достижения
+            achievement.type_specific_data = {
+                "test_id": test_id,
+                "required_score": required_score
+            }
+            achievement.save()
+
+        return achievement
+
+
 class NestedJSONField(serializers.Field):
     def __init__(self, serializer_class, **kwargs):
         self.serializer_class = serializer_class
@@ -851,6 +889,17 @@ class AchievementSerializer(serializers.ModelSerializer):
         if type_content_data:
             achievement.difficulty = type_content_data.get('difficulty', 'Medium')
             achievement.type_specific_data = type_content_data.get('type_specific_data')
+
+            # Проверяем, есть ли `test_id` в `type_specific_data` и прикрепляем его к тесту
+            if type_content_data.get('type_specific_data'):
+                test_id = type_content_data['type_specific_data'].get('test_id')
+                if test_id:
+                    try:
+                        test = Test.objects.get(pk=test_id)
+                        test.achievement = achievement
+                        test.save()
+                    except Test.DoesNotExist:
+                        raise serializers.ValidationError(f"Тест с ID {test_id} не найден")
 
         # Сохраняем изменения
         achievement.save()

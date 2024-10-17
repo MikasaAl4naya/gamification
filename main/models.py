@@ -57,7 +57,13 @@ class SurveyAnswer(models.Model):
 
     def __str__(self):
         return f"{self.employee.username}: {self.answer_text[:50]}"
-
+def get_default_profile_settings():
+    return {
+        "show_avatar": True,
+        "show_level": True,
+        "show_experience": True,
+        "show_karma": True,
+    }
 class Employee(AbstractUser):
     POSITION_CHOICES = [
         ('Оператор ТП', 'Оператор ТП'),
@@ -78,6 +84,7 @@ class Employee(AbstractUser):
     last_activity = models.DateTimeField(null=True, blank=True)
     remaining_experience = models.IntegerField(blank=True)
     experience_progress = models.IntegerField(blank=True)
+    profile_settings = models.JSONField(default=get_default_profile_settings, blank=True, null=True)
 
 
     def deactivate(self):
@@ -719,16 +726,16 @@ class Test(models.Model):
     image = models.ImageField(upload_to='test/', null=True, blank=True )
 
     def clean(self):
-        # Убеждаемся, что тип ачивки всегда "Test"
+        # Убеждаемся, что тип ачивки всегда соответствует числовому значению для "Test"
         if self.achievement:
-            if self.achievement.type != 'Test':
-                raise ValidationError('Achievement type must be "Test".')
+            if self.achievement.type != 5:  # Убедитесь, что сравниваете с числовым значением
+                raise ValidationError('Achievement type must be "Test" (type=5).')
 
     def save(self, *args, **kwargs):
-        # Убеждаемся, что тип ачивки всегда "Test"
+        # Убеждаемся, что тип ачивки всегда соответствует числовому значению для "Test"
         if self.achievement:
-            if self.achievement.type != 'Test':
-                raise ValidationError('Achievement type must be "Test".')
+            if self.achievement.type != 5:  # Убедитесь, что сравниваете с числовым значением
+                raise ValidationError('Achievement type must be "Test" (type=5).')
         super().save(*args, **kwargs)
 
 
