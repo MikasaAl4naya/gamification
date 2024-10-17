@@ -895,7 +895,7 @@ class AchievementSerializer(serializers.ModelSerializer):
         model = Achievement
         fields = [
             'id', 'name', 'description', 'reward_experience', 'reward_currency', 'template_background',
-            'template_foreground', 'background_image', 'foreground_image', 'back_image', 'is_award', 'is_double', 'type',
+            'template_foreground', 'background_image', 'foreground_image', 'back_image', 'is_award', 'type',
             'styleCard', 'typeAchContent', 'can_be_repeated'
         ]
 
