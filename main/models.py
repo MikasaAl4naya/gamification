@@ -63,6 +63,12 @@ def get_default_profile_settings():
         "show_level": True,
         "show_experience": True,
         "show_karma": True,
+        "show_total_requests": True,
+        "show_achievements_count": True,
+        "show_total_experience_earned": True,
+        "show_completed_tests_count": True,
+        "show_total_lates": True,
+        "show_worked_days": True
     }
 class Employee(AbstractUser):
     POSITION_CHOICES = [
@@ -84,7 +90,7 @@ class Employee(AbstractUser):
     last_activity = models.DateTimeField(null=True, blank=True)
     remaining_experience = models.IntegerField(blank=True)
     experience_progress = models.IntegerField(blank=True)
-    profile_settings = models.JSONField(default=get_default_profile_settings, blank=True, null=True)
+    profile_settings = models.JSONField(default=get_default_profile_settings, blank=True, null=False)
 
 
     def deactivate(self):
