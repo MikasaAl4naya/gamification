@@ -939,6 +939,48 @@ class AchievementSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(url)
         return url
 
+    def update(self, instance, validated_data):
+        # Извлекаем данные, которые не относятся к модели Achievement
+        style_data = validated_data.pop('styleCard', None)
+        type_content_data = validated_data.pop('typeAchContent', None)
+
+        # Обновляем объект Achievement без этих данных
+        for attr, value in validated_data.items():
+            if attr in ['background_image', 'foreground_image', 'back_image']:
+                # Проверяем, является ли значение строкой и не пустое
+                if isinstance(value, str) and value.startswith('http'):
+                    # Если это строка, значит это URL, который нельзя использовать для загрузки файла, поэтому пропускаем
+                    continue
+            setattr(instance, attr, value)
+
+        # Обрабатываем данные стиля
+        if style_data:
+            instance.border_style = style_data.get('border_style', 'solid')
+            instance.border_width = style_data.get('border_width', 0)
+            instance.border_color = style_data.get('border_color', '#000000')
+            instance.use_border = style_data.get('use_border', False)
+            instance.textColor = style_data.get('textColor', '#000000')
+
+        # Обрабатываем данные типа достижений
+        if type_content_data:
+            instance.difficulty = type_content_data.get('difficulty', 'Medium')
+            instance.type_specific_data = type_content_data.get('type_specific_data')
+
+            # Проверяем, есть ли `test_id` в `type_specific_data` и прикрепляем его к тесту
+            if type_content_data.get('type_specific_data'):
+                test_id = type_content_data['type_specific_data'].get('test_id')
+                if test_id:
+                    try:
+                        test = Test.objects.get(pk=test_id)
+                        test.achievement = instance
+                        test.save()
+                    except Test.DoesNotExist:
+                        raise serializers.ValidationError(f"Тест с ID {test_id} не найден")
+
+        # Сохраняем изменения
+        instance.save()
+        return instance
+
     def to_representation(self, instance):
         representation = super().to_representation(instance)
         request = self.context.get('request')
