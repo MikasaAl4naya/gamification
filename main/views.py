@@ -1191,7 +1191,12 @@ def get_employee_complaints(request):
     try:
         # Получаем сотрудника, жалобы на которого нужно показать
         employee = request.user
+        employee_id = request.query_params.get('employee_id', None)
 
+        if employee_id:
+            employee = get_object_or_404(Employee, id=employee_id)
+        else:
+            employee = current_employee
         # Получаем одобренные жалобы на этого сотрудника
         complaints = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved')
 
