@@ -878,10 +878,7 @@ class TemplateSerializer(serializers.ModelSerializer):
                 instance.back_image, 'url') else None
 
         return representation
-class KarmaAndexpSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Employee
-        fields = ['experience', 'karma']
+
 class AchievementSerializer(serializers.ModelSerializer):
     styleCard = NestedJSONField(serializer_class=StyleCardSerializer, required=False)
     typeAchContent = NestedJSONField(serializer_class=TypeAchContentSerializer, required=False)
@@ -936,6 +933,48 @@ class AchievementSerializer(serializers.ModelSerializer):
 
         return achievement
 
+    def get_full_url(self, request, url):
+        """Формирует полный URL на основе запроса и относительного пути"""
+        if request and url:
+            return request.build_absolute_uri(url)
+        return url
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+
+        # Обработка изображений и получения полного URL
+        if instance.background_image and hasattr(instance.background_image, 'url'):
+            representation['background_image'] = self.get_full_url(request, instance.background_image.url)
+        elif instance.template_background and instance.template_background.image and hasattr(instance.template_background.image, 'url'):
+            representation['background_image'] = self.get_full_url(request, instance.template_background.image.url)
+        else:
+            representation['background_image'] = None
+
+        if instance.foreground_image and hasattr(instance.foreground_image, 'url'):
+            representation['foreground_image'] = self.get_full_url(request, instance.foreground_image.url)
+        elif instance.template_foreground and instance.template_foreground.image and hasattr(instance.template_foreground.image, 'url'):
+            representation['foreground_image'] = self.get_full_url(request, instance.template_foreground.image.url)
+        else:
+            representation['foreground_image'] = None
+
+        # Формирование объекта styleCard
+        representation['styleCard'] = {
+            "border_style": instance.border_style,
+            "border_width": instance.border_width,
+            "border_color": instance.border_color,
+            "use_border": instance.use_border,
+            "textColor": instance.textColor,
+        }
+
+        # Формирование объекта typeAchContent
+        representation['typeAchContent'] = {
+            "difficulty": instance.difficulty,
+            "type_specific_data": instance.type_specific_data,
+        }
+
+        return representation
+
 class EmployeeAchievementSerializer(serializers.ModelSerializer):
     achievement = AchievementSerializer(read_only=True)
 
@@ -964,3 +1003,7 @@ class RatingSerializer(serializers.ModelSerializer):
     def get_full_name(self,obj):
         full_name = f'{obj.first_name} {obj.last_name}'
         return full_name
+class KarmaAndexpSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Employee
+        fields = ['experience', 'karma']
