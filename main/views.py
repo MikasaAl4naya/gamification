@@ -1187,10 +1187,10 @@ def get_user(request):
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, partial(HasPermission, perm='main.can_view_complaints')])
-def get_employee_complaints(request, employee_id):
+def get_employee_complaints(request):
     try:
         # Получаем сотрудника, жалобы на которого нужно показать
-        employee = get_object_or_404(Employee, id=employee_id)
+        employee = request.user
 
         # Получаем одобренные жалобы на этого сотрудника
         complaints = Feedback.objects.filter(target_employee=employee, type="complaint", status='approved')
