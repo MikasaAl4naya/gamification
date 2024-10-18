@@ -1190,7 +1190,7 @@ def get_user(request):
 def get_employee_complaints(request):
     try:
         # Получаем сотрудника, жалобы на которого нужно показать
-        employee = request.user
+        current_employee = request.user
         employee_id = request.query_params.get('employee_id', None)
 
         if employee_id:
