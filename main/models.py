@@ -498,6 +498,7 @@ class Achievement(models.Model):
     textColor = models.CharField(default='#000000', max_length=255)
     back_image = models.ImageField(upload_to='achievement_back_images/', null=True, blank=True)
     can_be_repeated = models.BooleanField(default=False)
+    show_name = models.BooleanField(default=True)
 
     class Meta:
         app_label = 'main'

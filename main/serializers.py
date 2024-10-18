@@ -893,7 +893,7 @@ class AchievementSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 'reward_experience', 'reward_currency', 'template_background',
             'template_foreground', 'background_image', 'foreground_image', 'back_image', 'is_award', 'type',
-            'styleCard', 'typeAchContent', 'can_be_repeated'
+            'styleCard', 'typeAchContent', 'can_be_repeated', 'show_name'
         ]
 
     def create(self, validated_data):
@@ -972,6 +972,9 @@ class AchievementSerializer(serializers.ModelSerializer):
             "difficulty": instance.difficulty,
             "type_specific_data": instance.type_specific_data,
         }
+        # Условие для отображения имени
+        if not instance.show_name:
+            representation.pop('name', None)
 
         return representation
 
