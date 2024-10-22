@@ -43,14 +43,14 @@ class SurveyQuestion(models.Model):
 
 
 def get_avatar_upload_path(instance, filename):
-    # Получаем объект FilePath с именем 'Avatars'
     file_path = FilePath.objects.filter(name='Avatars').first()
-    if not file_path:
-        # Если FilePath не найден, используем стандартный путь
-        return os.path.join('avatars', filename)
+    if file_path:
+        base_path = file_path.path  # Должно быть '/home/Shaman/media/avatars'
+        # Используем os.path.join для безопасного построения пути
+        return os.path.join(base_path, filename)
+    else:
+        raise ValueError("FilePath for 'Avatars' not found.")
 
-    # Формируем полный путь для сохранения файла
-    return os.path.join(file_path.path, filename)
 
 class PreloadedAvatar(models.Model):
     name = models.CharField(max_length=100)
