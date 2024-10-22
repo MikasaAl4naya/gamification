@@ -1,12 +1,11 @@
 import logging
-from datetime import timezone
 
 from django.contrib.auth import logout
 from django.core.exceptions import SuspiciousOperation
 from rest_framework.authtoken.models import Token
 from django.http import JsonResponse, HttpResponse
 from django.utils.deprecation import MiddlewareMixin
-
+from django.utils import timezone
 from main.models import Employee, UserSession, SystemSetting
 
 
