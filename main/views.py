@@ -1715,7 +1715,7 @@ class PreloadedAvatarViewSet(BasePermissionViewSet):
         for avatar in avatars_data:
             avatar_instance = PreloadedAvatar.objects.get(id=avatar['id'])
             avatar['is_owned'] = avatar_instance.owned_by.filter(id=employee.id).exists()
-            avatar['is_equipped'] = employee.current_avatar_id == avatar_instance.id
+            avatar['is_equipped'] = employee.avatar_id == avatar_instance.id
             avatar[
                 'is_available'] = avatar_instance.level_required <= employee.level and avatar_instance.karma_required <= employee.karma
 
