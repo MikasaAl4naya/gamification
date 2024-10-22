@@ -50,7 +50,7 @@ class ClassificationSerializer(serializers.ModelSerializer):
 class PreloadedAvatarSerializer(serializers.ModelSerializer):
     class Meta:
         model = PreloadedAvatar
-        fields = ['id', 'name', 'image']
+        fields = '__all__'
 
 class PlayersSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
