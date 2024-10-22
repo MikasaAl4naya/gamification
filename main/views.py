@@ -1726,7 +1726,7 @@ class PreloadedAvatarViewSet(BasePermissionViewSet):
 
     def perform_create(self, serializer):
         # Проверяем или создаем запись в FilePath
-        file_path, created = FilePath.objects.get_or_create(name='Avatars', defaults={'path': 'path/to/avatars'})
+        file_path, created = FilePath.objects.get_or_create(name='Avatars', defaults={'path': 'media/avatars/'})
 
         if not file_path.path:
             raise serializers.ValidationError("Invalid FilePath configuration for 'Avatars'.")
@@ -3915,7 +3915,6 @@ class BackgroundViewSet(viewsets.ModelViewSet):
     serializer_class = BackgroundSerializer
     permission_classes = [IsAuthenticated]
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def buy(self, request, pk=None):
         employee = request.user

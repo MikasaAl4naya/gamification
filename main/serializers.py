@@ -50,7 +50,21 @@ class ClassificationSerializer(serializers.ModelSerializer):
 class PreloadedAvatarSerializer(serializers.ModelSerializer):
     class Meta:
         model = PreloadedAvatar
-        fields = '__all__'
+        fields = ['id', 'name', 'price', 'level_required', 'karma_required', 'image']
+
+    def get_image(self, obj):
+        request = self.context.get('request')
+        if obj.image:
+            return request.build_absolute_uri(obj.image.url)
+        return None
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        if instance.image and request:
+            representation['image'] = request.build_absolute_uri(instance.image.url)
+        return representation
+
 
 class PlayersSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', read_only=True)
