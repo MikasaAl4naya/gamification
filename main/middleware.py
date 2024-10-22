@@ -26,8 +26,6 @@ class CheckActiveUserMiddleware:
 
         return self.get_response(request)
 
-from django.utils import timezone
-from rest_framework.authtoken.models import Token
 
 class UpdateLastLoginMiddleware(MiddlewareMixin):
     def process_request(self, request):

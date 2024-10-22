@@ -12,7 +12,7 @@ from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, A
     Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, \
     KarmaSettings, \
     FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement, EmployeeLog, \
-    Item, EmployeeItem, Template, ComplexityThresholds, ShiftHistory
+    Item, EmployeeItem, Template, ComplexityThresholds, ShiftHistory, Background
 from main.names_translations import translate_permission_name
 
 
@@ -245,13 +245,14 @@ class EmployeeSerializer(serializers.ModelSerializer):
     avatar_url = serializers.SerializerMethodField()
     remaining_experience = serializers.SerializerMethodField()
     experience_progress = serializers.SerializerMethodField()
+    selected_background_image = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 'position', 'level', 'experience',
             'next_level_experience', 'remaining_experience', 'experience_progress', 'karma', 'birth_date',
-            'avatar_url', 'status', 'acoin_amount', 'is_active', 'groups', 'is_active'
+            'avatar_url', 'status', 'acoin_amount', 'is_active', 'groups', 'is_active', 'selected_background', 'selected_background_image'
         ]
         read_only_fields = ['username', 'email', 'position', 'level', 'experience', 'next_level_experience', 'karma']
 
@@ -262,7 +263,10 @@ class EmployeeSerializer(serializers.ModelSerializer):
     def get_remaining_experience(self, obj):
         """Возвращает количество опыта, необходимое для достижения следующего уровня."""
         return obj.next_level_experience - obj.experience
-
+    def  get_selected_background_image(self,obj):
+        if obj.selected_background and hasattr(obj.selected_background, 'image'):
+            return f"http://shaman.pythonanywhere.com{obj.selected_background.image}"
+        return "http://shaman.pythonanywhere.com/media/default.jpg"
     def get_experience_progress(self, obj):
         """Возвращает прогресс опыта в процентах внутри текущего уровня."""
         if obj.next_level_experience > 0:
@@ -426,8 +430,6 @@ class TestAttemptModerationSerializer(serializers.ModelSerializer):
     def get_employee_name(self, obj):
         return f"{obj.employee.first_name} {obj.employee.last_name}"
 
-from rest_framework import serializers
-from django.contrib.auth.models import Group, Permission
 
 class PermissionSerializer(serializers.ModelSerializer):
     translated_name = serializers.SerializerMethodField()
@@ -1052,3 +1054,7 @@ class KarmaAndexpSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = ['experience', 'karma']
+class BackgroundSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Background
+        fields = ['id', 'name', 'price', 'level_required', 'karma_required', 'image']

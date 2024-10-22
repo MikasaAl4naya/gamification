@@ -10,6 +10,7 @@ from .views import *
 
 router = DefaultRouter()
 router.register(r'groups', GroupViewSet)
+router.register(r'backgrounds', BackgroundViewSet, basename='background')
 router.register(r'permissions', PermissionManagementViewSet,basename='permission-management')
 router.register(r'players', PlayersViewSet)
 router.register(r'survey-questions', SurveyQuestionViewSet)

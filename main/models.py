@@ -15,6 +15,15 @@ from django.dispatch import receiver
 from django.utils import timezone
 
 from gamefication import settings
+class Background(models.Model):
+    name = models.CharField(max_length=255)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    level_required = models.IntegerField(default=0)
+    karma_required = models.IntegerField(default=0)
+    image = models.ImageField(upload_to='backgrounds/')
+
+    def __str__(self):
+        return self.name
 
 
 def validate_custom_email(value):
@@ -91,8 +100,8 @@ class Employee(AbstractUser):
     remaining_experience = models.IntegerField(blank=True)
     experience_progress = models.IntegerField(blank=True)
     profile_settings = models.JSONField(default=get_default_profile_settings, blank=True, null=False)
-
-
+    selected_background = models.ForeignKey(Background, on_delete=models.SET_NULL, null=True, blank=True)
+    owned_backgrounds = models.ManyToManyField(Background, related_name='owned_by', blank=True)
     def deactivate(self):
         self.is_active = False
         self.force_save = True
@@ -966,8 +975,3 @@ class KarmaSettings(models.Model):
         level_str = f" - {self.get_level_display()}" if self.level else ""
         operation_type_str = self.get_operation_type_display() if self.operation_type else "Неизвестный тип операции"
         return f'{operation_type_str}{level_str}'
-
-
-
-
-

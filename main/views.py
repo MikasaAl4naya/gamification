@@ -407,6 +407,7 @@ def assign_achievement(request):
     return Response({"message": "Achievement assigned successfully"}, status=status.HTTP_200_OK)
 
 
+
 class AchievementViewSet(viewsets.ModelViewSet):
     queryset = Achievement.objects.all()
     serializer_class = AchievementSerializer
@@ -2118,7 +2119,7 @@ def get_test_statistics(request):
 def get_test_by_id(request, test_id):
     # Получаем тест по его ID или возвращаем ошибку 404, если тест не найден
     test = get_object_or_404(Test, id=test_id)
-
+    employee = request.employee
     # Сериализуем данные теста
     test_serializer = TestSerializer(test, context={'request': request})
     test_data = test_serializer.data
@@ -2159,6 +2160,12 @@ def get_test_by_id(request, test_id):
 
     # Сортируем блоки по позиции, если она есть
     sorted_blocks = sorted(blocks, key=lambda x: x['content'].get('position', 0))
+    employee_experience = employee.experience
+    employee_karma = employee.karma
+    has_sufficient_karma = employee_karma >= test.required_karma
+    has_sufficient_experience = employee_experience >= test.min_experience
+    test_available = has_sufficient_karma and has_sufficient_experience
+
 
     # Добавляем позицию вопроса к соответствующим блокам
     for block in sorted_blocks:
@@ -2166,7 +2173,6 @@ def get_test_by_id(request, test_id):
 
     # Определение доступности теста
     employee = getattr(request, 'employee', request.user)
-    test_available = True
 
     if not test.can_attempt_twice:
         last_test_attempt = TestAttempt.objects.filter(employee=employee, test=test, status=TestAttempt.PASSED).exists()
@@ -3879,3 +3885,62 @@ def get_exp_karma(request):
     employee = request.user
     serializer = KarmaAndexpSerializer(employee, context={'request': request})
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+class BackgroundViewSet(viewsets.ModelViewSet):
+    queryset = Background.objects.all()
+    serializer_class = BackgroundSerializer
+    permission_classes = [IsAuthenticated]
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def buy(self, request, pk=None):
+        background = self.get_object()
+        employee = request.user
+
+        # Проверка уровня и кармы пользователя перед покупкой фона
+        if employee.level < background.level_required:
+            return Response({'detail': 'Ваш уровень недостаточен для покупки этого фона.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if employee.karma < background.karma_required:
+            return Response({'detail': 'У вас недостаточно кармы для покупки этого фона.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Проверка, не купил ли сотрудник этот фон ранее
+        if background in employee.owned_backgrounds.all():
+            return Response({'detail': 'Вы уже приобрели этот фон.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Списываем карму и добавляем фон в список приобретенных
+        employee.karma -= background.karma_required
+        employee.owned_backgrounds.add(background)
+        employee.save()
+
+        return Response({'detail': 'Фон успешно куплен.'})
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def available(self, request):
+        employee = request.user
+        available_backgrounds = Background.objects.filter(
+            level_required__lte=employee.level,
+            karma_required__lte=employee.karma
+        ).exclude(owned_by=employee)
+        serializer = self.get_serializer(available_backgrounds, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def owned(self, request):
+        employee = request.user
+        owned_backgrounds = employee.owned_backgrounds.all()
+        serializer = self.get_serializer(owned_backgrounds, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def set_background(self, request, pk=None):
+        background = self.get_object()
+        employee = request.user
+
+        # Проверка, принадлежит ли фон сотруднику
+        if background not in employee.owned_backgrounds.all():
+            return Response({'detail': 'Вы не владеете этим фоном.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Установка фона
+        employee.selected_background = background
+        employee.save()
+        return Response({'detail': 'Фон успешно установлен.'})
