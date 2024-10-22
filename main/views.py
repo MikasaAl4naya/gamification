@@ -1748,23 +1748,6 @@ class PreloadedAvatarViewSet(BasePermissionViewSet):
         employee.save()
         return Response({'detail': 'Avatar equipped successfully.'}, status=status.HTTP_200_OK)
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def change_avatar(request):
-    avatar_id = request.data.get('avatar_id')
-
-    if not avatar_id:
-        return Response({'error': 'Avatar ID is required'}, status=400)
-
-    avatar = get_object_or_404(PreloadedAvatar, id=avatar_id)
-
-    employee = request.user
-    employee.avatar = avatar.image
-    employee.save()
-
-    return Response({'message': 'Avatar updated successfully'}, status=200)
-
-
 def get_active_users(minutes=5):
     time_threshold = timezone.now() - timedelta(minutes=minutes)
     active_users = Employee.objects.filter(last_login__gte=time_threshold, is_active=True)
