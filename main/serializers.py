@@ -259,7 +259,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
     def get_avatar_url(self, obj):
         if obj.avatar and hasattr(obj.avatar, 'url'):
             return f"http://shaman.pythonanywhere.com{obj.avatar.url}"
-        return "http://shaman.pythonanywhere.com/media/default.jpg"
+        return "http://shaman.pythonanywhere.com/media/backgrounds/default_backround.jpg"
     def get_remaining_experience(self, obj):
         """Возвращает количество опыта, необходимое для достижения следующего уровня."""
         return obj.next_level_experience - obj.experience
