@@ -1702,7 +1702,6 @@ class SystemSettingViewSet(BasePermissionViewSet):
 class PreloadedAvatarViewSet(BasePermissionViewSet):
     queryset = PreloadedAvatar.objects.all()
     serializer_class = PreloadedAvatarSerializer
-    permission_classes = [IsAdminUser]
     parser_classes = [MultiPartParser, FormParser]
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
@@ -1720,7 +1719,10 @@ class PreloadedAvatarViewSet(BasePermissionViewSet):
             avatar[
                 'is_available'] = avatar_instance.level_required <= employee.level and avatar_instance.karma_required <= employee.karma
 
-        return Response(avatars_data)
+        # Разделяем аватарки на группы по 8 элементов
+        chunked_avatars = [avatars_data[i:i + 8] for i in range(0, len(avatars_data), 8)]
+
+        return Response(chunked_avatars)
 
     def perform_create(self, serializer):
         # Проверяем или создаем запись в FilePath
@@ -3953,11 +3955,14 @@ class BackgroundViewSet(viewsets.ModelViewSet):
         for background in backgrounds_data:
             background_instance = Background.objects.get(id=background['id'])
             background['is_owned'] = background_instance.owned_by.filter(id=employee.id).exists()
-            background['is_equipped'] = employee.selected_background.id == background_instance.id
+            background['is_equipped'] = employee.selected_background_id == background_instance.id
             background[
                 'is_available'] = background_instance.level_required <= employee.level and background_instance.karma_required <= employee.karma
 
-        return Response(backgrounds_data)
+        # Разделяем фоны на группы по 3 элемента
+        chunked_backgrounds = [backgrounds_data[i:i + 3] for i in range(0, len(backgrounds_data), 3)]
+
+        return Response(chunked_backgrounds)
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def owned(self, request):
