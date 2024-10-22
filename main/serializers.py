@@ -1054,8 +1054,10 @@ class KarmaAndexpSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
         fields = ['experience', 'karma']
+
 class BackgroundSerializer(serializers.ModelSerializer):
-    image = serializers.SerializerMethodField()
+    image = serializers.ImageField(required=True)  # Убедитесь, что используется ImageField
+
     class Meta:
         model = Background
         fields = ['id', 'name', 'price', 'level_required', 'karma_required', 'image']
@@ -1065,3 +1067,10 @@ class BackgroundSerializer(serializers.ModelSerializer):
         if obj.image:
             return request.build_absolute_uri(obj.image.url)
         return None
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        request = self.context.get('request')
+        if instance.image and request:
+            representation['image'] = request.build_absolute_uri(instance.image.url)
+        return representation
