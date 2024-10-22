@@ -1727,11 +1727,31 @@ class PreloadedAvatarUploadViewSet(BasePermissionViewSet):
     permission_classes = [IsAdminUser]
     parser_classes = [MultiPartParser, FormParser]
 
-    def perform_create(self, serializer):
-        file_path = FilePath.objects.filter(name='Avatars').first()
-        if not file_path:
-            raise serializers.ValidationError("FilePath for 'Avatars' not found.")
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def available(self, request):
+        employee = request.user
+        avatars = PreloadedAvatar.objects.all()
 
+        serializer = self.get_serializer(avatars, many=True, context={'request': request})
+        avatars_data = serializer.data
+
+        for avatar in avatars_data:
+            avatar_instance = PreloadedAvatar.objects.get(id=avatar['id'])
+            avatar['is_owned'] = avatar_instance.owned_by.filter(id=employee.id).exists()
+            avatar['is_equipped'] = employee.current_avatar_id == avatar_instance.id
+            avatar[
+                'is_available'] = avatar_instance.level_required <= employee.level and avatar_instance.karma_required <= employee.karma
+
+        return Response(avatars_data)
+
+    def perform_create(self, serializer):
+        # Проверяем или создаем запись в FilePath
+        file_path, created = FilePath.objects.get_or_create(name='Avatars', defaults={'path': 'path/to/avatars'})
+
+        if not file_path.path:
+            raise serializers.ValidationError("Invalid FilePath configuration for 'Avatars'.")
+
+        # Обработка файла изображения
         original_image = self.request.FILES['image']
         new_image_path = os.path.join(file_path.path, original_image.name)
 
@@ -1743,24 +1763,28 @@ class PreloadedAvatarUploadViewSet(BasePermissionViewSet):
         # Сохраняем путь в базе данных (в формате относительно media root)
         relative_image_path = os.path.join('avatars', original_image.name)
         serializer.save(image=relative_image_path)
-
 
     def perform_update(self, serializer):
+        # Повторяем те же действия для обновления, если требуется смена изображения
         file_path = FilePath.objects.filter(name='Avatars').first()
-        if not file_path:
+
+        if not file_path or not file_path.path:
             raise serializers.ValidationError("FilePath for 'Avatars' not found.")
 
-        original_image = self.request.FILES['image']
-        new_image_path = os.path.join(file_path.path, original_image.name)
+        original_image = self.request.FILES.get('image')
+        if original_image:
+            new_image_path = os.path.join(file_path.path, original_image.name)
 
-        # Сохраняем изображение в указанную папку
-        with open(new_image_path, 'wb+') as destination:
-            for chunk in original_image.chunks():
-                destination.write(chunk)
+            # Сохраняем изображение в указанную папку
+            with open(new_image_path, 'wb+') as destination:
+                for chunk in original_image.chunks():
+                    destination.write(chunk)
 
-        # Сохраняем путь в базе данных (в формате относительно media root)
-        relative_image_path = os.path.join('avatars', original_image.name)
-        serializer.save(image=relative_image_path)
+            # Сохраняем путь в базе данных (в формате относительно media root)
+            relative_image_path = os.path.join('avatars', original_image.name)
+            serializer.save(image=relative_image_path)
+        else:
+            serializer.save()
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -3917,12 +3941,19 @@ class BackgroundViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def available(self, request):
         employee = request.user
-        available_backgrounds = Background.objects.filter(
-            level_required__lte=employee.level,
-            karma_required__lte=employee.karma
-        ).exclude(owned_by=employee)
-        serializer = self.get_serializer(available_backgrounds, many=True)
-        return Response(serializer.data)
+        backgrounds = Background.objects.all()
+
+        serializer = self.get_serializer(backgrounds, many=True, context={'request': request})
+        backgrounds_data = serializer.data
+
+        for background in backgrounds_data:
+            background_instance = Background.objects.get(id=background['id'])
+            background['is_owned'] = background_instance.owned_by.filter(id=employee.id).exists()
+            background['is_equipped'] = employee.selected_background.id == background_instance.id
+            background[
+                'is_available'] = background_instance.level_required <= employee.level and background_instance.karma_required <= employee.karma
+
+        return Response(backgrounds_data)
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def owned(self, request):

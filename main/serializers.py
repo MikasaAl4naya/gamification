@@ -1055,6 +1055,13 @@ class KarmaAndexpSerializer(serializers.ModelSerializer):
         model = Employee
         fields = ['experience', 'karma']
 class BackgroundSerializer(serializers.ModelSerializer):
+    image = serializers.SerializerMethodField()
     class Meta:
         model = Background
         fields = ['id', 'name', 'price', 'level_required', 'karma_required', 'image']
+
+    def get_image(self, obj):
+        request = self.context.get('request')
+        if obj.image:
+            return request.build_absolute_uri(obj.image.url)
+        return None
