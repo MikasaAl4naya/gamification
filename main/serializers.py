@@ -272,7 +272,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     def get_avatar_url(self, obj):
         if obj.avatar:
-            return f"http://shaman.pythonanywhere.com{obj.avatar.image}"
+            return f"http://shaman.pythonanywhere.com/{obj.avatar.image}"
         return "http://shaman.pythonanywhere.com/media/default.jpg"
 
     def get_remaining_experience(self, obj):
