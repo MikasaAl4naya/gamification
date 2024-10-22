@@ -1735,10 +1735,6 @@ class PreloadedAvatarViewSet(BasePermissionViewSet):
         original_image = self.request.FILES['image']
         new_image_path = os.path.join(file_path.path, original_image.name)
 
-        # Сохраняем изображение в указанную папку
-        with open(new_image_path, 'wb+') as destination:
-            for chunk in original_image.chunks():
-                destination.write(chunk)
 
         # Сохраняем путь в базе данных (в формате относительно media root)
         relative_image_path = os.path.join('avatars', original_image.name)

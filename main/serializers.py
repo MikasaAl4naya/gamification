@@ -257,22 +257,26 @@ class EmployeeSerializer(serializers.ModelSerializer):
         read_only_fields = ['username', 'email', 'position', 'level', 'experience', 'next_level_experience', 'karma']
 
     def get_avatar_url(self, obj):
-        if obj.avatar and hasattr(obj.avatar, 'url'):
-            return f"http://shaman.pythonanywhere.com{obj.avatar.url}"
-        return "http://shaman.pythonanywhere.com/media/backgrounds/default_backround.jpg"
+        if obj.avatar:
+            return f"http://shaman.pythonanywhere.com{obj.avatar.image}"
+        return "http://shaman.pythonanywhere.com/media/default.jpg"
+
     def get_remaining_experience(self, obj):
         """Возвращает количество опыта, необходимое для достижения следующего уровня."""
         return obj.next_level_experience - obj.experience
-    def  get_selected_background_image(self,obj):
-        if obj.selected_background and hasattr(obj.selected_background, 'image'):
+
+    def get_selected_background_image(self, obj):
+        if obj.selected_background:
             return f"http://shaman.pythonanywhere.com{obj.selected_background.image}"
-        return "http://shaman.pythonanywhere.com/media/default.jpg"
+        return "http://shaman.pythonanywhere.com/media/backgrounds/default_background.jpg"
+
     def get_experience_progress(self, obj):
         """Возвращает прогресс опыта в процентах внутри текущего уровня."""
         if obj.next_level_experience > 0:
             progress = (obj.experience / obj.next_level_experience) * 100
             return max(0, min(int(progress), 100))
         return 0
+
     def get_role(self, obj):
         roles = [group.name[:-1] if group.name.endswith('Ы') else group.name for group in obj.groups.all()]
         return roles
@@ -288,7 +292,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if acoin_amount is not None:
             instance.acoin.amount = acoin_amount
             instance.acoin.save()
+
         return super().update(instance, validated_data)
+
 
 class AdminEmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', required=False)

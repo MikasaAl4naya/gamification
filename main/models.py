@@ -54,7 +54,10 @@ def get_avatar_upload_path(instance, filename):
 
 class PreloadedAvatar(models.Model):
     name = models.CharField(max_length=100)
-    image = models.ImageField(upload_to=get_avatar_upload_path, default="default.jpg")
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # Добавлено поле "цена"
+    level_required = models.IntegerField(default=0)  # Добавлено поле "требуемый уровень"
+    karma_required = models.IntegerField(default=0)  # Добавлено поле "требуемая карма"
+    image = models.ImageField(upload_to=get_avatar_upload_path, default="avatars/default.jpg")  # Обновлен путь загрузки
 
     def __str__(self):
         return self.name
