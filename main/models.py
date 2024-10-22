@@ -96,7 +96,7 @@ class Employee(AbstractUser):
     next_level_experience = models.IntegerField(default=100)
     karma = models.IntegerField(default=50)
     birth_date = models.DateField(null=True, blank=True)
-    avatar = models.ForeignKey(PreloadedAvatar,on_delete=models.SET_NULL,null=True,blank=True,related_name='equipped_by')  # Изменение: внешний ключ вместо ImageField
+    avatar = models.ForeignKey(PreloadedAvatar,on_delete=models.SET_NULL,null=True,related_name='equipped_by')  # Изменение: внешний ключ вместо ImageField
     status = models.CharField(max_length=100, null=True, blank=True)
     last_karma_update = models.DateTimeField(null=True, blank=True)
     last_activity = models.DateTimeField(null=True, blank=True)
