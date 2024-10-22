@@ -1699,29 +1699,7 @@ class SystemSettingViewSet(BasePermissionViewSet):
 
         return Response({'message': f'Setting {key} updated', 'key': key, 'value': value})
 
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def select_avatar(request):
-    try:
-        avatar_id = request.data.get('avatar_id')
-        if not avatar_id:
-            return Response({'error': 'Avatar ID is required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Получаем аватарку из пула
-        avatar = PreloadedAvatar.objects.get(pk=avatar_id)
-
-        # Устанавливаем аватарку для текущего пользователя
-        request.user.avatar = avatar.image
-        request.user.save()
-
-        return Response({'message': 'Avatar updated successfully'}, status=status.HTTP_200_OK)
-    except PreloadedAvatar.DoesNotExist:
-        return Response({'error': 'Avatar not found'}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-class PreloadedAvatarUploadViewSet(BasePermissionViewSet):
+class PreloadedAvatarViewSet(BasePermissionViewSet):
     queryset = PreloadedAvatar.objects.all()
     serializer_class = PreloadedAvatarSerializer
     permission_classes = [IsAdminUser]
@@ -1785,6 +1763,30 @@ class PreloadedAvatarUploadViewSet(BasePermissionViewSet):
             serializer.save(image=relative_image_path)
         else:
             serializer.save()
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def buy(self, request, pk=None):
+        employee = request.user
+        avatar = self.get_object()
+
+        if avatar.level_required > employee.level or avatar.karma_required > employee.karma:
+            return Response({'detail': 'You do not meet the requirements to buy this avatar.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        employee.owned_avatars.add(avatar)
+        return Response({'detail': 'Avatar purchased successfully.'}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def equip(self, request, pk=None):
+        employee = request.user
+        avatar = self.get_object()
+
+        if not employee.owned_avatars.filter(id=avatar.id).exists():
+            return Response({'detail': 'You do not own this avatar.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        employee.current_avatar = avatar
+        employee.save()
+        return Response({'detail': 'Avatar equipped successfully.'}, status=status.HTTP_200_OK)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -3916,27 +3918,29 @@ class BackgroundViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def buy(self, request, pk=None):
-        background = self.get_object()
         employee = request.user
+        background = self.get_object()
 
-        # Проверка уровня и кармы пользователя перед покупкой фона
-        if employee.level < background.level_required:
-            return Response({'detail': 'Ваш уровень недостаточен для покупки этого фона.'}, status=status.HTTP_403_FORBIDDEN)
+        if background.level_required > employee.level or background.karma_required > employee.karma:
+            return Response({'detail': 'You do not meet the requirements to buy this background.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-        if employee.karma < background.karma_required:
-            return Response({'detail': 'У вас недостаточно кармы для покупки этого фона.'}, status=status.HTTP_403_FORBIDDEN)
-
-        # Проверка, не купил ли сотрудник этот фон ранее
-        if background in employee.owned_backgrounds.all():
-            return Response({'detail': 'Вы уже приобрели этот фон.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Списываем карму и добавляем фон в список приобретенных
-        employee.karma -= background.karma_required
         employee.owned_backgrounds.add(background)
-        employee.save()
+        return Response({'detail': 'Background purchased successfully.'}, status=status.HTTP_200_OK)
 
-        return Response({'detail': 'Фон успешно куплен.'})
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def equip(self, request, pk=None):
+        employee = request.user
+        background = self.get_object()
+
+        if not employee.owned_backgrounds.filter(id=background.id).exists():
+            return Response({'detail': 'You do not own this background.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        employee.current_background = background
+        employee.save()
+        return Response({'detail': 'Background equipped successfully.'}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def available(self, request):

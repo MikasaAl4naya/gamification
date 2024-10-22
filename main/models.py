@@ -102,6 +102,8 @@ class Employee(AbstractUser):
     profile_settings = models.JSONField(default=get_default_profile_settings, blank=True, null=False)
     selected_background = models.ForeignKey(Background, on_delete=models.SET_NULL, null=True, blank=True)
     owned_backgrounds = models.ManyToManyField(Background, related_name='owned_by', blank=True)
+    owned_avatars = models.ManyToManyField(PreloadedAvatar, related_name='owned_by', blank=True)
+
     def deactivate(self):
         self.is_active = False
         self.force_save = True
