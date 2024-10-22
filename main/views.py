@@ -1724,52 +1724,6 @@ class PreloadedAvatarViewSet(BasePermissionViewSet):
 
         return Response(chunked_avatars)
 
-    def perform_create(self, serializer):
-        # Проверяем или создаем запись в FilePath
-        file_path, created = FilePath.objects.get_or_create(name='Avatars', defaults={'path': 'media/avatars/'})
-
-        if not file_path.path:
-            raise serializers.ValidationError("Invalid FilePath configuration for 'Avatars'.")
-
-        # Получаем файл изображения из запроса
-        original_image = self.request.FILES.get('image')
-
-        if not original_image:
-            raise serializers.ValidationError("No image file found in the request.")
-
-        # Определяем путь для сохранения изображения
-        new_image_path = os.path.join(file_path.path, original_image.name)
-
-        # Сохраняем изображение в указанную папку
-        absolute_path = default_storage.save(new_image_path, original_image)
-
-        # Сохраняем путь в базе данных (в формате относительно media root)
-        relative_image_path = os.path.relpath(absolute_path, 'media/')
-        serializer.save(image=relative_image_path)
-
-    def perform_update(self, serializer):
-        # Проверяем наличие пути для сохранения аватарок
-        file_path = FilePath.objects.filter(name='Avatars').first()
-
-        if not file_path or not file_path.path:
-            raise serializers.ValidationError("FilePath for 'Avatars' not found.")
-
-        # Получаем файл изображения из запроса, если он предоставлен
-        original_image = self.request.FILES.get('image')
-        if original_image:
-            # Определяем путь для сохранения изображения
-            new_image_path = os.path.join(file_path.path, original_image.name)
-
-            # Сохраняем изображение в указанную папку с помощью default_storage
-            absolute_path = default_storage.save(new_image_path, original_image)
-
-            # Определяем относительный путь для сохранения в базе данных
-            relative_image_path = os.path.relpath(absolute_path, 'media/')
-            serializer.save(image=relative_image_path)
-        else:
-            # Если изображение не предоставлено, сохраняем остальные поля без изменений в поле изображения
-            serializer.save()
-
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def buy(self, request, pk=None):
         employee = request.user
