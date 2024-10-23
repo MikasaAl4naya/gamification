@@ -1744,7 +1744,7 @@ class PreloadedAvatarViewSet(BasePermissionViewSet):
         if not employee.owned_avatars.filter(id=avatar.id).exists():
             return Response({'detail': 'You do not own this avatar.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        employee.current_avatar = avatar
+        employee.avatar = avatar
         employee.save()
         return Response({'detail': 'Avatar equipped successfully.'}, status=status.HTTP_200_OK)
 
