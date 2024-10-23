@@ -19,7 +19,8 @@ admin.site.register(Item)
 admin.site.register(ShiftHistory)
 admin.site.register(Template)
 admin.site.register(ComplexityThresholds)
-
+admin.site.register(Background)
+admin.site.register(PreloadedAvatar)
 @admin.register(Request)
 class RequestAdmin(admin.ModelAdmin):
     # Определяем поля, которые будут отображаться в списке объектов
