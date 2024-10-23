@@ -281,7 +281,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
 
     def get_selected_background_image(self, obj):
         if obj.selected_background:
-            return f"http://shaman.pythonanywhere.com{obj.selected_background.image}"
+            return f"http://shaman.pythonanywhere.com/media/{obj.selected_background.image}"
         return "http://shaman.pythonanywhere.com/media/backgrounds/default_background.jpg"
 
     def get_experience_progress(self, obj):
