@@ -41,7 +41,7 @@ class MicroEmployeeSerializer(serializers.ModelSerializer):
         fields = ['first_name', 'avatar_url']
     def get_avatar_url(self, obj):
         if obj.avatar:
-            return f"http://shaman.pythonanywhere.com/media{obj.avatar.url}"
+            return f"http://shaman.pythonanywhere.com/media{obj.avatar.image}"
         return "http://shaman.pythonanywhere.com/media/avatars/default.jpg"
 class ClassificationSerializer(serializers.ModelSerializer):
     class Meta:
