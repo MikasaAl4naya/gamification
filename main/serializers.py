@@ -84,7 +84,7 @@ class PlayersSerializer(serializers.ModelSerializer):
         if obj.profile_settings.get("show_avatar", True):
             if obj.avatar:
                 return f"http://shaman.pythonanywhere.com/media/{obj.avatar.image}"
-        return "http://shaman.pythonanywhere.com/media/default.jpg"
+        return "http://shaman.pythonanywhere.com/media/avatars/default.jpg"
 
     def get_statistics(self, obj):
         # Получаем настройки профиля
