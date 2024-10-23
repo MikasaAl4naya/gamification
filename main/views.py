@@ -1117,7 +1117,6 @@ def get_user(request):
             # Обновляем последнюю обработанную дату
             last_date = shift.date
 
-        print(f"Максимальное количество дней без опозданий: {max_days_without_late}")
 
         # Инвентарь сотрудника
         employee_items = EmployeeItem.objects.filter(employee=employee)
@@ -1703,7 +1702,6 @@ class PreloadedAvatarViewSet(BasePermissionViewSet):
     queryset = PreloadedAvatar.objects.all()
     serializer_class = PreloadedAvatarSerializer
     parser_classes = [MultiPartParser, FormParser]
-
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def available(self, request):
         employee = request.user
@@ -1729,13 +1727,27 @@ class PreloadedAvatarViewSet(BasePermissionViewSet):
         employee = request.user
         avatar = self.get_object()
 
+        # Проверяем, хватает ли уровня и кармы для покупки аватара
         if avatar.level_required > employee.level or avatar.karma_required > employee.karma:
             return Response({'detail': 'You do not meet the requirements to buy this avatar.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        employee.owned_avatars.add(avatar)
-        return Response({'detail': 'Avatar purchased successfully.'}, status=status.HTTP_200_OK)
+        # Получаем объект Acoin, связанный с сотрудником
+        acoin = employee.acoin
 
+        # Проверяем, хватает ли акоинов для покупки
+        if acoin.amount < avatar.price:
+            return Response({'detail': 'You do not have enough Acoins to buy this avatar.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Вычитаем цену аватара из количества акоинов сотрудника
+        acoin.amount -= avatar.price
+        acoin.save()
+
+        # Добавляем аватар к купленным сотрудником
+        employee.owned_avatars.add(avatar)
+
+        return Response({'detail': 'Avatar purchased successfully.'}, status=status.HTTP_200_OK)
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def equip(self, request, pk=None):
         employee = request.user
@@ -1743,7 +1755,6 @@ class PreloadedAvatarViewSet(BasePermissionViewSet):
 
         if not employee.owned_avatars.filter(id=avatar.id).exists():
             return Response({'detail': 'You do not own this avatar.'}, status=status.HTTP_400_BAD_REQUEST)
-
         employee.avatar = avatar
         employee.save()
         return Response({'detail': 'Avatar equipped successfully.'}, status=status.HTTP_200_OK)
@@ -3865,12 +3876,27 @@ class BackgroundViewSet(viewsets.ModelViewSet):
         employee = request.user
         background = self.get_object()
 
+        # Проверяем, хватает ли уровня и кармы для покупки аватара
         if background.level_required > employee.level or background.karma_required > employee.karma:
             return Response({'detail': 'You do not meet the requirements to buy this background.'},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        employee.owned_backgrounds.add(background)
-        return Response({'detail': 'Background purchased successfully.'}, status=status.HTTP_200_OK)
+        # Получаем объект Acoin, связанный с сотрудником
+        acoin = employee.acoin
+
+        # Проверяем, хватает ли акоинов для покупки
+        if acoin.amount < background.price:
+            return Response({'detail': 'You do not have enough Acoins to buy this background.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Вычитаем цену аватара из количества акоинов сотрудника
+        acoin.amount -= background.price
+        acoin.save()
+
+        # Добавляем аватар к купленным сотрудником
+        employee.owned_background.add(background)
+
+        return Response({'detail': 'Avatar purchased successfully.'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def equip(self, request, pk=None):
@@ -3879,8 +3905,7 @@ class BackgroundViewSet(viewsets.ModelViewSet):
 
         if not employee.owned_backgrounds.filter(id=background.id).exists():
             return Response({'detail': 'You do not own this background.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        employee.current_background = background
+        employee.selected_background = background
         employee.save()
         return Response({'detail': 'Background equipped successfully.'}, status=status.HTTP_200_OK)
 
