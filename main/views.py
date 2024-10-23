@@ -3896,7 +3896,7 @@ class BackgroundViewSet(viewsets.ModelViewSet):
         # Добавляем аватар к купленным сотрудником
         employee.owned_backgrounds.add(background)
 
-        return Response({'detail': 'Avatar purchased successfully.'}, status=status.HTTP_200_OK)
+        return Response({'detail': 'Background purchased successfully.'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def equip(self, request, pk=None):
