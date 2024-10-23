@@ -3894,7 +3894,7 @@ class BackgroundViewSet(viewsets.ModelViewSet):
         acoin.save()
 
         # Добавляем аватар к купленным сотрудником
-        employee.owned_background.add(background)
+        employee.owned_backgrounds.add(background)
 
         return Response({'detail': 'Avatar purchased successfully.'}, status=status.HTTP_200_OK)
 
