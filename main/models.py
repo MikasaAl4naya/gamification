@@ -12,12 +12,15 @@ from django.dispatch import receiver
 from django.utils import timezone
 from gamefication import settings
 
+
 class Background(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255)  # Имя файла (для скрипта или изображения)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     level_required = models.IntegerField(default=0)
     karma_required = models.IntegerField(default=0)
-    image = models.ImageField(upload_to='backgrounds/')
+    image = models.ImageField(upload_to='backgrounds/', default="backgrounds/default.jpg", blank=True, null=True)
+    is_script = models.BooleanField(default=False)  # Определяет, является ли фон скриптом
+
 
     def __str__(self):
         return self.name
@@ -139,7 +142,7 @@ class Employee(AbstractUser):
         if self.karma > 100:
             self.karma = 100
         if self.karma<0:
-            self.karma = 100
+            self.karma = 0
         # Признак, что поле is_active меняется через admin
         if 'is_active' in kwargs.get('update_fields', []):
             self.force_save = True

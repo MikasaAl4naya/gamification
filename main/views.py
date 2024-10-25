@@ -1157,7 +1157,6 @@ def get_user(request):
                 ]
             }
         ]
-
         profile_data = serializer.data.copy()
         profile_data['praises_count'] = praises_count
         profile_data['complaints_count'] = complaints_count
@@ -3921,10 +3920,12 @@ class BackgroundViewSet(viewsets.ModelViewSet):
             background_instance = Background.objects.get(id=background['id'])
             background['is_owned'] = background_instance.owned_by.filter(id=employee.id).exists()
             background['is_equipped'] = employee.selected_background_id == background_instance.id
-            background[
-                'is_available'] = background_instance.level_required <= employee.level and background_instance.karma_required <= employee.karma
+            background['is_available'] = (
+                    background_instance.level_required <= employee.level and
+                    background_instance.karma_required <= employee.karma
+            )
 
-        # Разделяем фоны на группы по 3 элемента
+        # Разделение фонов на группы по 3 элемента
         chunked_backgrounds = [backgrounds_data[i:i + 3] for i in range(0, len(backgrounds_data), 3)]
 
         return Response(chunked_backgrounds)

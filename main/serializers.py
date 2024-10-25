@@ -260,13 +260,15 @@ class EmployeeSerializer(serializers.ModelSerializer):
     remaining_experience = serializers.SerializerMethodField()
     experience_progress = serializers.SerializerMethodField()
     selected_background_image = serializers.SerializerMethodField()
+    selected_background_is_script = serializers.SerializerMethodField()
 
     class Meta:
         model = Employee
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 'position', 'level', 'experience',
             'next_level_experience', 'remaining_experience', 'experience_progress', 'karma', 'birth_date',
-            'avatar_url', 'status', 'acoin_amount', 'is_active', 'groups', 'is_active', 'selected_background', 'selected_background_image'
+            'avatar_url', 'status', 'acoin_amount', 'is_active', 'groups', 'is_active', 'selected_background',
+            'selected_background_image', 'selected_background_is_script'
         ]
         read_only_fields = ['username', 'email', 'position', 'level', 'experience', 'next_level_experience', 'karma']
 
@@ -276,16 +278,22 @@ class EmployeeSerializer(serializers.ModelSerializer):
         return "http://shaman.pythonanywhere.com/media/avatars/default.jpg"
 
     def get_remaining_experience(self, obj):
-        """Возвращает количество опыта, необходимое для достижения следующего уровня."""
         return obj.next_level_experience - obj.experience
 
     def get_selected_background_image(self, obj):
+        """Возвращает название скрипта, если фон является скриптом, или ссылку на изображение, если это обычный фон."""
         if obj.selected_background:
-            return f"http://shaman.pythonanywhere.com/media/{obj.selected_background.image}"
+            if obj.selected_background.is_script:
+                return obj.selected_background.name  # Возвращаем имя скрипта
+            else:
+                return f"http://shaman.pythonanywhere.com/media/{obj.selected_background.image}"  # Ссылка на изображение фона
         return "http://shaman.pythonanywhere.com/media/backgrounds/default_background.jpg"
 
+    def get_selected_background_is_script(self, obj):
+        """Проверяет, является ли выбранный фон скриптом."""
+        return obj.selected_background.is_script if obj.selected_background else False
+
     def get_experience_progress(self, obj):
-        """Возвращает прогресс опыта в процентах внутри текущего уровня."""
         if obj.next_level_experience > 0:
             progress = (obj.experience / obj.next_level_experience) * 100
             return max(0, min(int(progress), 100))
@@ -296,19 +304,16 @@ class EmployeeSerializer(serializers.ModelSerializer):
         return roles
 
     def update(self, instance, validated_data):
-        # Обновляем группы сотрудника, если они предоставлены в запросе
         groups = validated_data.pop('groups', None)
         if groups is not None:
             instance.groups.set(groups)
 
-        # Обновляем количество акоинов сотрудника, если оно предоставлено в запросе
         acoin_amount = validated_data.pop('acoin_amount', None)
         if acoin_amount is not None:
             instance.acoin.amount = acoin_amount
             instance.acoin.save()
 
         return super().update(instance, validated_data)
-
 
 class AdminEmployeeSerializer(serializers.ModelSerializer):
     acoin_amount = serializers.IntegerField(source='acoin.amount', required=False)
@@ -1080,7 +1085,7 @@ class BackgroundSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Background
-        fields = ['id', 'name', 'price', 'level_required', 'karma_required', 'image']
+        fields = ['id', 'name', 'price', 'level_required', 'karma_required', 'image', 'is_script']
 
     def get_image(self, obj):
         request = self.context.get('request')
