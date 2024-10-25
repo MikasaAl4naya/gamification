@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from .models import TestAttempt, AcoinTransaction, Employee, create_acoin_transaction, TestQuestion, Test, Acoin, \
     Request, Achievement, EmployeeAchievement, ExperienceMultiplier, EmployeeActionLog, ShiftHistory, EmployeeLog, \
-    UserSession
+    UserSession, ComplexityThresholds
 from django.contrib.auth.models import User, Group
 
 @receiver(post_save, sender=TestAttempt)
@@ -66,28 +66,27 @@ def assign_group(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Request)
 def award_experience(sender, instance, created, **kwargs):
-    if created:
-        # Получаем множители из базы данных по их названиям
+    if created or instance.status == 'Completed':  # Добавляем условие, чтобы начислять опыт при завершении
+        # Получаем множители
         operator_responsible_multiplier = ExperienceMultiplier.objects.filter(
             name="operator_responsible_multiplier").first()
         massive_request_multiplier = ExperienceMultiplier.objects.filter(name="massive_request_multiplier").first()
 
-        # Проверяем наличие оператора поддержки
         support_operator = instance.support_operator
         if not support_operator:
             print(f"No support operator found for request {instance.number}")
             return
 
-        # Проверяем, существует ли опыт по классификации
         experience_points = getattr(instance.classification, 'experience_points', None)
         if not experience_points:
             print(f"No experience points found for classification in request {instance.number}")
             return
 
-        # Логика начисления опыта
-        print(f"Initial experience points from classification: {experience_points}")
+        # Получаем сложность обращения
+        complexity = instance.get_complexity()
+        print(f"Complexity of the request: {complexity}")
 
-        # Проверяем совпадение оператора и ответственного
+        # Применяем множитель за ответственность, если оператор сам завершил обращение
         responsible_full_name = instance.responsible.split()
         if len(responsible_full_name) >= 2:
             responsible_name = f"{responsible_full_name[1]} {responsible_full_name[0]}"  # Имя + Фамилия
@@ -97,26 +96,17 @@ def award_experience(sender, instance, created, **kwargs):
                 if operator_responsible_multiplier:
                     experience_points *= operator_responsible_multiplier.multiplier
                     print(f"Experience points after operator_responsible_multiplier: {experience_points}")
-                else:
-                    print("No operator_responsible_multiplier found.")
 
-        # Увеличение опыта для массовых обращений
+        # Применяем множитель за массовое обращение
         if instance.is_massive:
             if massive_request_multiplier:
                 experience_points *= massive_request_multiplier.multiplier
                 print(f"Experience points after massive_request_multiplier: {experience_points}")
-            else:
-                print("No massive_request_multiplier found.")
 
-        # Добавление опыта оператору
-        if instance.is_massive:
-            support_operator.add_experience(experience_points, source=f"За массовую {instance.number}")
-        else:
-            support_operator.add_experience(experience_points, source=f"За обращение {instance.number}")
-
-        print(
-            f"Awarded {experience_points} experience points to {support_operator.first_name} {support_operator.last_name}")
-        support_operator.save()  # Сохраняем изменения в сотруднике
+        # Добавляем опыт оператору
+        support_operator.add_experience(experience_points, source=f"За {complexity} обращение {instance.number}")
+        print(f"Awarded {experience_points} experience points to {support_operator.first_name} {support_operator.last_name}")
+        support_operator.save()
 
 
 @receiver(post_save, sender=Employee)

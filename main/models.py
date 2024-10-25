@@ -586,6 +586,17 @@ class Request(models.Model):
     def __str__(self):
         return f'{self.number} - {self.get_status_display()}'
 
+    def get_complexity(self):
+        thresholds = ComplexityThresholds.get_current_thresholds()
+        experience_points = self.classification.experience_points
+
+        if experience_points < thresholds.simple:
+            return 'simple'
+        elif thresholds.simple <= experience_points < thresholds.medium:
+            return 'medium'
+        else:
+            return 'hard'
+
 CHANGE_TYPE_CHOICES = [
     ('experience', 'Опыт'),
     ('karma', 'Карма'),
