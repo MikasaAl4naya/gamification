@@ -1,6 +1,4 @@
-
 import os
-
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AbstractUser, Group, Permission, User
 from django.contrib.sessions.models import Session
@@ -8,13 +6,12 @@ from django.db import models, transaction
 from django.core.validators import EmailValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 import re
-
 from django.db.models import JSONField
 from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
-
 from gamefication import settings
+
 class Background(models.Model):
     name = models.CharField(max_length=255)
     price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -100,7 +97,7 @@ class Employee(AbstractUser):
     status = models.CharField(max_length=100, null=True, blank=True)
     last_karma_update = models.DateTimeField(null=True, blank=True)
     last_activity = models.DateTimeField(null=True, blank=True)
-    remaining_experience = models.IntegerField(blank=True)
+    remaining_experience = models.IntegerField(blank=True, default=100)
     experience_progress = models.IntegerField(blank=True)
     profile_settings = models.JSONField(default=get_default_profile_settings, blank=True, null=False)
     selected_background = models.ForeignKey(Background, on_delete=models.SET_NULL, null=True, blank=True)
