@@ -1027,9 +1027,18 @@ def get_user(request):
             month=Count('number', filter=Q(date__year=today.year, date__month=today.month)),
             week=Count('number', filter=Q(date__gte=start_of_week))
         )
-        simple_requests = requests_qs.filter(classification__complexity='simple').count()
-        medium_requests = requests_qs.filter(classification__complexity='medium').count()
-        hard_requests = requests_qs.filter(classification__complexity='hard').count()
+        # Подсчёт количества обращений по типам сложности
+        simple_requests_count = requests_qs.filter(classification__complexity='simple').count()
+        medium_requests_count = requests_qs.filter(classification__complexity='medium').count()
+        hard_requests_count = requests_qs.filter(classification__complexity='hard').count()
+
+        # Подсчёт процентов для каждого типа
+        def calculate_percentage(part, whole):
+            return round((part / whole) * 100, 2) if whole > 0 else 0
+
+        simple_requests_percentage = calculate_percentage(simple_requests_count, total_requests)
+        medium_requests_percentage = calculate_percentage(medium_requests_count, total_requests)
+        hard_requests_percentage = calculate_percentage(hard_requests_count, total_requests)
         grouped_requests = [
             {
                 'classification_name': c['classification__name'],
@@ -1134,9 +1143,6 @@ def get_user(request):
                     f"Выполнено тестов: {completed_tests_count}",
                     f"Жалоб: {complaints_count}",
                     f"Комплиментов: {praises_count}",
-                    f"Простых: {simple_requests}",
-                    f"Средних:{medium_requests}",
-                    f"Сложных: {hard_requests}",
 
                 ]
             },
@@ -1154,6 +1160,26 @@ def get_user(request):
                     f"Всего: {total_acoins}",
                     f"За месяц: {total_acoins_month}",
                     f"За неделю: {total_acoins_week}"
+                ]
+            },
+            {
+                "titleName": "Сложность обращений",
+                "contentPoint": [
+                    {
+        'type': 'Простые',
+        'count': simple_requests_count,
+        'percentage': simple_requests_percentage
+    },
+    {
+        'type': 'Средние',
+        'count': medium_requests_count,
+        'percentage': medium_requests_percentage
+    },
+    {
+        'type': 'Сложные',
+        'count': hard_requests_count,
+        'percentage': hard_requests_percentage
+    }
                 ]
             }
         ]
