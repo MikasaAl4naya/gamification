@@ -98,7 +98,7 @@ class Employee(AbstractUser):
     last_karma_update = models.DateTimeField(null=True, blank=True)
     last_activity = models.DateTimeField(null=True, blank=True)
     remaining_experience = models.IntegerField(blank=True, default=100)
-    experience_progress = models.IntegerField(blank=True)
+    experience_progress = models.IntegerField(blank=True, default =0)
     profile_settings = models.JSONField(default=get_default_profile_settings, blank=True, null=False)
     selected_background = models.ForeignKey(Background, on_delete=models.SET_NULL, null=True, blank=True)
     owned_backgrounds = models.ManyToManyField(Background, related_name='owned_by', blank=True)
