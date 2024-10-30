@@ -1028,9 +1028,9 @@ def get_user(request):
             week=Count('number', filter=Q(date__gte=start_of_week))
         )
         # Подсчёт количества обращений по типам сложности
-        simple_requests_count = requests_qs.filter(classification__complexity='simple').count()
-        medium_requests_count = requests_qs.filter(classification__complexity='medium').count()
-        hard_requests_count = requests_qs.filter(classification__complexity='hard').count()
+        simple_requests_count = requests_qs.filter(computed_complexity='simple').count()
+        medium_requests_count = requests_qs.filter(computed_complexity='medium').count()
+        hard_requests_count = requests_qs.filter(computed_complexity='hard').count()
 
         # Подсчёт процентов для каждого типа
         def calculate_percentage(part, whole):
