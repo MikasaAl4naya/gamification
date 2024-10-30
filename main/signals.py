@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.translation import gettext as _
 from .models import TestAttempt, AcoinTransaction, Employee, create_acoin_transaction, TestQuestion, Test, Acoin, \
     Request, Achievement, EmployeeAchievement, ExperienceMultiplier, EmployeeActionLog, ShiftHistory, EmployeeLog, \
-    UserSession, ComplexityThresholds
+    UserSession, ComplexityThresholds, Feedback
 from django.contrib.auth.models import User, Group
 
 @receiver(post_save, sender=TestAttempt)
@@ -66,7 +66,7 @@ def assign_group(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Request)
 def award_experience(sender, instance, created, **kwargs):
-    if created or instance.status == 'Completed':  # Добавляем условие, чтобы начислять опыт при завершении
+    if created or instance.status == 'Completed':  # Начисляем опыт при создании и завершении обращения
         # Получаем множители
         operator_responsible_multiplier = ExperienceMultiplier.objects.filter(
             name="operator_responsible_multiplier").first()
@@ -77,14 +77,11 @@ def award_experience(sender, instance, created, **kwargs):
             print(f"No support operator found for request {instance.number}")
             return
 
+        # Начальная база опыта, указанная в классификации
         experience_points = getattr(instance.classification, 'experience_points', None)
         if not experience_points:
             print(f"No experience points found for classification in request {instance.number}")
             return
-
-        # Получаем сложность обращения
-        complexity = instance.get_complexity()
-        print(f"Complexity of the request: {complexity}")
 
         # Применяем множитель за ответственность, если оператор сам завершил обращение
         responsible_full_name = instance.responsible.split()
@@ -98,16 +95,25 @@ def award_experience(sender, instance, created, **kwargs):
                     print(f"Experience points after operator_responsible_multiplier: {experience_points}")
 
         # Применяем множитель за массовое обращение
-        if instance.is_massive:
-            if massive_request_multiplier:
-                experience_points *= massive_request_multiplier.multiplier
-                print(f"Experience points after massive_request_multiplier: {experience_points}")
+        if instance.is_massive and massive_request_multiplier:
+            experience_points *= massive_request_multiplier.multiplier
+            print(f"Experience points after massive_request_multiplier: {experience_points}")
+
+        # Теперь определяем сложность на основе итогового значения опыта
+        thresholds = ComplexityThresholds.get_current_thresholds()
+        if experience_points < thresholds.simple:
+            complexity = 'simple'
+        elif thresholds.simple <= experience_points < thresholds.medium:
+            complexity = 'medium'
+        else:
+            complexity = 'hard'
+
+        print(f"Final complexity of the request based on total experience points: {complexity}")
 
         # Добавляем опыт оператору
         support_operator.add_experience(experience_points, source=f"За {complexity} обращение {instance.number}")
         print(f"Awarded {experience_points} experience points to {support_operator.first_name} {support_operator.last_name}")
         support_operator.save()
-
 
 @receiver(post_save, sender=Employee)
 def track_experience_and_karma_changes(sender, instance, created, **kwargs):
@@ -683,7 +689,81 @@ def track_test_attempt_achievements(sender, instance, created, **kwargs):
 
     except Exception as e:
         print(f"Ошибка при отслеживании прогресса теста: {e}")
+receiver(post_save, sender=Feedback)
+def track_praise_achievement(sender, instance, created, **kwargs):
+    """
+    Отслеживает выполнение достижений, связанных с овациями (похвалами).
+    """
+    if created and instance.type == 'praise':  # Проверяем, что это новый объект с типом 'praise'
+        try:
+            employee = instance.target_employee
 
+            # Получаем все достижения, относящиеся к овациям (похвалам)
+            praise_achievements = Achievement.objects.filter(type=7)  # 7 соответствует типу "Овации"
+
+            for achievement in praise_achievements:
+                type_data = achievement.type_specific_data
+
+                # Получаем необходимые параметры из type_specific_data
+                required_praises_total = type_data.get('required_praises_total', None)
+                required_days_in_a_row = type_data.get('required_days_in_a_row', None)
+
+                # Найти или создать объект EmployeeAchievement для отслеживания прогресса
+                employee_achievement, created = EmployeeAchievement.objects.get_or_create(
+                    employee=employee,
+                    achievement=achievement
+                )
+
+                # Отслеживаем количество полученных похвал
+                total_praises = Feedback.objects.filter(
+                    target_employee=employee,
+                    type='praise',
+                    status='approved'
+                ).count()
+
+                # Проверка условий для достижения
+                fulfilled_conditions = 0
+                total_conditions = 0
+
+                # 1. Проверка общего количества похвал
+                if required_praises_total is not None:
+                    if total_praises >= required_praises_total:
+                        fulfilled_conditions += 1
+                    total_conditions += 1
+
+                # 2. Проверка на дни подряд с похвалами
+                if required_days_in_a_row is not None:
+                    praise_dates = Feedback.objects.filter(
+                        target_employee=employee,
+                        type='praise',
+                        status='approved'
+                    ).values_list('created_at', flat=True).distinct()
+
+                    # Подсчет последовательных дней
+                    consecutive_days = 1
+                    previous_date = None
+                    for date in sorted(praise_dates):
+                        if previous_date and (date - previous_date).days == 1:
+                            consecutive_days += 1
+                        else:
+                            consecutive_days = 1
+                        previous_date = date
+
+                        if consecutive_days >= required_days_in_a_row:
+                            fulfilled_conditions += 1
+                            break
+                    total_conditions += 1
+
+                # Если все условия выполнены, обновляем ачивку
+                if fulfilled_conditions == total_conditions and not employee_achievement.date_awarded:
+                    employee_achievement.progress = 1
+                    employee_achievement.reward_employee()
+                    employee_achievement.date_awarded = timezone.now()
+
+                employee_achievement.save()
+
+        except Exception as e:
+            print(f"Ошибка при отслеживании прогресса достижения для оваций: {e}")
 @receiver(post_delete)
 def log_model_delete(sender, instance, **kwargs):
     excluded_models = [EmployeeActionLog, ShiftHistory, EmployeeLog, Request]
