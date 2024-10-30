@@ -149,6 +149,9 @@ class Employee(AbstractUser):
         super().save(*args, **kwargs)
 
     def log_change(self, change_type, old_value, new_value, source=None, description=None):
+        # Пропускаем запись в лог, если старое и новое значения одинаковы
+        if old_value == new_value:
+            return
 
         # Если описание не передано, создаём его на основе типа изменения
         if description is None:
@@ -181,6 +184,7 @@ class Employee(AbstractUser):
         )
         print(
             f"Logging change: {change_type}, {old_value} -> {new_value}, source: {source}, description: {description}")
+
     def add_karma(self, amount, source="Изменили вручную"):
         """ Увеличивает карму на указанное количество и логирует изменение """
         if not self.is_active:

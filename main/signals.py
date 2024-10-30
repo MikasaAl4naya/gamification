@@ -122,13 +122,14 @@ def track_experience_and_karma_changes(sender, instance, created, **kwargs):
     except sender.DoesNotExist:
         return
 
-    # Проверяем изменения опыта
+    # Проверяем изменения опыта, только если старое и новое значения различаются
     if old_instance.experience != instance.experience:
         instance.set_experience(instance.experience, source="Ручное изменение через админку или API")
 
-    # Проверяем изменения кармы
+    # Проверяем изменения кармы, только если старое и новое значения различаются
     if old_instance.karma != instance.karma:
         instance.set_karma(instance.karma, source="Ручное изменение через админку или API")
+
 @receiver(post_save, sender=ShiftHistory)
 def track_shift_late_achievements(sender, instance, created, **kwargs):
     if created:
