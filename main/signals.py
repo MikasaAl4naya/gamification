@@ -66,7 +66,7 @@ def assign_group(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Request)
 def award_experience(sender, instance, created, **kwargs):
-    if created or instance.status == 'Completed':  # Начисляем опыт при создании и завершении обращения
+    if created or instance.status == 'Completed':
         # Получаем множители
         operator_responsible_multiplier = ExperienceMultiplier.objects.filter(
             name="operator_responsible_multiplier").first()
@@ -100,18 +100,13 @@ def award_experience(sender, instance, created, **kwargs):
             print(f"Experience points after massive_request_multiplier: {experience_points}")
 
         # Теперь определяем сложность на основе итогового значения опыта
-        thresholds = ComplexityThresholds.get_current_thresholds()
-        if experience_points < thresholds.simple:
-            complexity = 'simple'
-        elif thresholds.simple <= experience_points < thresholds.medium:
-            complexity = 'medium'
-        else:
-            complexity = 'hard'
+        instance.computed_complexity = instance.compute_complexity(experience_points)
+        instance.save(update_fields=['computed_complexity'])
 
-        print(f"Final complexity of the request based on total experience points: {complexity}")
+        print(f"Final computed complexity of the request based on total experience points: {instance.computed_complexity}")
 
         # Добавляем опыт оператору
-        support_operator.add_experience(experience_points, source=f"За {complexity} обращение {instance.number}")
+        support_operator.add_experience(experience_points, source=f"За {instance.computed_complexity} обращение {instance.number}")
         print(f"Awarded {experience_points} experience points to {support_operator.first_name} {support_operator.last_name}")
         support_operator.save()
 

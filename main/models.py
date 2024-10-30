@@ -582,7 +582,20 @@ class Request(models.Model):
     description = models.TextField(null=True, blank=True)
     date = models.DateTimeField()
     is_massive = models.BooleanField(default=False)  # Новое поле для массовых обращений
+    computed_complexity = models.CharField(max_length=10, choices=Classifications.COMPLEXITY_CHOICES, null=True,
+                                           blank=True)
 
+    def compute_complexity(self, experience_points):
+        """
+        Определяет сложность на основе переданного значения опыта.
+        """
+        thresholds = ComplexityThresholds.get_current_thresholds()
+        if experience_points < thresholds.simple:
+            return Classifications.SIMPLE
+        elif thresholds.simple <= experience_points < thresholds.medium:
+            return Classifications.MEDIUM
+        else:
+            return Classifications.HARD
     def __str__(self):
         return f'{self.number} - {self.get_status_display()}'
 
