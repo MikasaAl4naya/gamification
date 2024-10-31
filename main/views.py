@@ -380,31 +380,45 @@ class DynamicPermission(BasePermission):
 @api_view(['POST'])
 @permission_classes([IsAdmin])  # Только администратор может присваивать достижения
 def assign_achievement(request):
-    employee_id = request.data.get('employee_id')
+    employee_ids = request.data.get('employee_ids', [])  # Ожидаем массив с ID сотрудников
     achievement_id = request.data.get('achievement_id')
 
+    if not isinstance(employee_ids, list) or not employee_ids:
+        return Response({"error": "employee_ids must be a non-empty list"}, status=status.HTTP_400_BAD_REQUEST)
+
     try:
-        employee = Employee.objects.get(id=employee_id)
         achievement = Achievement.objects.get(id=achievement_id)
-    except Employee.DoesNotExist:
-        return Response({"error": "Employee not found"}, status=status.HTTP_404_NOT_FOUND)
     except Achievement.DoesNotExist:
         return Response({"error": "Achievement not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Проверка, если достижение можно получить только один раз и уже было присвоено
-    if  EmployeeAchievement.objects.filter(employee=employee, achievement=achievement).exists():
-        return Response({"message": "This achievement can only be earned once and has already been assigned."},
-                        status=status.HTTP_400_BAD_REQUEST)
+    # Переменные для хранения успешных и неуспешных попыток присвоения достижения
+    success_count = 0
+    errors = []
 
-    # Присвоение достижения
-    employee_achievement = EmployeeAchievement.objects.create(
-        employee=employee,
-        achievement=achievement,
-        assigned_manually=True
-    )
-    employee_achievement.reward_employee()
+    for employee_id in employee_ids:
+        try:
+            employee = Employee.objects.get(id=employee_id)
+            # Проверка, если достижение можно получить только один раз и уже было присвоено
+            if EmployeeAchievement.objects.filter(employee=employee, achievement=achievement).exists():
+                errors.append({"employee_id": employee_id, "error": "Achievement already assigned"})
+                continue
 
-    return Response({"message": "Achievement assigned successfully"}, status=status.HTTP_200_OK)
+            # Присвоение достижения
+            employee_achievement = EmployeeAchievement.objects.create(
+                employee=employee,
+                achievement=achievement,
+                assigned_manually=True
+            )
+            employee_achievement.reward_employee()
+            success_count += 1
+
+        except Employee.DoesNotExist:
+            errors.append({"employee_id": employee_id, "error": "Employee not found"})
+
+    return Response({
+        "message": f"Achievement assigned to {success_count} employees successfully",
+        "errors": errors
+    }, status=status.HTTP_200_OK if success_count > 0 else status.HTTP_400_BAD_REQUEST)
 
 
 
