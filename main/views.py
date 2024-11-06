@@ -391,25 +391,25 @@ def assign_achievement(request):
     except Achievement.DoesNotExist:
         return Response({"error": "Achievement not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    # Переменные для хранения успешных и неуспешных попыток присвоения достижения
     success_count = 0
     errors = []
 
     for employee_id in employee_ids:
         try:
             employee = Employee.objects.get(id=employee_id)
-            # Проверка, если достижение можно получить только один раз и уже было присвоено
+
+            # Проверка, что достижение не будет повторно присвоено, если это награда, получаемая только один раз
             if EmployeeAchievement.objects.filter(employee=employee, achievement=achievement).exists():
                 errors.append({"employee_id": employee_id, "error": "Achievement already assigned"})
                 continue
 
-            # Присвоение достижения
+            # Присваиваем достижение
             employee_achievement = EmployeeAchievement.objects.create(
                 employee=employee,
                 achievement=achievement,
                 assigned_manually=True
             )
-            employee_achievement.reward_employee()
+            employee_achievement.reward_employee()  # Награждаем сотрудника опытом и валютой
             success_count += 1
 
         except Employee.DoesNotExist:

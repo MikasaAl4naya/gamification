@@ -498,12 +498,12 @@ class Achievement(models.Model):
 
     name = models.CharField(max_length=100)
     description = models.TextField(null=True, blank=True)
-    type = models.IntegerField(choices=TYPE_CHOICES)
+    type = models.IntegerField(choices=TYPE_CHOICES, null=True)
     reward_experience = models.IntegerField(null=True, blank=True, default=0)
     reward_currency = models.IntegerField(null=True, blank=True, default=0)
     template_background = models.ForeignKey(Template, related_name='background_achievements', on_delete=models.SET_NULL, null=True, blank=True)
     template_foreground = models.ForeignKey(Template, related_name='foreground_achievements', on_delete=models.SET_NULL, null=True, blank=True)
-    difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default='Medium')
+    difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, null=True)
     is_award = models.BooleanField(default=False)
     border_style = models.CharField(max_length=20, default='solid')
     border_width = models.IntegerField(null=True, blank=True, default=0)
@@ -525,6 +525,11 @@ class Achievement(models.Model):
         return self.name
 
     def clean(self):
+        if self.is_award:
+            if self.type or self.difficulty or self.type_specific_data:
+                raise ValidationError(
+                    'For an award, the fields `type` and `difficulty` should not be specified.'
+                )
         if self.type == 'Requests':
             if not self.request_type:
                 raise ValidationError('Field request_type is required for achievements based on number of requests.')
