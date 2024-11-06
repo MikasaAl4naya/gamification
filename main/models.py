@@ -71,16 +71,16 @@ class SurveyAnswer(models.Model):
         return f"{self.employee.username}: {self.answer_text[:50]}"
 def get_default_profile_settings():
     return {
-        "show_avatar": True,
-        "show_level": True,
-        "show_experience": True,
-        "show_karma": True,
-        "show_total_requests": True,
-        "show_achievements_count": True,
-        "show_total_experience_earned": True,
-        "show_completed_tests_count": True,
-        "show_total_lates": True,
-        "show_worked_days": True
+        "show_avatar": False,
+        "show_level": False,
+        "show_experience": False,
+        "show_karma": False,
+        "show_total_requests": False,
+        "show_achievements_count": False,
+        "show_total_experience_earned": False,
+        "show_completed_tests_count": False,
+        "show_total_lates": False,
+        "show_worked_days": False
     }
 class Employee(AbstractUser):
     POSITION_CHOICES = [

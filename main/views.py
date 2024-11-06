@@ -630,9 +630,45 @@ def reset_karma_update(request, employee_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 class PlayersViewSet(BasePermissionViewSet):
-    queryset = Employee.objects.all()
+    queryset = Employee.objects.filter(is_active=True)
     serializer_class = PlayersSerializer
     permission_classes = [IsAuthenticated]
+
+    @action(detail=False, methods=['patch'], url_path='update-profile-settings')
+    def update_profile_settings(self, request):
+        # Получаем текущего сотрудника по токену
+        employee = request.user
+        profile_settings = request.data.get("profile_settings", {})
+
+        # Проверка на валидность входных данных (только разрешенные поля)
+        allowed_keys = [
+            "show_avatar",
+            "show_total_requests",
+            "show_achievements_count",
+            "show_total_experience_earned",
+            "show_completed_tests_count",
+            "show_total_lates",
+            "show_worked_days",
+            # Добавьте любые другие настройки, которые вы хотите разрешить
+        ]
+
+        # Фильтруем только разрешенные ключи
+        filtered_settings = {key: profile_settings[key] for key in profile_settings if key in allowed_keys}
+
+        if not filtered_settings:
+            return Response(
+                {"error": "No valid settings provided"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Обновляем настройки профиля
+        employee.profile_settings.update(filtered_settings)
+        employee.save()
+
+        return Response(
+            {"message": "Profile settings updated successfully", "profile_settings": employee.profile_settings},
+            status=status.HTTP_200_OK
+        )
 
 
 @api_view(['POST'])

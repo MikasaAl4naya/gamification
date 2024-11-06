@@ -80,32 +80,26 @@ class PlayersSerializer(serializers.ModelSerializer):
         read_only_fields = ['first_name', 'last_name', 'level', 'experience', 'next_level_experience']
 
     def get_avatar_url(self, obj):
-        # Проверяем, включено ли отображение аватара в настройках профиля
-        if obj.profile_settings.get("show_avatar", True):
-            if obj.avatar:
-                return f"http://shaman.pythonanywhere.com/media/{obj.avatar.image}"
+        # Обязательное отображение аватара
+        if obj.avatar:
+            return f"http://shaman.pythonanywhere.com/media/{obj.avatar.image}"
         return "http://shaman.pythonanywhere.com/media/avatars/default.jpg"
 
     def get_statistics(self, obj):
-        # Получаем настройки профиля
-        settings = obj.profile_settings
-
-        # Логирование для отладки
-        print(f"Profile settings for {obj.first_name} {obj.last_name}: {settings}")
-
-        # Подготавливаем статистику на основе настроек профиля
+        settings = obj.profile_settings or {}
         statistics = {}
 
-        # Добавляем дополнительные элементы статистики, если они включены в настройках профиля
-        if settings.get("show_total_requests", True):
+
+        # Дополнительные поля, которые можно настроить
+        if settings.get("show_total_requests", False):
             total_requests = Request.objects.filter(support_operator=obj).count()
             statistics['total_requests'] = total_requests
 
-        if settings.get("show_achievements_count", True):
+        if settings.get("show_achievements_count", False):
             achievements_count = EmployeeAchievement.objects.filter(employee=obj).count()
             statistics['achievements_count'] = achievements_count
 
-        if settings.get("show_total_experience_earned", True):
+        if settings.get("show_total_experience_earned", False):
             total_experience_earned = EmployeeLog.objects.filter(
                 employee=obj,
                 change_type='experience',
@@ -113,22 +107,24 @@ class PlayersSerializer(serializers.ModelSerializer):
             ).annotate(gain=F('new_value') - F('old_value')).aggregate(total=Sum('gain'))['total'] or 0
             statistics['total_experience_earned'] = total_experience_earned
 
-        if settings.get("show_completed_tests_count", True):
+        if settings.get("show_completed_tests_count", False):
             completed_tests_count = TestAttempt.objects.filter(employee=obj, status=TestAttempt.PASSED).count()
             statistics['completed_tests_count'] = completed_tests_count
 
-        if settings.get("show_total_lates", True):
-            total_lates = ShiftHistory.objects.filter(employee=obj, late=True).count()
-            statistics['total_lates'] = total_lates
 
-        if settings.get("show_worked_days", True):
+        if settings.get("show_worked_days", False):
             worked_days = ShiftHistory.objects.filter(employee=obj).values('date').distinct().count()
             statistics['worked_days'] = worked_days
 
-        # Здесь можно добавить другие элементы статистики по желанию
+        # Другие настраиваемые элементы статистики
+        if settings.get("show_praises_count", False):
+            praises_count = Feedback.objects.filter(target_employee=obj, type="praise", status='approved').count()
+            statistics['praises_count'] = praises_count
+
+        if settings.get("show_status", False):
+            statistics['status'] = obj.status or "Не указан"
 
         return statistics
-
 
 class SurveyQuestionSerializer(serializers.ModelSerializer):
     class Meta:
