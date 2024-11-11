@@ -11,7 +11,7 @@ from django.db.models.signals import post_save, post_delete, pre_delete
 from django.dispatch import receiver
 from django.utils import timezone
 from gamefication import settings
-
+from django.core.exceptions import ObjectDoesNotExist
 
 class Background(models.Model):
     name = models.CharField(max_length=255)  # Имя файла (для скрипта или изображения)
@@ -61,7 +61,25 @@ class PreloadedAvatar(models.Model):
 
     def __str__(self):
         return self.name
+class LevelConfiguration(models.Model):
+    base_acoin_amount = models.IntegerField(default=50, help_text="Базовое количество акоинов за повышение уровня")
+    acoin_multiplier = models.FloatField(default=0.2, help_text="Множитель для выдачи акоинов при повышении уровня")
+    experience_multiplier = models.FloatField(default=1.2, help_text="Множитель для расчета требуемого опыта для следующего уровня")
 
+    def save(self, *args, **kwargs):
+        # Проверка, что существует только одна запись
+        if not self.pk and LevelConfiguration.objects.exists():
+            raise ValidationError("Допускается только одна запись в LevelConfiguration.")
+        super(LevelConfiguration, self).save(*args, **kwargs)
+
+    @classmethod
+    def get_solo_instance(cls):
+        # Получает единственный экземпляр или создает его при отсутствии
+        obj, created = cls.objects.get_or_create(id=1)
+        return obj
+
+    def __str__(self):
+        return "Конфигурация уровней"
 class SurveyAnswer(models.Model):
     employee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     question = models.ForeignKey(SurveyQuestion, on_delete=models.CASCADE)
@@ -231,28 +249,45 @@ class Employee(AbstractUser):
         self.save()
 
     def check_level_up(self):
+        if getattr(self, '_checking_level', False):
+            return
+        self._checking_level = True  # Устанавливаем флаг начала проверки уровня
         leveled_up_or_down = False  # Флаг для отслеживания, был ли уровень изменен
         max_level = 50
         min_level = 1
 
+        # Получаем конфигурацию уровней или используем значения по умолчанию
+        try:
+            config = LevelConfiguration.objects.get()
+            acoins_for_level = config.base_acoin_amount
+            acoin_multiplier = config.acoin_multiplier
+            experience_multiplier = config.experience_multiplier
+        except ObjectDoesNotExist:
+            acoins_for_level = 50
+            acoin_multiplier = 0.2
+            experience_multiplier = 1.2
+
         # Проверка на повышение уровня
         while self.experience >= self.next_level_experience and self.level < max_level:
+            self.add_acoins(acoins_for_level * (self.level * acoin_multiplier),
+                            source=f"За получение {self.level}-го уровня")
             old_level = self.level
             self.level += 1
             leveled_up_or_down = True
-            self.next_level_experience = self.calculate_experience_for_level(self.level)
+            self.next_level_experience = self.calculate_experience_for_level(self.level, experience_multiplier)
             self.log_change('level', old_level, self.level)
 
         # Проверка на понижение уровня
-        while self.level > min_level and self.experience < self.calculate_experience_for_level(self.level - 1):
+        while self.level > min_level and self.experience < self.calculate_experience_for_level(self.level - 1,
+                                                                                               experience_multiplier):
             old_level = self.level
             self.level -= 1
             leveled_up_or_down = True
-            self.next_level_experience = self.calculate_experience_for_level(self.level)
+            self.next_level_experience = self.calculate_experience_for_level(self.level, experience_multiplier)
             self.log_change('level', old_level, self.level)
 
         # Обновление оставшегося опыта
-        previous_level_experience = self.calculate_experience_for_level(self.level - 1)
+        previous_level_experience = self.calculate_experience_for_level(self.level - 1, experience_multiplier)
         self.remaining_experience = self.next_level_experience - self.experience
 
         # Корректный расчет прогресса опыта (в процентах)
@@ -266,7 +301,6 @@ class Employee(AbstractUser):
 
         # Сохранение изменений только если уровень был изменен
         if leveled_up_or_down:
-            print(f"Level changed: {self.level}, recalculating experience.")
             super(Employee, self).save(
                 update_fields=['level', 'experience', 'next_level_experience', 'remaining_experience',
                                'experience_progress'])
@@ -274,14 +308,12 @@ class Employee(AbstractUser):
             super(Employee, self).save(
                 update_fields=['experience', 'next_level_experience', 'remaining_experience', 'experience_progress'])
 
-    def calculate_experience_for_level(self, level):
+    def calculate_experience_for_level(self, level, multiplier=1.2):
         base_experience = 100  # базовый опыт для первого уровня
         experience_required = base_experience
 
         for i in range(2, level + 1):
-            # Увеличение опыта на каждый следующий уровень
-            experience_required += int(base_experience * (i - 1) * 0.2)  # Плавный рост сложности
-
+            experience_required += int(base_experience * (i - 1) * multiplier)  # рост сложности
         return experience_required
 
     def add_experience(self, experience, source="Изменили вручную"):
@@ -300,12 +332,12 @@ class Employee(AbstractUser):
             self.log_change('experience', old_experience, self.experience, source=source)
             self.check_level_up()
             self.save()
-    def add_acoins(self, acoins):
+    def add_acoins(self, acoins, source):
         if not self.is_active:
             raise ValidationError("Cannot modify a deactivated account.")
         if acoins is not None:
             AcoinTransaction.objects.create(employee=self, amount=acoins)
-            self.log_change('acoins', self.acoin.amount, self.acoin.amount + acoins, )
+            self.log_change('acoins', self.acoin.amount, self.acoin.amount + acoins, source= source)
             self.acoin.amount += acoins
             self.acoin.save()
 
@@ -383,6 +415,12 @@ class PasswordPolicy(models.Model):
     allowed_symbols = models.CharField(max_length=255, default="~!@#$%^&*()-_=+[{]}|;:'\",<.>/?")
     arabic_only = models.BooleanField(default=True)
     no_spaces = models.BooleanField(default=True)
+
+    def save(self, *args, **kwargs):
+        # Проверка, что существует только одна запись
+        if not self.pk and PasswordPolicy.objects.exists():
+            raise ValidationError("Допускается только одна запись в PasswordPolicy.")
+        super(PasswordPolicy, self).save(*args, **kwargs)
 
 class KarmaHistory(models.Model):
     employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='karma_history')

@@ -359,16 +359,51 @@ class EmployeeAchievementsView(generics.ListAPIView):
                 'name': achievement.name,
                 'description': achievement.description,
                 'type': achievement.type,
-                'required_count': achievement.required_count,
                 'reward_experience': achievement.reward_experience,
                 'reward_currency': achievement.reward_currency,
-                'image': achievement.image.url,
-                'max_level': achievement.max_level,
                 'progress': employee_achievement.progress,
                 'level': employee_achievement.level
             })
 
         return Response(achievement_data)
+
+class LevelConfigurationView(APIView):
+    def get(self, request):
+        try:
+            config = LevelConfiguration.objects.get()
+            serializer = LevelConfigurationSerializer(config)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except LevelConfiguration.DoesNotExist:
+            return Response({"error": "Level configuration not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    def put(self, request):
+        config, _ = LevelConfiguration.objects.get_or_create()
+        serializer = LevelConfigurationSerializer(config, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    # Метод для удаления EmployeeAchievement
+    def delete(self, request, *args, **kwargs):
+        employee_id = self.kwargs['employee_id']
+        achievement_id = request.data.get('achievement_id')
+
+        try:
+            employee_achievement = EmployeeAchievement.objects.get(
+                employee_id=employee_id, achievement_id=achievement_id
+            )
+            employee_achievement.delete()
+            return Response(
+                {"message": "Achievement successfully deleted"},
+                status=status.HTTP_204_NO_CONTENT
+            )
+        except EmployeeAchievement.DoesNotExist:
+            return Response(
+                {"error": "Achievement not found for this employee"},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
 class DynamicPermission(BasePermission):
     def has_permission(self, request, view):
         required_permission = view.required_permissions.get(request.method.lower())

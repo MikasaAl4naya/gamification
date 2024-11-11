@@ -794,6 +794,7 @@ def track_request_classification(sender, instance, created, **kwargs):
             employee = instance.support_operator
             request_classification = instance.classification
             is_massive = instance.is_massive
+            request_complexity = instance.get_complexity()  # Метод для получения сложности обращения ('simple', 'medium', 'hard')
 
             # Фильтрация достижений типа "Обращения" (type=1)
             request_achievements = Achievement.objects.filter(type=1)
@@ -803,10 +804,14 @@ def track_request_classification(sender, instance, created, **kwargs):
                 type_specific_data = achievement.type_specific_data
                 required_requests_count = type_specific_data.get("required_requests_count")
                 required_classification_ids = type_specific_data.get("classification_ids", [])
+                required_complexity = type_specific_data.get("required_complexity")  # Значение: 'simple', 'medium', 'hard'
                 is_massive_required = type_specific_data.get("is_massive", False)
 
-                # Проверяем соответствие классификации и типу обращения
-                if request_classification.id in required_classification_ids and is_massive == is_massive_required:
+                # Проверяем соответствие классификации, сложности и типа обращения
+                if (request_classification.id in required_classification_ids and
+                        request_complexity == required_complexity and
+                        is_massive == is_massive_required):
+
                     # Найти или создать объект EmployeeAchievement
                     employee_achievement, _ = EmployeeAchievement.objects.get_or_create(
                         employee=employee,
@@ -864,6 +869,10 @@ def track_employee_level_and_experience(sender, instance, **kwargs):
                 employee=instance,
                 achievement=achievement
             )
+
+            # Обработайте случаи, если объект не создан
+            if not employee_achievement:
+                continue  # Или добавьте соответствующую обработку ошибок
 
             # Инициализируем список для хранения прогрессов по каждому условию
             progress_values = []

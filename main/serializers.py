@@ -8,11 +8,7 @@ from rest_framework import serializers, viewsets
 from rest_framework.permissions import IsAdminUser
 
 from gamefication import settings
-from main.models import Employee, AcoinTransaction, Acoin, Test, TestQuestion, AnswerOption, Theory, Achievement, \
-    Request, Theme, Classifications, TestAttempt, Feedback, SurveyAnswer, SurveyQuestion, EmployeeActionLog, \
-    KarmaSettings, \
-    FilePath, ExperienceMultiplier, SystemSetting, PasswordPolicy, PreloadedAvatar, EmployeeAchievement, EmployeeLog, \
-    Item, EmployeeItem, Template, ComplexityThresholds, ShiftHistory, Background
+from main.models import *
 from main.names_translations import translate_permission_name
 
 
@@ -810,7 +806,10 @@ class ThemeWithTestsSerializer(serializers.ModelSerializer):
     def validate(self, data):
         # Добавьте дополнительные проверки, если необходимо
         return data
-
+class LevelConfigurationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LevelConfiguration
+        fields = ['base_acoin_amount', 'acoin_multiplier', 'experience_multiplier']
 class StyleCardSerializer(serializers.Serializer):
     border_style = serializers.CharField(default='solid')
     border_width = serializers.IntegerField(default=0, required=False)
